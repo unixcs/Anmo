@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 )
@@ -9,7 +10,7 @@ import (
 func TestSMSStoreVerifyConsume(t *testing.T) {
 	s := newSMSStore()
 	ctx := context.Background()
-	sender := devSender{}
+	sender := devSender{log: slog.Default()}
 
 	if err := s.send(ctx, sender, "13911112222", 5*time.Minute, "123456"); err != nil {
 		t.Fatalf("send: %v", err)
@@ -25,7 +26,7 @@ func TestSMSStoreVerifyConsume(t *testing.T) {
 func TestSMSStoreRateLimitAndExpiry(t *testing.T) {
 	s := newSMSStore()
 	ctx := context.Background()
-	sender := devSender{}
+	sender := devSender{log: slog.Default()}
 
 	if err := s.send(ctx, sender, "13911112222", 5*time.Minute, "111111"); err != nil {
 		t.Fatalf("first send: %v", err)
