@@ -423,3 +423,73 @@ Phase 11 E2E
 ## Next
 
 最终验收（§136 + V1 FINAL STATUS）
+
+---
+
+## Session: V1 FINAL STATUS (2026-09-27)
+
+# V1 FINAL STATUS
+
+## 交付总览
+
+- Phase 0-11 全部走完 Trellis Plan→Execute→Finish 生命周期并归档；Phase 0 Review PASS；编码前子代理审查 B1 修复后复审 PASS；Phase 11 后独立子代理对抗审查（25 用例实跑）发现 1 BLOCKER + 8 WARNING，全部修复复验
+- 后端：Go Modular Monolith（server/，13 个测试包）；前端：apps/customer（Vue3+Vite+TS）
+- migration 001-010（24 业务表 + sys_sequence/schema_migrations 技术表）
+
+## 验证命令（最终态）
+
+- go build ./...：PASS
+- go vet ./...：PASS
+- go test ./... -count=1：**13 包全部 ok**（单测 60+ 用例 + DB 集成 + 对抗 25 用例 + E2E 全链路）
+- 干净库启动冒烟：migrate 全成功、/healthz 200、OWNER 登录成功
+- npm run build（vue-tsc + vite）：PASS
+
+## Plan §136 验收清单（逐项核对）
+
+### 顾客
+- [x] 手机登录（短信码 dev=123456，限频/过期/消费）
+- [x] 查看服务（/api/services 仅 ACTIVE）
+- [x] 查看会员卡（/api/me/cards，token 推导）
+- [x] 创建预约（冲突检查+日历锁+营业时间/槽位/提前量校验）
+- [x] 取消预约（2h 限制，后台无限制）
+- [x] 改期（仅 PENDING/CONFIRMED，冲突排除自身）
+- [x] 查看历史预约（status=COMPLETED 列表）
+
+### 老板
+- [x] 今日工作台（/admin/workbench：6 态汇总+卡片+收款状态）
+- [x] 管会员（列表/新建/详情/编辑/标签/备注）
+- [x] 管服务（分类+项目 CRUD/上下架/排序）
+- [x] 发卡（member_card + ISSUE 流水单事务）
+- [x] 续卡（=再发新卡，D10）
+- [x] 调整次数（ADJUSTMENT ±N，USED_UP 复活）
+- [x] 看预约（列表筛选+今日视图）
+- [x] 确认预约 / 开始服务 / 完成服务（状态机条件 UPDATE 守卫；重复完成 409，§99 Case 10）
+- [x] 核销（§53 全链路单事务 + 幂等键）
+- [x] 收款（现金/微信/其他，一预约一笔 VALID）
+- [x] 撤销核销（恢复次数+payment VOIDED，支持作废/过期卡上的账目修正）
+- [x] 看交易流水（payments/redemptions/卡流水）
+- [x] 看操作日志（middleware 全量审计 + /admin/logs）
+
+### 核心正确性（均有自动化测试证据）
+- [x] 同一时间不能重复预约（并发 8/6/24/30 协程风暴均恰 1 赢家，Case 2）
+- [x] 卡余额不能小于 0（CHECK + FOR UPDATE + 16 协程混战账实一致）
+- [x] 卡扣次必须有流水（REDEEM 同事务，账实链校验）
+- [x] 重复核销不能重复扣次（Case 6：同键回放 + active_lock）
+- [x] 撤销核销能恢复次数（Case 7）
+- [x] 重复撤销失败（Case 8：6 协程并发恰 1 成功）
+- [x] 过期卡不能使用（Case 4：惰性校验为准 + sweep 同步状态）
+- [x] 不适用服务的卡不能使用（Case 5：card_service_rule 模板级）
+- [x] 已取消预约不能完成（Case 9/10：状态守卫 + 时段释放）
+- [x] 已完成预约不能重复完成（Case 10：409）
+- [x] 客户不能读取其他客户数据（跨顾客 403/列表隔离，H3）
+- [x] 所有重要后台操作有日志（middleware 审计 + 断言非空）
+
+## 范围合规
+
+- §131 禁止实体零引入（无 staff/tenant/积分/优惠券/库存/线上支付/派单/地图等）
+- 后台管理 Web UI 不在 Plan Phase 清单内，按"歧义不做"以 admin API 交付（Phase 8 journal 记录）
+- Phase 12 上线项（HTTPS/备份/监控）需真实服务器，本环境不执行，生产部署建议见 config.example.yaml 注释
+
+## 结论
+
+**V1 达成 Plan §140 定义的全部核心目标，验收通过。**
