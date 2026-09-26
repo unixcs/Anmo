@@ -2,6 +2,8 @@ package shared
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"time"
 )
 
@@ -16,6 +18,11 @@ func NowShanghai() time.Time {
 // Shanghai returns t expressed in the business timezone.
 func Shanghai(t time.Time) time.Time {
 	return t.In(shanghaiLoc)
+}
+
+// NewNopLogger returns a discard logger for tests/tools.
+func NewNopLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 // LockHandle releases a named lock.

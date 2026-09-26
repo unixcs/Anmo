@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"net/http"
@@ -12,20 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"anmo/server/internal/middleware"
-
+	"anmo/server/internal/app"
 	"anmo/server/internal/config"
 	"anmo/server/internal/database"
 	"anmo/server/internal/logger"
-	"anmo/server/internal/modules/appointment"
-	"anmo/server/internal/modules/card"
-	"anmo/server/internal/modules/content"
-	"anmo/server/internal/modules/identity"
-	"anmo/server/internal/modules/member"
-	"anmo/server/internal/modules/ops"
-	"anmo/server/internal/modules/service"
-	"anmo/server/internal/modules/transaction"
-	"anmo/server/internal/router"
 )
 
 func main() {
@@ -58,36 +47,12 @@ func main() {
 		return
 	}
 
-	// Modules. Dependency direction (AGENTS.md): identity→member,
-	// appointment→service, transaction→card+appointment, ops→card+appointment.
-	// Cross-module calls go through api.go Providers only.
-	memberMod := member.New(db, cfg)
-	serviceMod := service.New(db, cfg)
-	identityMod := identity.New(db, cfg, memberMod, log)
-	if err := identityMod.EnsureSeed(context.Background()); err != nil {
+	if err := app.SeedIdentity(db, cfg, log); err != nil {
 		log.Error("seed identity", "err", err)
 		os.Exit(1)
 	}
-	cardMod := card.New(db, cfg)
-	appointmentMod := appointment.New(db, cfg, serviceMod)
-	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod, memberMod)
-	contentMod := content.New(db, cfg)
-	opsMod := ops.New(db, cfg, cardMod, appointmentMod, memberMod)
 
-	opLog := opsMod.NewLogWriter(log)
-	logEntry := func(r *http.Request, status int) {
-		pr, _ := middleware.PrincipalFrom(r.Context())
-		detail, _ := json.Marshal(map[string]any{"method": r.Method, "status": status, "query": r.URL.RawQuery})
-		opLog(ops.LogEntry{
-			ActorType: pr.ActorType, ActorID: pr.ActorID,
-			Action: r.Method + " " + r.URL.Path, TargetType: "http", TargetID: "",
-			Detail: string(detail), IP: r.RemoteAddr,
-		})
-	}
-	handler := router.New(log, identityMod.TokenVerifier(), logEntry,
-		identityMod, memberMod, serviceMod, cardMod,
-		appointmentMod, transactionMod, contentMod, opsMod,
-	)
+	handler := app.Build(db, cfg, log)
 
 	srv := &http.Server{
 		Addr:              cfg.Server.Addr,
