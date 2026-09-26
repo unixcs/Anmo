@@ -268,3 +268,34 @@ Phase 6 Appointment
 ## Next
 
 Phase 7 Transaction（核心）
+
+---
+
+## Session: Phase 7 — Transaction (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- SettleByCard 核心事务（§53 完整链路单事务：锁卡→校验→扣次→REDEEM 流水→redemption→payment(CARD)→appointment COMPLETED→status log→last_visit）
+- 幂等：请求级 UUID idempotency_key 重放返回原结果；active_lock 生成列唯一保证一预约一有效核销
+- SettleByPay（现金/微信/其他）：仅写 VALID payment，不改预约状态（D9）；一预约一 VALID payment 守卫（D1）
+- ReverseRedemption：置 REVERSED→恢复次数→REVERSAL 流水→reversal→原 CARD payment 置 VOIDED，预约保持 COMPLETED（§59），撤销后可重结
+- 后台路由：redeem/payments/reverse/payments 列表/redemptions 列表
+
+## Tests
+
+- go build/vet/test 全过（11 包 ok）
+- transaction 测试 6 项：全链路、幂等重放（Case 6）、异键防重（active_lock）、撤销恢复+重复撤销失败（Case 7/8）+收款不双计（D1）、现金不改状态（D9）、**并发核销余额 1 → 1 成功 1 失败（Case 1）**
+
+## Database
+
+- 无新 migration（006 已建表）
+
+## Files Changed
+
+- transaction/{settle,queries,handler,module,api,settle_test}.go、appointment/queries.go(ServicesOfTx)、main.go
+
+## Next
+
+Phase 8 今日工作台
