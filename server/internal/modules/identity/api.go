@@ -5,8 +5,11 @@
 package identity
 
 import (
+	"log/slog"
+
 	"anmo/server/internal/config"
 
+	"anmo/server/internal/middleware"
 	"anmo/server/internal/modules/member"
 	"anmo/server/internal/shared"
 )
@@ -16,11 +19,26 @@ type Provider struct {
 	db      shared.DB
 	cfg     *config.Config
 	members *member.Provider
+	tokens  *tokenService
+	sms     *smsStore
+	sender  smsSender
 }
 
 // New builds the module Provider. Dependencies are injected by main.
-func New(db shared.DB, cfg *config.Config, members *member.Provider) *Provider {
-	return &Provider{db: db, cfg: cfg, members: members}
+func New(db shared.DB, cfg *config.Config, members *member.Provider, log *slog.Logger) *Provider {
+	return &Provider{
+		db:      db,
+		cfg:     cfg,
+		members: members,
+		tokens:  &tokenService{secret: []byte(cfg.Auth.JWTSecret)},
+		sms:     newSMSStore(),
+		sender:  devSender{log: log},
+	}
+}
+
+// TokenVerifier exposes JWT verification to the auth middleware.
+func (p *Provider) TokenVerifier() middleware.TokenVerifier {
+	return p.tokens.Verify
 }
 
 // DB exposes the pool to the module's own handler/service files only.

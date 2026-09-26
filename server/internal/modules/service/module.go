@@ -2,6 +2,6 @@ package service
 
 import "net/http"
 
-// Mount registers this module's routes. Phase 1 skeleton: no routes yet.
-func (p *Provider) Mount(mux *http.ServeMux) {
+// Mount registers this module's routes (Phase 2 skeleton: none yet).
+func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 }

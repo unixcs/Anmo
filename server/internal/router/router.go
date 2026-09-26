@@ -10,24 +10,33 @@ import (
 )
 
 // Module is the contract every internal/modules/* package exposes to the
-// router (AGENTS.md 模块地图).
+// router (AGENTS.md 模块地图). root=public, admin=JWT(OWNER/OPERATOR),
+// api=JWT(customer).
 type Module interface {
-	Mount(mux *http.ServeMux)
+	Mount(root, admin, api *http.ServeMux)
 }
 
-// New builds the root handler.
-func New(log *slog.Logger, mods ...Module) http.Handler {
-	mux := http.NewServeMux()
+// New builds the root handler. Admin routes live under /admin/, customer
+// routes under /api/; both prefixes are auth-guarded here. Public routes
+// (login, SMS) are registered by the identity module directly on root.
+func New(log *slog.Logger, verify middleware.TokenVerifier, mods ...Module) http.Handler {
+	root := http.NewServeMux()
+	admin := http.NewServeMux()
+	api := http.NewServeMux()
 
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		shared.OK(w, map[string]string{"status": "ok"})
 	})
 
 	for _, m := range mods {
-		m.Mount(mux)
+		m.Mount(root, admin, api)
 	}
 
-	handler := middleware.Recover(log)(mux)
+	// auth guards (innermost relative to the global chain)
+	root.Handle("/admin/", middleware.NewAuth(verify, true)(admin))
+	root.Handle("/api/", middleware.NewAuth(verify, false)(api))
+
+	handler := middleware.Recover(log)(root)
 	handler = middleware.Logging(log)(handler)
 	handler = middleware.RequestIDMw(handler)
 	return handler

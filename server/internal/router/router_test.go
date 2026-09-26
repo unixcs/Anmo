@@ -5,14 +5,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"anmo/server/internal/middleware"
 )
 
-type noopModule struct{}
-
-func (noopModule) Mount(mux *http.ServeMux) {}
+func noopVerify(token string) (middleware.Principal, error) {
+	return middleware.Principal{}, nil
+}
 
 func TestHealthz(t *testing.T) {
-	h := New(slog.Default(), noopModule{})
+	h := New(slog.Default(), noopVerify, noopModule{})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
 	if rec.Code != 200 {
@@ -33,3 +35,7 @@ func contains(s, sub string) bool {
 		return false
 	})()
 }
+
+type noopModule struct{}
+
+func (noopModule) Mount(root, admin, api *http.ServeMux) {}

@@ -2,6 +2,9 @@ package identity
 
 import "net/http"
 
-// Mount registers this module's routes. Phase 1 skeleton: no routes yet.
-func (p *Provider) Mount(mux *http.ServeMux) {
+// Mount registers identity routes. Auth endpoints are public (no token).
+func (p *Provider) Mount(root, admin, api *http.ServeMux) {
+	root.HandleFunc("POST /admin/auth/login", p.handleAdminLogin)
+	root.HandleFunc("POST /api/auth/sms/send", p.handleSMSSend)
+	root.HandleFunc("POST /api/auth/sms/verify", p.handleSMSVerify)
 }

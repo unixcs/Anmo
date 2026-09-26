@@ -60,14 +60,18 @@ func main() {
 	// Cross-module calls go through api.go Providers only.
 	memberMod := member.New(db, cfg)
 	serviceMod := service.New(db, cfg)
-	identityMod := identity.New(db, cfg, memberMod)
+	identityMod := identity.New(db, cfg, memberMod, log)
+	if err := identityMod.EnsureSeed(context.Background()); err != nil {
+		log.Error("seed identity", "err", err)
+		os.Exit(1)
+	}
 	cardMod := card.New(db, cfg)
 	appointmentMod := appointment.New(db, cfg, serviceMod)
 	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod)
 	contentMod := content.New(db, cfg)
 	opsMod := ops.New(db, cfg, cardMod, appointmentMod)
 
-	handler := router.New(log,
+	handler := router.New(log, identityMod.TokenVerifier(),
 		identityMod, memberMod, serviceMod, cardMod,
 		appointmentMod, transactionMod, contentMod, opsMod,
 	)
