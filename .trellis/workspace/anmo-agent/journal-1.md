@@ -373,3 +373,27 @@ Phase 10 Content + Ops
 ## Next
 
 Phase 11 E2E
+
+---
+
+## Session: Phase 11 — E2E (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- internal/app 装配抽取（main 与 E2E 共用一套构建路径）
+- E2E（真实 HTTP 栈 + 真实 MySQL，12 包全部挂载）：老板登录→建服务/卡模板/规则→顾客登录→发卡(10)→预约→确认→开始→完成→核销→余额 9→流水 ISSUE+REDEEM→撤销恢复 10→重核销→现金收款(不改状态)→第二笔 VALID 拒→工作台→日志→洞察→首页/设置→改期/取消/跨顾客 403/未登录 401
+- API 级并发抢时段（6 顾客并发仅 1 成功，Case 2）
+
+## Tests
+
+- E2E 2 项全过；go build/vet/test 全过（13 包 ok）
+
+## Database
+
+- 无新 migration
+
+## Next
+
+对抗式审查（独立任务）
