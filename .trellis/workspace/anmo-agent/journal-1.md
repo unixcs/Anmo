@@ -199,3 +199,37 @@ Phase 4 Service
 ## Next
 
 Phase 5 Card
+
+---
+
+## Session: Phase 5 — Card (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- 卡模板 CRUD（type/validity 校验，D11）+ 模板级服务规则 SetServiceRules（D4）
+- 发卡 IssueCard：单事务 member_card + ISSUE 流水（§127）；续卡=再发新卡（D10）
+- 核销协作 API：LockForRedeem(FOR UPDATE)/ValidateForRedeem(状态+有效期+规则+余额)/ApplyRedeem(扣次+REDEEM 流水+USED_UP 联动)/ApplyReversal(恢复+REVERSAL 流水)
+- Adjust（ADJUSTMENT ±N，USED_UP 复活）/Cancel（仅状态，D12）/流水查询/UsableCards
+- 后台路由：模板/规则/发卡/调整/作废/流水；会员卡列表
+
+## Tests
+
+- go build/vet/test 全过（8 包 ok）；card 模块 DB 测试 5 项：发卡流水、核销+撤销、四类拒绝（不适用/余额不足/过期/作废）、USED_UP 联动+调整复活、可用卡过滤
+
+## Database
+
+- 无新 migration（004 已建表）
+
+## Files Changed
+
+- card/{template,redeem,handler,operator,module,repo_test}.go
+
+## Remaining
+
+- 并发核销（Case 1）在 Phase 7/E2E 覆盖
+
+## Next
+
+Phase 6 Appointment
