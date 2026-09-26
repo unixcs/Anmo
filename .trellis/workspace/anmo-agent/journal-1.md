@@ -71,3 +71,37 @@ Phase 1 工程骨架
 - 复审 DECISION: PASS（B1 闭环推演成立，D1-D17 无冲突，无新 BLOCKER）
 - 报告：.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md
 - 门禁结论：允许进入 Phase 1 编码
+
+---
+
+## Session: Phase 1 — 工程骨架 (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- migrations 001-008（24 张表全部落库，含 active_lock 生成列、CHECK、FK、唯一约束、种子数据）——数据库冻结
+- Go Modular Monolith 骨架：config(YAML+env)/logger(slog)/database(Pool适配+迁移runner)/shared(errors/Tx/ULID/分页/响应)/middleware(requestid/logging/recover/auth骨架)/router
+- 8 个业务模块挂载完成，各模块 AGENTS.md（职责/表/API/事务/测试/禁止）就位
+- 跨模块事务协议落地：shared.Tx + database.Pool（D6），Migrate 可复用 shared.DB
+
+## Tests
+
+- go build: PASS / go vet: PASS / go test: PASS（shared/router 单测 + database 迁移集成测试：幂等 + 24 表校验）
+- migration 实跑 anmo 库 8 个文件成功；/healthz 冒烟 200
+
+## Database
+
+- 001_identity … 008_ops（应用 8 个，schema_migrations 记录，重复执行幂等）
+
+## Files Changed
+
+- server/**（go.mod、cmd/anmo、migrations/8、internal/**、config.example.yaml）、AGENTS.md 补充
+
+## Remaining
+
+- auth 中间件等待 Phase 2 的 TokenVerifier 实装
+
+## Next
+
+Phase 2 Identity
