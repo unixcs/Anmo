@@ -139,3 +139,36 @@ Phase 2 Identity
 ## Next
 
 Phase 3 Member
+
+---
+
+## Session: Phase 3 — Member (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- 后台会员管理：列表(关键词+分页)/新增(member_no 日序列)/详情/编辑(name/gender/birthday/remark 校验)
+- 标签：列表/新建(重名 409)/设置(全量替换，INSERT IGNORE 幂等)
+- 顾客端：GET/PUT /api/me/profile（member_id 取自 token）
+- 修复：DATE 列 parseTime=true 下按 NullTime 扫描并格式化 YYYY-MM-DD
+
+## Tests
+
+- go build/vet/test 全过（6 包 ok）；member 模块 DB 集成测试 4 项（创建/手机号冲突/Ensure 绑定一致/标签替换/资料校验）
+
+## Database
+
+- 无新 migration（002 已建表）
+
+## Files Changed
+
+- member/{repo,tags,handler,module,testmain,repo_test}.go
+
+## Remaining
+
+- 会员详情聚合卡/预约信息待 Phase 5-6 后回补
+
+## Next
+
+Phase 4 Service
