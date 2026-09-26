@@ -2,18 +2,13 @@ package card
 
 import (
 	"context"
-	"database/sql"
-	"os"
-	"path/filepath"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql"
-
 	"anmo/server/internal/config"
-	"anmo/server/internal/database"
 	"anmo/server/internal/modules/member"
 	svcmodule "anmo/server/internal/modules/service"
 	"anmo/server/internal/shared"
+	"anmo/server/internal/testsupport"
 )
 
 type cardEnv struct {
@@ -39,32 +34,12 @@ func (e *cardEnv) mustItem(t *testing.T, name string, duration int, price int64)
 
 func newCardEnv(t *testing.T) *cardEnv {
 	t.Helper()
-	dsn := os.Getenv("ANMO_TEST_MYSQL_DSN")
-	if dsn == "" {
-		t.Skip("ANMO_TEST_MYSQL_DSN not set; skipping DB test")
-	}
-	raw, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	schema := "anmo_card_" + shared.NewID()
-	if _, err := raw.Exec("CREATE DATABASE `" + schema + "`"); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	t.Cleanup(func() { raw.Exec("DROP DATABASE `" + schema + "`"); raw.Close() })
-	if _, err := raw.Exec("USE `" + schema + "`"); err != nil {
-		t.Fatalf("use: %v", err)
-	}
-	migDir, _ := filepath.Abs("../../../migrations")
-	if _, err := database.Migrate(context.Background(), &database.Pool{DB: raw}, migDir); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	db := &database.Pool{DB: raw}
-	cfg := &config.Config{}
+	db := testsupport.NewSchemaDB(t, "anmo_card_")
+	cfg := config.Defaults()
 	e := &cardEnv{p: New(db, cfg), mem: member.New(db, cfg), svc: svcmodule.New(db, cfg)}
 
 	ctx := context.Background()
-	err = shared.RunInTx(ctx, e.p.db, func(tx shared.Tx) error {
+	err := shared.RunInTx(ctx, e.p.db, func(tx shared.Tx) error {
 		var er error
 		e.mbrID, _, er = e.mem.EnsureByPhone(ctx, tx, "13900000001", "卡测试")
 		return er

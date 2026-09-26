@@ -2,42 +2,18 @@ package member
 
 import (
 	"context"
-	"database/sql"
-	"os"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql"
-
 	"anmo/server/internal/config"
-	"anmo/server/internal/database"
 	"anmo/server/internal/shared"
+	"anmo/server/internal/testsupport"
 )
 
 // newTestProvider builds a provider against a fresh schema with migrations applied.
 func newTestProvider(t *testing.T) (*Provider, shared.DB) {
 	t.Helper()
-	dsn := os.Getenv("ANMO_TEST_MYSQL_DSN")
-	if dsn == "" {
-		t.Skip("ANMO_TEST_MYSQL_DSN not set; skipping DB test")
-	}
-	raw, err := sql.Open("mysql", dsn)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	schema := "anmo_member_" + shared.NewID()
-	if _, err := raw.Exec("CREATE DATABASE `" + schema + "`"); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	t.Cleanup(func() { raw.Exec("DROP DATABASE `" + schema + "`"); raw.Close() })
-	if _, err := raw.Exec("USE `" + schema + "`"); err != nil {
-		t.Fatalf("use: %v", err)
-	}
-	migDir, _ := absMigrations()
-	if _, err := database.Migrate(context.Background(), &database.Pool{DB: raw}, migDir); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	db := &database.Pool{DB: raw}
-	return New(db, &config.Config{}), db
+	db := testsupport.NewSchemaDB(t, "anmo_member_")
+	return New(db, config.Defaults()), db
 }
 
 func TestCreateAndPhoneConflict(t *testing.T) {

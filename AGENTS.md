@@ -111,9 +111,9 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 |---|------|
 | D1 | payment.status ∈ {VALID, VOIDED}；撤销事务同事务置 VOIDED；收款只统计 VALID；一预约最多一笔 VALID payment；V1 无独立作废收款功能 |
 | D2 | RBAC：identity_user.role 枚举（OWNER/OPERATOR）实现角色；identity_role/identity_permission 建静态种子表；V1 OPERATOR 权限与 OWNER 相同 |
-| D3 | 数据库共 24 张表（§124 清单为权威）；appointment.member_id NOT NULL，无代客下单 |
+| D3 | 数据库共 24 张业务表（§124 清单为权威）+ 技术表（schema_migrations、sys_sequence 原子计数器）；appointment.member_id NOT NULL，无代客下单 |
 | D4 | card_service_rule 挂 card_template_id（模板级）；核销经 member_card.card_template_id 解析 |
-| D5 | 并发预约：事务内 GET_LOCK('anmo:appointment:calendar') 串行化冲突检查，COMMIT 后释放 |
+| D5 | 并发预约：专用连接 NamedLock('anmo:appointment:calendar') 串行化冲突检查，事务 COMMIT 后才释放（锁必须覆盖提交） |
 | D6 | 跨模块单事务：transaction 模块开事务，显式 Tx 执行器传入 card/appointment 的 api.go；模块内禁止自开嵌套事务（Phase 1 落地 shared.TxRunner） |
 | D7 | 操作日志由 HTTP middleware 写 ops_operation_log；业务模块不 import ops；ops 定时任务单向依赖业务模块 api.go |
 | D8 | 状态迁移一律 `UPDATE ... WHERE status=期望` 校验影响行数；改期限 PENDING_CONFIRM/CONFIRMED、沿用 2 小时限制、同 appointment 改时间、冲突排除自身；NO_SHOW 仅从 CONFIRMED 迁出 |

@@ -107,6 +107,13 @@ func atoi(v string) int {
 	return n
 }
 
+// Defaults returns a config with all defaults applied (tests, tools).
+func Defaults() *Config {
+	cfg := &Config{}
+	setDefaults(cfg)
+	return cfg
+}
+
 func setDefaults(cfg *Config) {
 	if cfg.Server.Addr == "" {
 		cfg.Server.Addr = ":8080"

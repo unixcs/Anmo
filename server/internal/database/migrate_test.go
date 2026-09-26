@@ -66,6 +66,7 @@ func TestMigrateIdempotentAndComplete(t *testing.T) {
 		"payment": true, "redemption": true, "redemption_reversal": true,
 		"content_page_config": true, "content_banner": true, "content_announcement": true, "content_system_setting": true,
 		"ops_operation_log": true, "ops_insight_snapshot": true,
+		"sys_sequence": true, // 009: technical counter table
 	}
 	rows, err := db.Query(`SELECT table_name FROM information_schema.tables WHERE table_schema = ?`, schema)
 	if err != nil {

@@ -40,28 +40,12 @@ func (p *Provider) EnsureByPhone(ctx context.Context, tx shared.Tx, phone, name 
 	return id, true, nil
 }
 
-// nextMemberNo generates M + yyyymmdd + 4-digit sequence under GET_LOCK.
+// nextMemberNo generates M+yyyymmdd+seq via the atomic counter table.
 func (p *Provider) nextMemberNo(ctx context.Context, tx shared.Tx) (string, error) {
 	day := shared.NowShanghai().Format("20060102")
-	lock := "anmo:member:no:" + day
-	res := tx.QueryRowContext(ctx, `SELECT GET_LOCK(?, 5)`, lock)
-	var got sql.NullInt64
-	if err := res.Scan(&got); err != nil || !got.Valid || got.Int64 != 1 {
-		return "", shared.Conflict("MEMBER_NO_LOCK", "会员号生成繁忙，请重试")
-	}
-	defer tx.ExecContext(context.Background(), `SELECT RELEASE_LOCK(?)`, lock)
-
-	var maxNo sql.NullString
-	if err := tx.QueryRowContext(ctx,
-		`SELECT MAX(member_no) FROM member WHERE member_no LIKE CONCAT('M', ?, '%')`,
-		day).Scan(&maxNo); err != nil {
-		return "", shared.Server("MEMBER_NO_QUERY", err)
-	}
-	seq := 1
-	if maxNo.Valid && len(maxNo.String) >= 9 {
-		if n := atoi4(maxNo.String[len(maxNo.String)-4:]); n > 0 {
-			seq = n + 1
-		}
+	seq, err := shared.NextSeq(ctx, tx, shared.SeqDateName("member", day))
+	if err != nil {
+		return "", err
 	}
 	return sprintf("M%s%04d", day, seq), nil
 }
