@@ -225,7 +225,7 @@ func (p *Provider) acquireCalendar(ctx context.Context) (shared.LockHandle, erro
 	if !ok {
 		return nil, shared.Server("LOCK_UNSUPPORTED", nil)
 	}
-	h, err := locker.NamedLock(ctx, calendarLock, 5)
+	h, err := locker.NamedLock(ctx, calendarLock, 15)
 	if err != nil {
 		return nil, shared.Conflict("APT_LOCK_BUSY", "预约繁忙，请重试")
 	}

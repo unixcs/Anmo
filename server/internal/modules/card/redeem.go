@@ -85,19 +85,23 @@ func (p *Provider) ApplyRedeem(ctx context.Context, tx shared.Tx, cardID, servic
 }
 
 // ApplyReversal restores balance and writes the REVERSAL transaction.
+// W4: a CANCELLED card still gets its count restored (ledger correction for a
+// mistaken redemption) but stays CANCELLED. W5: an EXPIRED card is never
+// resurrected — only USED_UP flips back to ACTIVE.
 func (p *Provider) ApplyReversal(ctx context.Context, tx shared.Tx, cardID string, quantity int, refID, operatorID string) (before, after int, err error) {
 	c, err := p.LockForRedeem(ctx, tx, cardID)
 	if err != nil {
 		return 0, 0, err
 	}
-	if c.Status == "CANCELLED" {
-		return 0, 0, shared.Conflict("CARD_CANCELLED", "会员卡已作废，无法恢复次数")
-	}
 	before = c.RemainingCount
 	after = before + quantity
+	status := c.Status
+	if status == "USED_UP" {
+		status = "ACTIVE"
+	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE member_card SET remaining_count = ?, status = 'ACTIVE' WHERE id = ?`,
-		after, cardID); err != nil {
+		`UPDATE member_card SET remaining_count = ?, status = ? WHERE id = ?`,
+		after, status, cardID); err != nil {
 		return 0, 0, shared.Server("CARD_REVERSAL_UPDATE", err)
 	}
 	if err := p.writeCardTx(ctx, tx, cardID, c.MemberID, "REVERSAL", quantity, before, after,

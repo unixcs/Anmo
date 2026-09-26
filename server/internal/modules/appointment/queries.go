@@ -48,8 +48,10 @@ func (p *Provider) MarkCompleted(ctx context.Context, tx shared.Tx, id, operator
 	if a.Status == StatusCompleted {
 		return nil
 	}
-	if a.Status != StatusInService && a.Status != StatusConfirmed {
-		return shared.Conflict("APT_BAD_TRANSITION", "预约状态不可结算")
+	// W8 (对抗审查): frozen state machine has no CONFIRMED→COMPLETED —
+	// settle requires the service to have actually started.
+	if a.Status != StatusInService {
+		return shared.Conflict("APT_BAD_TRANSITION", "预约需处于服务中才能结算")
 	}
 	_, err = tx.ExecContext(ctx,
 		`UPDATE appointment SET status = ?, completed_at = NOW() WHERE id = ? AND status = ?`,

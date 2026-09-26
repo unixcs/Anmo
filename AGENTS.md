@@ -117,7 +117,7 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D6 | 跨模块单事务：transaction 模块开事务，显式 Tx 执行器传入 card/appointment 的 api.go；模块内禁止自开嵌套事务（Phase 1 落地 shared.TxRunner） |
 | D7 | 操作日志由 HTTP middleware 写 ops_operation_log；业务模块不 import ops；ops 定时任务单向依赖业务模块 api.go |
 | D8 | 状态迁移一律 `UPDATE ... WHERE status=期望` 校验影响行数；改期限 PENDING_CONFIRM/CONFIRMED、沿用 2 小时限制、同 appointment 改时间、冲突排除自身；NO_SHOW 仅从 CONFIRMED 迁出 |
-| D9 | 仅核销事务与"完成服务"动作触发 COMPLETED；现金/微信收款只写 payment，不改预约状态 |
+| D9 | 仅核销事务与"完成服务"动作触发 COMPLETED；核销要求预约处于 IN_SERVICE（CONFIRMED 不可跳步结算，对抗审查 W8）；现金/微信收款只写 payment，不改预约状态 |
 | D10 | 续卡 = 同一 member 再发一张新卡（复用 ISSUE 流水）；调整次数 = 现有卡 ADJUSTMENT ±N 流水 |
 | D11 | 卡模板 type 仅 COUNT/ACTIVITY 存枚举，不产生独立逻辑，有效期由 validity_type/valid_from/valid_until 表达 |
 | D12 | 作废卡：仅置 CANCELLED，不改次数、不写次数流水；核销拒绝 CANCELLED |
@@ -126,6 +126,7 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D15 | 营业时间边界：scheduled_end ≤ 营业结束时间，否则拒绝 |
 | D16 | content_page_config 的 JSON block 引用 banner/announcement id，不复制正文 |
 | D17 | 顾客多时段待确认预约无上限限制，风险知情接受（"不做"原则） |
+| D18 | 撤销核销允许对 CANCELLED/EXPIRED 卡恢复次数（账目修正），但卡保持原状态不复活（对抗审查 W4/W5）；payment 表有生成列 valid_lock+UNIQUE 强制一预约一笔 VALID 收款（B1）及 idempotency_key 幂等（W2） |
 
 参考报告：`.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md`、`.../09-27-phase0-review/REVIEW.md`
 
