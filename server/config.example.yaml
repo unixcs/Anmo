@@ -1,0 +1,32 @@
+server:
+  addr: ":8080"
+
+mysql:
+  # 时区与多语句为迁移所需；multiStatements 供 migration runner 使用
+  dsn: "anmo:anmo-dev-2026@tcp(127.0.0.1:33306)/anmo?parseTime=true&loc=Asia%2FShanghai&time_zone=%27%2B08%3A00%27&charset=utf8mb4&multiStatements=true"
+
+auth:
+  jwt_secret: "change-me-in-production"
+  admin_token_hours: 12
+  customer_token_hours: 168
+  admin_phone: "13800000000"
+  admin_password_seed: "anmo-admin-2026"   # 首次启动时种子 OWNER 账号的初始密码
+
+sms:
+  mode: "dev"          # dev: 固定验证码 123456，写入日志
+  code_ttl_seconds: 300
+
+log:
+  level: "info"
+
+business:
+  open_time: "09:00"
+  close_time: "21:00"
+  slot_minutes: 30
+  book_ahead_days: 30
+  book_min_ahead_hours: 2
+  cancel_min_ahead_hours: 2
+  buffer_minutes: 0
+  low_balance_count: 2
+  dormant_days: 60
+  expiring_days: 7
