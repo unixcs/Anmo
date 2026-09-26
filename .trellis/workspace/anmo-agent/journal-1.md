@@ -172,3 +172,30 @@ Phase 3 Member
 ## Next
 
 Phase 4 Service
+
+---
+
+## Session: Phase 4 — Service (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- 分类 CRUD + 上下架；服务项目 CRUD + 上下架 + 排序；价格整数分校验（duration>0, price>=0）
+- 顾客端 GET /api/services 仅返回 ACTIVE 分类+项目
+
+## Tests
+
+- go build/vet/test 全过（7 包 ok）；service 模块 DB 测试 2 项（创建+可见性切换、参数校验）
+
+## Database
+
+- 无新 migration（003 已建表）
+
+## Files Changed
+
+- service/{repo,handler,module,repo_test,testmain}.go
+
+## Next
+
+Phase 5 Card
