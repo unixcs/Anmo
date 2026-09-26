@@ -67,7 +67,7 @@ func main() {
 	}
 	cardMod := card.New(db, cfg)
 	appointmentMod := appointment.New(db, cfg, serviceMod)
-	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod)
+	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod, memberMod)
 	contentMod := content.New(db, cfg)
 	opsMod := ops.New(db, cfg, cardMod, appointmentMod)
 

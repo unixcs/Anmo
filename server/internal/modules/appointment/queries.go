@@ -171,6 +171,26 @@ func (p *Provider) ServicesOf(ctx context.Context, aptID string) ([]*Appointment
 	return out, nil
 }
 
+// ServicesOfTx is the tx-joining snapshot read for settlement flows (D6).
+func (p *Provider) ServicesOfTx(ctx context.Context, tx shared.Tx, aptID string) ([]*AppointmentService, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, appointment_id, service_id, service_name_snapshot, duration_minutes_snapshot, price_snapshot, quantity
+		 FROM appointment_service WHERE appointment_id = ?`, aptID)
+	if err != nil {
+		return nil, shared.Server("APT_SERVICE_QUERY", err)
+	}
+	defer rows.Close()
+	var out []*AppointmentService
+	for rows.Next() {
+		s := &AppointmentService{}
+		if err := rows.Scan(&s.ID, &s.AppointmentID, &s.ServiceID, &s.NameSnapshot, &s.DurationSnapshot, &s.PriceSnapshot, &s.Quantity); err != nil {
+			return nil, shared.Server("APT_SERVICE_SCAN", err)
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
 // Today returns workbench data for a business date (defaults to today).
 func (p *Provider) Today(ctx context.Context, date string) (*TodaySummary, []*AppointmentDetail, error) {
 	if date == "" {
