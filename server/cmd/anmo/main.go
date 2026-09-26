@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"anmo/server/internal/middleware"
 
 	"anmo/server/internal/config"
 	"anmo/server/internal/database"
@@ -69,9 +72,19 @@ func main() {
 	appointmentMod := appointment.New(db, cfg, serviceMod)
 	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod, memberMod)
 	contentMod := content.New(db, cfg)
-	opsMod := ops.New(db, cfg, cardMod, appointmentMod)
+	opsMod := ops.New(db, cfg, cardMod, appointmentMod, memberMod)
 
-	handler := router.New(log, identityMod.TokenVerifier(),
+	opLog := opsMod.NewLogWriter(log)
+	logEntry := func(r *http.Request, status int) {
+		pr, _ := middleware.PrincipalFrom(r.Context())
+		detail, _ := json.Marshal(map[string]any{"method": r.Method, "status": status, "query": r.URL.RawQuery})
+		opLog(ops.LogEntry{
+			ActorType: pr.ActorType, ActorID: pr.ActorID,
+			Action: r.Method + " " + r.URL.Path, TargetType: "http", TargetID: "",
+			Detail: string(detail), IP: r.RemoteAddr,
+		})
+	}
+	handler := router.New(log, identityMod.TokenVerifier(), logEntry,
 		identityMod, memberMod, serviceMod, cardMod,
 		appointmentMod, transactionMod, contentMod, opsMod,
 	)

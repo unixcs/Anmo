@@ -183,6 +183,30 @@ func (p *Provider) UpdateProfile(ctx context.Context, id string, u ProfileUpdate
 	return p.Get(ctx, id)
 }
 
+// DormantMembers returns members with no visit in N days (§86 沉睡客户).
+// A member who never visited counts once they are older than N days.
+func (p *Provider) DormantMembers(ctx context.Context, days int) ([]*Member, error) {
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT `+memberColumns+` FROM member
+		 WHERE status = 'ACTIVE'
+		   AND (last_visit_at IS NULL AND created_at < NOW() - INTERVAL ? DAY
+		        OR last_visit_at < NOW() - INTERVAL ? DAY)
+		 ORDER BY created_at`, days, days)
+	if err != nil {
+		return nil, shared.Server("MEMBER_DORMANT", err)
+	}
+	defer rows.Close()
+	var out []*Member
+	for rows.Next() {
+		m, err := scanMember(rows)
+		if err != nil {
+			return nil, shared.Server("MEMBER_SCAN", err)
+		}
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 // TouchLastVisit sets last_visit_at (called by transaction module after redeem).
 func (p *Provider) TouchLastVisit(ctx context.Context, tx shared.Tx, memberID string, at time.Time) error {
 	if _, err := tx.ExecContext(ctx,

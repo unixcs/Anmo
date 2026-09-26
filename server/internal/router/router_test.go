@@ -14,7 +14,7 @@ func noopVerify(token string) (middleware.Principal, error) {
 }
 
 func TestHealthz(t *testing.T) {
-	h := New(slog.Default(), noopVerify, noopModule{})
+	h := New(slog.Default(), noopVerify, nil, noopModule{})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
 	if rec.Code != 200 {

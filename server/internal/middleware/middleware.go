@@ -82,6 +82,21 @@ func Logging(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// OperationLog writes an audit entry after every admin mutation (non-GET
+// under /admin/). The writer comes from the ops module via main (D7). Audit
+// failures never break the request.
+func OperationLog(write func(r *http.Request, status int)) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rec := &statusRecorder{ResponseWriter: w, status: 200}
+			next.ServeHTTP(rec, r)
+			if r.Method != http.MethodGet && write != nil {
+				write(r, rec.status)
+			}
+		})
+	}
+}
+
 // Recover converts panics into 500 responses.
 func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

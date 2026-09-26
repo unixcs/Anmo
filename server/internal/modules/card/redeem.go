@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"time"
 
 	"anmo/server/internal/shared"
 )
@@ -227,4 +226,56 @@ func (p *Provider) Transactions(ctx context.Context, cardID string) ([]*CardTran
 	return out, nil
 }
 
-var _ = time.Now
+// LowBalanceCards returns ACTIVE cards with remaining <= threshold (§86).
+func (p *Provider) LowBalanceCards(ctx context.Context, threshold int) ([]*MemberCard, error) {
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT `+cardColumns+` FROM member_card WHERE status = 'ACTIVE' AND remaining_count <= ? ORDER BY remaining_count`, threshold)
+	if err != nil {
+		return nil, shared.Server("CARD_LOW", err)
+	}
+	defer rows.Close()
+	var out []*MemberCard
+	for rows.Next() {
+		c, err := scanCard(rows)
+		if err != nil {
+			return nil, shared.Server("CARD_SCAN", err)
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// ExpiringCards returns ACTIVE cards expiring within N days (§86).
+func (p *Provider) ExpiringCards(ctx context.Context, days int) ([]*MemberCard, error) {
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT `+cardColumns+` FROM member_card
+		 WHERE status = 'ACTIVE' AND valid_until IS NOT NULL
+		   AND valid_until < CURDATE() + INTERVAL ? DAY`, days)
+	if err != nil {
+		return nil, shared.Server("CARD_EXP", err)
+	}
+	defer rows.Close()
+	var out []*MemberCard
+	for rows.Next() {
+		c, err := scanCard(rows)
+		if err != nil {
+			return nil, shared.Server("CARD_SCAN", err)
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+// SweepExpired flips ACTIVE cards past valid_until to EXPIRED (W2/D13).
+// Lazy validation at redeem time remains the hard constraint; this sweep only
+// keeps the displayed status in sync.
+func (p *Provider) SweepExpired(ctx context.Context) (int64, error) {
+	res, err := p.db.ExecContext(ctx,
+		`UPDATE member_card SET status = 'EXPIRED'
+		 WHERE status = 'ACTIVE' AND valid_until IS NOT NULL AND valid_until < CURDATE()`)
+	if err != nil {
+		return 0, shared.Server("CARD_SWEEP", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}

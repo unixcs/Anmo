@@ -19,7 +19,7 @@ type Module interface {
 // New builds the root handler. Admin routes live under /admin/, customer
 // routes under /api/; both prefixes are auth-guarded here. Public routes
 // (login, SMS) are registered by the identity module directly on root.
-func New(log *slog.Logger, verify middleware.TokenVerifier, mods ...Module) http.Handler {
+func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.Request, status int), mods ...Module) http.Handler {
 	root := http.NewServeMux()
 	admin := http.NewServeMux()
 	api := http.NewServeMux()
@@ -37,6 +37,7 @@ func New(log *slog.Logger, verify middleware.TokenVerifier, mods ...Module) http
 	root.Handle("/api/", middleware.NewAuth(verify, false)(api))
 
 	handler := middleware.Recover(log)(root)
+	handler = middleware.OperationLog(opLog)(handler)
 	handler = middleware.Logging(log)(handler)
 	handler = middleware.RequestIDMw(handler)
 	return handler
