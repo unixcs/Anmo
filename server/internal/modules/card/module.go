@@ -14,4 +14,6 @@ func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	admin.HandleFunc("PUT /admin/cards/{id}/adjust", p.handleAdjust)
 	admin.HandleFunc("PUT /admin/cards/{id}/cancel", p.handleCancel)
 	admin.HandleFunc("GET /admin/cards/{id}/transactions", p.handleTransactions)
+
+	api.HandleFunc("GET /api/me/cards", p.handleMyCards)
 }
