@@ -1,0 +1,27 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: anmo-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: anmo-root-2026
+      MYSQL_DATABASE: anmo
+      MYSQL_USER: anmo
+      MYSQL_PASSWORD: anmo-dev-2026
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      - "33306:3306"
+    volumes:
+      - anmo-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-panmo-root-2026"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  anmo-mysql-data:
