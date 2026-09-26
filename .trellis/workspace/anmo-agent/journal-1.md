@@ -397,3 +397,29 @@ Phase 11 E2E
 ## Next
 
 对抗式审查（独立任务）
+
+---
+
+## Session: 对抗式审查 (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- 独立子代理构造 25 个对抗用例（DB 级 18 + HTTP 级 7）真实运行：BLOCKER 1 + WARNING 8，全部复现
+- 正面确认：卡余额并发不变量、日历锁风暴、认证/跨顾客隔离/JWT 伪造拦截、SQL 参数化
+- 修复 B1（payment valid_lock+UNIQUE、先锁预约）与 W1-W8（幂等回放/跨会员校验/撤销语义/锁序/状态机收紧），migration 010
+- REVEAL 用例翻转为 GUARD 断言后 25 用例全过；E2E 重跑全过
+- 结果落盘 .trellis/tasks/对抗审查结果.md（含修复记录与复验证据）；冻结口径新增 D18
+
+## Tests
+
+- go build/vet/test -count=1：13 包全部 ok
+
+## Database
+
+- migration 010_payment_idem.sql（payment.valid_lock 生成列 + idempotency_key）
+
+## Next
+
+最终验收（§136 + V1 FINAL STATUS）
