@@ -105,3 +105,37 @@ Phase 1 工程骨架
 ## Next
 
 Phase 2 Identity
+
+---
+
+## Session: Phase 2 — Identity (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- 后台登录 POST /admin/auth/login（bcrypt + JWT, role=OWNER/OPERATOR），首次启动种子 OWNER（config 注入）
+- RBAC：router 三层 mux（root 公开 / admin 校验 / api 校验顾客 token），middleware.NewAuth 注入 identity.TokenVerifier；顾客 token 访问后台 403、无 token 401
+- 顾客登录：POST /api/auth/sms/send（dev 固定码 123456 + 60s 限频 + 日志）→ /api/auth/sms/verify → member 自动创建/绑定（EnsureByPhone，GET_LOCK 日序列 member_no=M+yyyymmdd+4位）
+- JWT: HS256, act=ADMIN/CUSTOMER, admin 12h / customer 7d
+
+## Tests
+
+- go build/vet/test 全过；新增 token 往返/篡改/过期、SMS 消费/限频/过期、auth 中间件 401/403 单测
+- 冒烟：OWNER 登录取 token、顾客登录建 member、越权 403/401 实测通过
+
+## Database
+
+- 无新 migration（001 已含 identity 表与种子；OWNER 账号运行时种子化，密码不入 SQL）
+
+## Files Changed
+
+- identity/{api,admin,customer,sms,token,handler,module}.go、member/{ensure,clock}.go、router/router.go、middleware/auth.go、main.go
+
+## Remaining
+
+- 会员管理 CRUD 属 Phase 3
+
+## Next
+
+Phase 3 Member
