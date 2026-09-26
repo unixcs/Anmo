@@ -299,3 +299,27 @@ Phase 7 Transaction（核心）
 ## Next
 
 Phase 8 今日工作台
+
+---
+
+## Session: Phase 8 — 今日工作台 (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- GET /admin/workbench?date=：6 态汇总 + 卡片（会员姓名/服务 snapshot/价格/VALID 收款信息）
+- 快速操作（确认/开始/完成/核销/收款/取消/爽约）端点齐备（Phase 6/7 交付）
+- 决策记录：后台管理 Web UI 不在 Plan §108-121 Phase 清单内，按"歧义不做"原则以 admin API 交付能力；§136 老板项以 API 验收
+
+## Tests
+
+- go build/vet/test 全过（11 包 ok）；workbench 聚合测试（汇总计数/姓名/快照/收款状态）
+
+## Database
+
+- 无新 migration
+
+## Next
+
+Phase 9 Customer H5
