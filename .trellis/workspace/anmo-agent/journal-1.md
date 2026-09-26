@@ -349,3 +349,27 @@ Phase 9 Customer H5
 ## Next
 
 Phase 10 Content + Ops
+
+---
+
+## Session: Phase 10 — Content + Ops (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- content：GET /api/home（blocks+ACTIVE banner/公告）、GET /api/settings（公开项+config 兜底）；后台 page config 校验保存（D16）、banner/公告 CRUD、settings 读写
+- ops：OperationLog 中间件（admin 非 GET 全量审计，D7 经 main 注入不产生 import 环）、GET /admin/logs、三项洞察（走 card/member api，§86 边界精确 <=2/60d/7d）、POST /admin/ops/daily（EXPIRED sweep + 快照落库）
+- card/member api 扩展：LowBalanceCards/ExpiringCards/SweepExpired/DormantMembers
+
+## Tests
+
+- go build/vet/test 全过（12 包 ok）；ops 测试 3 项（洞察边界/沉睡边界/每日 sweep+快照）
+
+## Database
+
+- 无新 migration
+
+## Next
+
+Phase 11 E2E
