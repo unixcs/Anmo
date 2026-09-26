@@ -298,8 +298,9 @@ func (p *Provider) Complete(ctx context.Context, id, operatorID string) (*Appoin
 			return shared.Server("APT_QUERY", err)
 		}
 		if a.Status == StatusCompleted {
-			out = a
-			return nil
+			// §99 Case 10: 已完成预约不能重复完成（拒绝重复动作；
+			// 核销事务内的联动幂等由 MarkCompleted 单独保证）
+			return shared.Conflict("APT_BAD_TRANSITION", "预约已完成，不能重复完成")
 		}
 		out, err = p.transition(ctx, tx, id, StatusInService, StatusCompleted, "ADMIN", operatorID, "完成服务")
 		return err

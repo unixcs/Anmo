@@ -172,10 +172,9 @@ func TestCompleteIdempotentAndNoShowGuard(t *testing.T) {
 	if _, err := e.p.Complete(ctx, a.ID, "op"); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	// idempotent complete (W1)
-	again, err := e.p.Complete(ctx, a.ID, "op")
-	if err != nil || again.Status != StatusCompleted {
-		t.Fatalf("second complete: %v %+v", err, again)
+	// Case 10: 重复完成必须拒绝（§99）
+	if _, err := e.p.Complete(ctx, a.ID, "op"); !shared.Is(err, "APT_BAD_TRANSITION") {
+		t.Fatalf("second complete must fail, got %v", err)
 	}
 }
 

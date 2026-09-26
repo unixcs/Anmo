@@ -203,10 +203,9 @@ func TestFullLoop(t *testing.T) {
 
 	// ---- 完成 + 核销（§120/§53）----
 	admin.ok("PUT", "/admin/appointments/"+aptID+"/complete", nil)
-	// 已完成不能重复完成 → 幂等完成返回 COMPLETED
-	again := admin.ok("PUT", "/admin/appointments/"+aptID+"/complete", nil)
-	if str(again["data"].(map[string]any), "status") != "COMPLETED" {
-		t.Fatalf("complete not idempotent")
+	// §99 Case 10：已完成不能重复完成 → 409
+	if status, _ := admin.do("PUT", "/admin/appointments/"+aptID+"/complete", nil); status != 409 {
+		t.Fatalf("re-complete status = %d, want 409", status)
 	}
 
 	redeem := admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
