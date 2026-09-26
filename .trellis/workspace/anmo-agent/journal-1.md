@@ -27,3 +27,36 @@
 ### Status
 
 [OK] **Completed**
+
+---
+
+## Session: Phase 0 — Plan Review (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- Trellis init（--zcode），父任务 09-27-anmo-v1 建立
+- 根 AGENTS.md 编写（项目定位/闭环/模块地图/数据库规则/状态机/事务/不变量/禁止事项）
+- MySQL 8.4 容器（anmo-mysql, 33306, db=anmo）
+- plan.md 只读审查，`.trellis/tasks/archive/2026-09/09-27-phase0-review/REVIEW.md`，DECISION=PASS
+
+## Tests
+
+- 纯审查任务，无测试；git commit fd51383
+
+## Database
+
+- docker-compose.yml（mysql:8.4, utf8mb4, Asia/Shanghai, 端口 33306）
+
+## Files Changed
+
+- AGENTS.md, docker-compose.yml, plan.md(入库), .trellis/*, .zcode/*
+
+## Remaining
+
+- W1-W5 执行口径已冻结（见 REVIEW.md），进入 Phase 1
+
+## Next
+
+Phase 1 工程骨架
