@@ -323,3 +323,29 @@ Phase 8 今日工作台
 ## Next
 
 Phase 9 Customer H5
+
+---
+
+## Session: Phase 9 — Customer H5 (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- apps/customer（Vue3+Vite+TS+vue-router）：首页/服务/预约(选服务→日期→时间槽→提交)/我的(会员卡/我的预约/历史/资料)/登录
+- 目录符合 §101：core(api/models/logic/booking 时间槽生成/store/utils) + platform(auth/storage/notify，唯一 DOM/localStorage 边界) + pages/components
+- 路由守卫（未登录跳登录）、冲突文案 §106、内部备注不下发 §107、预约入口带 service 预选
+- 后端补 GET /api/me/cards（token 推导 member_id）
+- npm run build（vue-tsc）通过；go 全测 10 包 ok
+
+## Tests
+
+- go build/vet/test 全过；vue-tsc + vite build PASS
+
+## Database
+
+- 无新 migration
+
+## Next
+
+Phase 10 Content + Ops
