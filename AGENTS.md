@@ -92,17 +92,42 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 
 1. 发卡：member_card + card_transaction(ISSUE)
 2. 核销：锁卡 → 校验状态/有效期/卡服务规则/余额 → 扣次 → card_transaction(REDEEM) → redemption → payment(CARD) → appointment=COMPLETED → status log，任一步失败 ROLLBACK
-3. 撤销：锁卡 → 确认未撤销 → 恢复次数 → card_transaction(REVERSAL) → redemption_reversal
+3. 撤销：锁卡 → 确认未撤销 → 恢复次数 → card_transaction(REVERSAL) → redemption_reversal → **同一事务将原核销的 payment(CARD) 置 VOIDED**。payment.status ∈ {VALID, VOIDED}；收款记录只统计 VALID；一个预约最多一笔 VALID payment
 
 禁止异步事件扣卡。EventBus 仅用于通知/统计/洞察。
 
 ## 业务不变量
 
 - `remaining_count >= 0` 恒成立
-- 一个预约最多一次有效核销（appointment_id + SUCCESS 唯一），幂等键 `redeem:{appointment_id}`
+- 一个预约最多一次有效核销：redemption.status ∈ {SUCCESS, REVERSED}，撤销只置 REVERSED 不删行；生成列 active_lock（SUCCESS 时=appointment_id，否则 NULL）+ UNIQUE(active_lock) 保证不变量并支持撤销后重新核销
+- idempotency_key 为请求级 UUID，UNIQUE 约束防重复提交
 - 一个时间段只能有一个有效预约（PENDING_CONFIRM/CONFIRMED/IN_SERVICE 参与冲突判定）
-- 冲突判定：`existing.start < new.end AND existing.end > new.start`
+- 冲突判定：`existing.start < new.end AND existing.end > new.start`，排除自身（改期）
 - 顾客只能通过 token 确定自己的 member_id，禁止信任前端传参
+
+## 冻结决策（Phase 0 Review + 子代理审查，全部为"最简/不做"口径）
+
+| # | 决策 |
+|---|------|
+| D1 | payment.status ∈ {VALID, VOIDED}；撤销事务同事务置 VOIDED；收款只统计 VALID；一预约最多一笔 VALID payment；V1 无独立作废收款功能 |
+| D2 | RBAC：identity_user.role 枚举（OWNER/OPERATOR）实现角色；identity_role/identity_permission 建静态种子表；V1 OPERATOR 权限与 OWNER 相同 |
+| D3 | 数据库共 24 张表（§124 清单为权威）；appointment.member_id NOT NULL，无代客下单 |
+| D4 | card_service_rule 挂 card_template_id（模板级）；核销经 member_card.card_template_id 解析 |
+| D5 | 并发预约：事务内 GET_LOCK('anmo:appointment:calendar') 串行化冲突检查，COMMIT 后释放 |
+| D6 | 跨模块单事务：transaction 模块开事务，显式 Tx 执行器传入 card/appointment 的 api.go；模块内禁止自开嵌套事务（Phase 1 落地 shared.TxRunner） |
+| D7 | 操作日志由 HTTP middleware 写 ops_operation_log；业务模块不 import ops；ops 定时任务单向依赖业务模块 api.go |
+| D8 | 状态迁移一律 `UPDATE ... WHERE status=期望` 校验影响行数；改期限 PENDING_CONFIRM/CONFIRMED、沿用 2 小时限制、同 appointment 改时间、冲突排除自身；NO_SHOW 仅从 CONFIRMED 迁出 |
+| D9 | 仅核销事务与"完成服务"动作触发 COMPLETED；现金/微信收款只写 payment，不改预约状态 |
+| D10 | 续卡 = 同一 member 再发一张新卡（复用 ISSUE 流水）；调整次数 = 现有卡 ADJUSTMENT ±N 流水 |
+| D11 | 卡模板 type 仅 COUNT/ACTIVITY 存枚举，不产生独立逻辑，有效期由 validity_type/valid_from/valid_until 表达 |
+| D12 | 作废卡：仅置 CANCELLED，不改次数、不写次数流水；核销拒绝 CANCELLED |
+| D13 | 核销时 remaining_count 减至 0 同事务置 USED_UP；EXPIRED 惰性校验+每日 sweep（W2） |
+| D14 | 索引补唯一约束：member.phone、member_no、appointment_no、redemption.idempotency_key |
+| D15 | 营业时间边界：scheduled_end ≤ 营业结束时间，否则拒绝 |
+| D16 | content_page_config 的 JSON block 引用 banner/announcement id，不复制正文 |
+| D17 | 顾客多时段待确认预约无上限限制，风险知情接受（"不做"原则） |
+
+参考报告：`.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md`、`.../09-27-phase0-review/REVIEW.md`
 
 ## V1 边界 / 禁止事项（硬约束）
 

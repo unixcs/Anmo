@@ -60,3 +60,14 @@
 ## Next
 
 Phase 1 工程骨架
+
+---
+
+## Session: 子代理 Plan 独立审查（编码前门禁）(2026-09-27)
+
+- 独立子代理对 plan.md + AGENTS.md + Phase 0 REVIEW 做对抗式审查 → 首轮 DECISION: BLOCKED
+- BLOCKER B1：撤销核销事务未处理 payment(CARD)，撤销后重结导致收款双计
+- 修复：AGENTS.md 撤销事务补 payment 置 VOIDED；采纳 W-A~W-K/R1-R7 为冻结决策 D1-D17
+- 复审 DECISION: PASS（B1 闭环推演成立，D1-D17 无冲突，无新 BLOCKER）
+- 报告：.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md
+- 门禁结论：允许进入 Phase 1 编码

@@ -19,7 +19,19 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "09-27-phase0-review"
+    "09-27-phase0-review",
+    "09-27-plan-subagent-review",
+    "09-27-phase1-skeleton",
+    "09-27-phase2-identity",
+    "09-27-phase3-member",
+    "09-27-phase4-service",
+    "09-27-phase5-card",
+    "09-27-phase6-appointment",
+    "09-27-phase7-transaction",
+    "09-27-phase8-workbench",
+    "09-27-phase9-h5",
+    "09-27-phase10-content-ops",
+    "09-27-phase11-e2e"
   ],
   "parent": null,
   "relatedFiles": [],
