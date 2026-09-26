@@ -263,3 +263,42 @@ func TestConcurrentRedeemOneBalance(t *testing.T) {
 		t.Fatalf("Case 1: %d ok / %d fail, want 1/1 (%v %v)", ok, fail, results[0], results[1])
 	}
 }
+
+func TestWorkbenchSummaryAndCards(t *testing.T) {
+	e := newTxnEnv(t)
+	ctx := context.Background()
+	a1 := e.bookInService(t, 9, 10, 0)
+	e.bookInService(t, 9, 11, 0)
+	if _, _, err := e.p.SettleByCard(ctx, a1, e.card, "op-1", "wb-1"); err != nil {
+		t.Fatalf("settle: %v", err)
+	}
+
+	summary, cards, err := e.p.Workbench(ctx, shared.NowShanghai().AddDate(0, 0, 9).Format("2006-01-02"))
+	if err != nil {
+		t.Fatalf("workbench: %v", err)
+	}
+	if summary.Total != 2 || summary.Completed != 1 || summary.InService != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if len(cards) != 2 {
+		t.Fatalf("cards = %d", len(cards))
+	}
+	for _, c := range cards {
+		if c.MemberName != "结算测试" {
+			t.Fatalf("member name missing: %+v", c)
+		}
+		if c.Service == nil || c.Service.PriceSnapshot != 12800 {
+			t.Fatalf("service snapshot missing: %+v", c.Service)
+		}
+	}
+	// settled card has VALID payment; other has none
+	paid := 0
+	for _, c := range cards {
+		if c.Payment != nil && c.Payment.Method == "CARD" {
+			paid++
+		}
+	}
+	if paid != 1 {
+		t.Fatalf("paid cards = %d, want 1", paid)
+	}
+}

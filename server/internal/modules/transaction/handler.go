@@ -70,6 +70,15 @@ func (p *Provider) handleReverse(w http.ResponseWriter, r *http.Request) {
 	shared.OK(w, map[string]bool{"reversed": true})
 }
 
+func (p *Provider) handleWorkbench(w http.ResponseWriter, r *http.Request) {
+	summary, cards, err := p.Workbench(r.Context(), r.URL.Query().Get("date"))
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]any{"summary": summary, "cards": cards})
+}
+
 func (p *Provider) handleListPayments(w http.ResponseWriter, r *http.Request) {
 	pays, err := p.ListPayments(r.Context(), r.URL.Query().Get("status"))
 	if err != nil {
