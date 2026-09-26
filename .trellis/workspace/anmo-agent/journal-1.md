@@ -233,3 +233,38 @@ Phase 5 Card
 ## Next
 
 Phase 6 Appointment
+
+---
+
+## Session: Phase 6 — Appointment (2026-09-27)
+
+# PHASE RESULT
+
+## Completed
+
+- 预约创建：snapshot(appointment_service)、营业时间/提前量/时间槽对齐校验（D15）、APPT 编号 APT+日序列
+- 冲突判定重构：GET_LOCK 会在提交前释放导致双订窗口 → 改为 database.Pool.NamedLock（专用连接持锁至 COMMIT 后释放，D5 冻结口径按此实现）
+- 业务编号竞态修复：MAX+1 弃用，新增技术表 sys_sequence（migration 009）原子计数
+- 状态机全量：confirm/start/complete(幂等)/cancel(顾客 2h/后台无限制)/no-show(仅 CONFIRMED)/reschedule(排除自身+改期日志)，全部条件 UPDATE 守卫（D8）
+- 后台/顾客端路由 + 今日工作台查询（Today/汇总/卡片，Phase 8 复用）
+
+## Tests
+
+- go build/vet/test 全过（10 包 ok）
+- appointment 测试 6 项：重叠/相邻冲突、时间窗校验、状态守卫+取消释放时段（Case 9）、完成幂等+爽约守卫（Case 10）、改期排除自身、**并发抢时段 8 goroutine 仅 1 成功（Case 2）**
+
+## Database
+
+- migration 009_sequence.sql（sys_sequence 技术表；D3 更新为"24 业务表+技术表"）
+
+## Files Changed
+
+- appointment/{lifecycle,queries,handler,module,repo_test}.go、member/ensure.go、shared/{clock,sequence}.go、database/lock.go、migrations/009、AGENTS.md
+
+## Remaining
+
+- 核销事务联动 appointment 在 Phase 7
+
+## Next
+
+Phase 7 Transaction（核心）
