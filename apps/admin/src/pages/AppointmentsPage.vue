@@ -7,6 +7,7 @@
         <el-option v-for="(text, key) in APT_STATUS_TEXT" :key="key" :label="text" :value="key" />
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
+      <el-button type="warning" plain @click="closureVisible = true">闭店设置</el-button>
       <span class="spacer" />
       <span class="total">共 {{ total }} 条</span>
     </div>
@@ -16,7 +17,8 @@
       <el-empty v-if="rows.length === 0" description="暂无预约" :image-size="70" />
       <div v-for="row in rows" :key="row.id" class="apt-card">
         <div class="apt-top">
-          <span class="apt-time">{{ fmtTime(row.scheduled_start).slice(5, 16) }}</span>
+          <span class="apt-time">{{ timeLabel(row) }}</span>
+          <el-tag v-if="row.slot_type === 'HALF_DAY'" size="small" type="warning">{{ row.day_part === 'AM' ? '上午到店' : '下午到店' }}</el-tag>
           <el-tag :type="APT_STATUS_TAG[row.status]" size="small">{{ APT_STATUS_TEXT[row.status] }}</el-tag>
         </div>
         <div class="apt-main">
@@ -25,7 +27,7 @@
         </div>
         <div v-if="row.customer_note" class="apt-note">备注：{{ row.customer_note }}</div>
         <div class="apt-btns">
-          <AptActionButtons :row="row" :refresh="load" @settle="openSettle(row)" />
+          <AptActionButtons :row="row" :refresh="load" @settle="openSettle(row)" @reschedule="openReschedule(row)" />
         </div>
       </div>
     </template>
@@ -35,8 +37,13 @@
       <el-table-column label="顾客" width="150">
         <template #default="{ row }">{{ memberName(row.member_id) }}</template>
       </el-table-column>
-      <el-table-column label="开始时间" width="150">
-        <template #default="{ row }">{{ fmtTime(row.scheduled_start) }}</template>
+      <el-table-column label="时间" width="180">
+        <template #default="{ row }">
+          {{ timeLabel(row) }}
+          <el-tag v-if="row.slot_type === 'HALF_DAY'" size="small" type="warning">
+            {{ row.day_part === 'AM' ? '上午到店' : '下午到店' }}
+          </el-tag>
+        </template>
       </el-table-column>
       <el-table-column label="结束时间" width="150">
         <template #default="{ row }">{{ fmtTime(row.scheduled_end) }}</template>
@@ -49,7 +56,7 @@
       <el-table-column prop="customer_note" label="顾客备注" min-width="120" show-overflow-tooltip />
       <el-table-column label="操作" min-width="300" fixed="right">
         <template #default="{ row }">
-          <AptActionButtons :row="row" :refresh="load" @settle="openSettle(row)" />
+          <AptActionButtons :row="row" :refresh="load" @settle="openSettle(row)" @reschedule="openReschedule(row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -60,6 +67,8 @@
 
   <SettleDialog v-model="settleVisible" :appointment="settleApt" :service="null"
     :member-name="settleApt ? memberName(settleApt.member_id) : ''" @settled="load" />
+  <RescheduleDialog v-model="rescheduleVisible" :apt-id="rescheduleId" :on-done="load" />
+  <ClosureDialog v-model="closureVisible" />
 </template>
 
 <script setup lang="ts">
@@ -73,6 +82,8 @@ import { APT_STATUS_TAG, APT_STATUS_TEXT, fmtTime } from '../core/format'
 import { useIsMobile } from '../core/useMedia'
 import AptActionButtons from '../components/AptActionButtons.vue'
 import SettleDialog from '../components/SettleDialog.vue'
+import RescheduleDialog from '../components/RescheduleDialog.vue'
+import ClosureDialog from '../components/ClosureDialog.vue'
 
 const isMobile = useIsMobile()
 const date = ref('')
@@ -86,6 +97,20 @@ const memberMap = ref<Record<string, string>>({})
 
 const settleVisible = ref(false)
 const settleApt = ref<Appointment | null>(null)
+const rescheduleVisible = ref(false)
+const rescheduleId = ref('')
+const closureVisible = ref(false)
+
+function timeLabel(a: Appointment): string {
+  return a.slot_type === 'HALF_DAY'
+    ? `${fmtTime(a.scheduled_start).slice(5, 10)} ${a.day_part === 'AM' ? '上午' : '下午'}`
+    : fmtTime(a.scheduled_start).slice(5, 16)
+}
+
+function openReschedule(apt: Appointment) {
+  rescheduleId.value = apt.id
+  rescheduleVisible.value = true
+}
 
 function memberName(id: string): string {
   return memberMap.value[id] ?? id.slice(0, 8)

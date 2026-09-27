@@ -52,8 +52,8 @@ func newEnv(t *testing.T) *env {
 	mem := member.New(db, cfg)
 	svc := service.New(db, cfg)
 	cards := card.New(db, cfg)
-	apt := appointment.New(db, cfg, svc)
-	txp := transaction.New(db, cfg, cards, apt, mem)
+	apt := appointment.New(db, cfg, svc, nil)
+	txp := transaction.New(db, cfg, cards, apt, mem, nil)
 	e := &env{t: t, db: db, tx: txp, cards: cards, apt: apt, mem: mem, opID: "adv-op"}
 	ctx := context.Background()
 
@@ -126,7 +126,7 @@ func (e *env) newCard(memberID string, total int) string {
 // bookInService 建+确认+开始一个预约（可直接结算）。
 func (e *env) bookInService(memberID, svcID string, day, hh, mm int) string {
 	ctx := e.ctx()
-	a, err := e.apt.Create(ctx, memberID, svcID, e.slot(day, hh, mm), "")
+	a, err := e.apt.Create(ctx, memberID, svcID, appointment.BookingReq{StartTime: e.slot(day, hh, mm)}, "")
 	if err != nil {
 		e.t.Fatalf("create: %v", err)
 	}
@@ -647,17 +647,17 @@ func TestGUARD_A9_ConcurrentCreateAndRescheduleSameSlot(t *testing.T) {
 	out := make(chan res, 3)
 	go func() {
 		<-start
-		_, err := e.apt.Reschedule(ctx, e.mbrA, mover, target, true)
+		_, err := e.apt.Reschedule(ctx, e.mbrA, mover, appointment.BookingReq{StartTime: target}, true)
 		out <- res{"reschedule", err}
 	}()
 	go func() {
 		<-start
-		_, err := e.apt.Create(ctx, e.mbrB, e.svc60, target, "")
+		_, err := e.apt.Create(ctx, e.mbrB, e.svc60, appointment.BookingReq{StartTime: target}, "")
 		out <- res{"createB", err}
 	}()
 	go func() {
 		<-start
-		_, err := e.apt.Create(ctx, e.mbrA, e.svc30, target, "")
+		_, err := e.apt.Create(ctx, e.mbrA, e.svc30, appointment.BookingReq{StartTime: target}, "")
 		out <- res{"createA30", err}
 	}()
 	close(start)
@@ -710,7 +710,7 @@ func TestGUARD_A10_RescheduleConflictAfterLockWait(t *testing.T) {
 	go func() {
 		c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
-		_, err := e.apt.Reschedule(c, e.mbrA, mover, target, true)
+		_, err := e.apt.Reschedule(c, e.mbrA, mover, appointment.BookingReq{StartTime: target}, true)
 		res <- err
 	}()
 	time.Sleep(300 * time.Millisecond) // 让改期进入 GET_LOCK 等待
@@ -729,7 +729,7 @@ func TestGUARD_A11_TerminalStatusNoConflict(t *testing.T) {
 	e := newEnv(t)
 	ctx := e.ctx()
 	s := e.slot(2, 17, 0)
-	a1, err := e.apt.Create(ctx, e.mbrA, e.svc60, s, "")
+	a1, err := e.apt.Create(ctx, e.mbrA, e.svc60, appointment.BookingReq{StartTime: s}, "")
 	if err != nil {
 		t.Fatalf("create1: %v", err)
 	}
@@ -739,17 +739,17 @@ func TestGUARD_A11_TerminalStatusNoConflict(t *testing.T) {
 	if _, err := e.apt.NoShow(ctx, a1.ID, e.opID); err != nil {
 		t.Fatalf("noshow: %v", err)
 	}
-	if _, err := e.apt.Create(ctx, e.mbrB, e.svc60, s, ""); err != nil {
+	if _, err := e.apt.Create(ctx, e.mbrB, e.svc60, appointment.BookingReq{StartTime: s}, ""); err != nil {
 		t.Errorf("NO_SHOW 后同时段不可再约: %v", err)
 	}
-	a2, err := e.apt.Create(ctx, e.mbrA, e.svc30, e.slot(2, 18, 0), "")
+	a2, err := e.apt.Create(ctx, e.mbrA, e.svc30, appointment.BookingReq{StartTime: e.slot(2, 18, 0)}, "")
 	if err != nil {
 		t.Fatalf("create2: %v", err)
 	}
 	if _, err := e.apt.CancelByAdmin(ctx, a2.ID, e.opID, "test"); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if _, err := e.apt.Create(ctx, e.mbrB, e.svc30, e.slot(2, 18, 0), ""); err != nil {
+	if _, err := e.apt.Create(ctx, e.mbrB, e.svc30, appointment.BookingReq{StartTime: e.slot(2, 18, 0)}, ""); err != nil {
 		t.Errorf("CANCELLED 后同时段不可再约: %v", err)
 	}
 }
@@ -768,13 +768,13 @@ func TestGUARD_A12_BusinessHourBoundaries(t *testing.T) {
 	}{
 		{"23:30跨午夜", e.svc60, 2, 23, 30, "APT_OUT_OF_HOURS"},
 		{"20:30+60超打烊", e.svc60, 2, 20, 30, "APT_OUT_OF_HOURS"},
-		{"20:30+30恰好打烊", e.svc30, 2, 20, 30, ""},
-		{"20:15错位时间槽", e.svc30, 2, 20, 15, "APT_BAD_SLOT"},
+		{"19:30+30恰好打烊", e.svc30, 2, 19, 30, ""},
+		{"19:15错位时间槽", e.svc30, 2, 19, 15, "APT_BAD_SLOT"},
 		{"08:30早于开门", e.svc60, 2, 8, 30, "APT_OUT_OF_HOURS"},
 		{"40天后太远", e.svc60, 40, 10, 0, "APT_TOO_FAR"},
 	}
 	for _, c := range cases {
-		_, err := e.apt.Create(ctx, e.mbrA, c.svc, e.slot(c.day, c.hh, c.mm), "")
+		_, err := e.apt.Create(ctx, e.mbrA, c.svc, appointment.BookingReq{StartTime: e.slot(c.day, c.hh, c.mm)}, "")
 		got := ""
 		if err != nil {
 			got = errCode(err)
@@ -785,7 +785,7 @@ func TestGUARD_A12_BusinessHourBoundaries(t *testing.T) {
 	}
 	// 改期路径同样受 D15 约束
 	m := e.aptCreate(t, e.mbrA, e.svc60, 3, 10, 0)
-	if _, err := e.apt.Reschedule(ctx, e.mbrA, m, e.slot(3, 23, 0), false); !shared.Is(err, "APT_OUT_OF_HOURS") {
+	if _, err := e.apt.Reschedule(ctx, e.mbrA, m, appointment.BookingReq{StartTime: e.slot(3, 23, 0)}, false); !shared.Is(err, "APT_OUT_OF_HOURS") {
 		t.Errorf("改期到 23:00 未被营业时间拦截: %v", err)
 	}
 }
@@ -804,7 +804,7 @@ func TestGUARD_A13_BookingStormNoDeadlock(t *testing.T) {
 			<-start
 			c, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
-			_, err := e.apt.Create(c, e.mbrA, e.svc60, target, "")
+			_, err := e.apt.Create(c, e.mbrA, e.svc60, appointment.BookingReq{StartTime: target}, "")
 			statuses[i] = err
 		}(i)
 	}
@@ -820,7 +820,7 @@ func TestGUARD_A13_BookingStormNoDeadlock(t *testing.T) {
 	for i, err := range statuses {
 		if err == nil {
 			ok++
-		} else if code := errCode(err); code != "APPOINTMENT_CONFLICT" && code != "APT_LOCK_BUSY" {
+		} else if code := errCode(err); code != "APT_SLOT_FULL" && code != "APT_LOCK_BUSY" {
 			t.Errorf("create#%d 非预期错误: %v", i, err)
 		}
 	}
@@ -940,7 +940,7 @@ func TestREVEAL_A18_SettleFromConfirmedSkipsInService(t *testing.T) {
 	e := newEnv(t)
 	cardID := e.newCard(e.mbrA, 10)
 	ctx := e.ctx()
-	pending, err := e.apt.Create(ctx, e.mbrA, e.svc60, e.slot(2, 10, 0), "")
+	pending, err := e.apt.Create(ctx, e.mbrA, e.svc60, appointment.BookingReq{StartTime: e.slot(2, 10, 0)}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -966,7 +966,7 @@ func TestREVEAL_A18_SettleFromConfirmedSkipsInService(t *testing.T) {
 
 func (e *env) aptCreate(t *testing.T, memberID, svcID string, day, hh, mm int) string {
 	t.Helper()
-	a, err := e.apt.Create(e.ctx(), memberID, svcID, e.slot(day, hh, mm), "")
+	a, err := e.apt.Create(e.ctx(), memberID, svcID, appointment.BookingReq{StartTime: e.slot(day, hh, mm)}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

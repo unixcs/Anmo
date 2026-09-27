@@ -36,7 +36,7 @@ function minutesOf(hhmm: string): number {
 }
 
 /** 候选日期（今天起 bookAheadDays 天内）。 */
-export function candidateDays(hours: BusinessHours): DayOption[] {
+export function candidateDays(hours: BusinessHours = DEFAULT_HOURS): DayOption[] {
   const out: DayOption[] = []
   const now = new Date()
   for (let i = 0; i < hours.bookAheadDays; i++) {

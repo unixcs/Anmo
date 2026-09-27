@@ -50,41 +50,80 @@
         <el-button size="small" link @click="resetToScan">重新扫码</el-button>
       </div>
 
-      <el-form label-width="90px" class="pick">
-        <el-form-item label="今日预约">
-          <el-select v-model="selectedAptId" style="width: 100%" placeholder="该会员今日暂无预约">
-            <el-option v-for="a in myApts" :key="a.id" :value="a.id"
-              :label="`${fmtTime(a.scheduled_start).slice(11)} ${a.service?.service_name_snapshot ?? ''}（${APT_STATUS_TEXT[a.status]}）`" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <p v-if="myApts.length > 0 && !inServiceApts.includes(selectedAptId ?? '')" class="warn">
-        核销需要预约处于"服务中"状态；可先在下方开始服务，或到"预约管理"操作。
-      </p>
+      <!-- 散客模式：今日无预约，直接按卡扣次（D19） -->
+      <template v-if="walkIn">
+        <el-alert type="info" :closable="false" show-icon
+          title="今日无预约 · 散客直接核销" description="选择会员卡和本次服务项目即可扣次收款。" style="margin-bottom: 10px" />
+        <el-table :data="activeCards" size="small" v-loading="resolving" highlight-current-row
+          @row-click="(row: MemberCard) => (walkInCardId = row.id)">
+          <el-table-column label="卡" min-width="120">
+            <template #default="{ row }">{{ templateName(row.card_template_id) }}</template>
+          </el-table-column>
+          <el-table-column label="剩余/总" width="90">
+            <template #default="{ row }">{{ row.remaining_count }}/{{ row.total_count }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="110">
+            <template #default="{ row }">
+              <el-button size="small" :type="walkInCardId === row.id ? 'success' : 'default'"
+                @click.stop="walkInCardId = row.id">{{ walkInCardId === row.id ? '已选' : '选这张' }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="activeCards.length === 0" description="该会员没有可用会员卡" :image-size="60" />
 
-      <el-table :data="activeCards" size="small" v-loading="resolving">
-        <el-table-column label="卡" min-width="130">
-          <template #default="{ row }">{{ templateName(row.card_template_id) }}</template>
-        </el-table-column>
-        <el-table-column label="剩余/总" width="90">
-          <template #default="{ row }">{{ row.remaining_count }}/{{ row.total_count }}</template>
-        </el-table-column>
-        <el-table-column label="有效期至" width="110">
-          <template #default="{ row }">{{ row.valid_until ?? '永久' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" :disabled="row.remaining_count < 1 || !selectedAptId"
-              @click="doRedeem(row)">核销 1 次</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="activeCards.length === 0" description="该会员没有可用会员卡" :image-size="60" />
+        <el-form label-width="90px" class="pick" v-if="walkInCardId">
+          <el-form-item label="服务项目">
+            <el-select v-model="walkInServiceId" style="width: 100%" placeholder="选择本次服务（按卡规则可选）">
+              <el-option v-for="s in walkInServices" :key="s.id" :value="s.id"
+                :label="`${s.name}（¥${(s.default_price / 100).toFixed(0)}）`" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div class="actions">
+          <el-button type="primary" :loading="resolving" :disabled="!walkInServiceId" @click="doRedeem">
+            核销 1 次
+          </el-button>
+        </div>
+      </template>
 
-      <div class="actions">
-        <el-button v-if="confirmableApt" size="default" type="success" @click="startService">开始服务</el-button>
-        <el-button size="default" @click="refreshMember">刷新</el-button>
-      </div>
+      <!-- 预约模式：定位今日预约（核销需服务中，D9） -->
+      <template v-else>
+        <el-form label-width="90px" class="pick">
+          <el-form-item label="今日预约">
+            <el-select v-model="selectedAptId" style="width: 100%" placeholder="该会员今日暂无预约">
+              <el-option v-for="a in myApts" :key="a.id" :value="a.id"
+                :label="`${fmtTime(a.scheduled_start).slice(11)} ${a.service?.service_name_snapshot ?? ''}（${APT_STATUS_TEXT[a.status]}）`" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <p v-if="myApts.length > 0 && !inServiceApts.includes(selectedAptId ?? '')" class="warn">
+          核销需要预约处于"服务中"状态；可先在下方开始服务，或到"预约管理"操作。
+        </p>
+
+        <el-table :data="activeCards" size="small" v-loading="resolving">
+          <el-table-column label="卡" min-width="130">
+            <template #default="{ row }">{{ templateName(row.card_template_id) }}</template>
+          </el-table-column>
+          <el-table-column label="剩余/总" width="90">
+            <template #default="{ row }">{{ row.remaining_count }}/{{ row.total_count }}</template>
+          </el-table-column>
+          <el-table-column label="有效期至" width="110">
+            <template #default="{ row }">{{ row.valid_until ?? '永久' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button size="small" type="primary" :disabled="row.remaining_count < 1 || !selectedAptId"
+                @click="doRedeem(row)">核销 1 次</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="activeCards.length === 0" description="该会员没有可用会员卡" :image-size="60" />
+
+        <div class="actions">
+          <el-button v-if="confirmableApt" size="default" type="success" @click="startService">开始服务</el-button>
+          <el-button size="default" @click="refreshMember">刷新</el-button>
+        </div>
+      </template>
     </template>
 
     <!-- 第三步：结果 -->
@@ -109,7 +148,9 @@ import {
   listCardTemplates,
   listMemberCards,
   listMembers,
+  listServices,
   redeemCard,
+  redeemWalkIn,
   startAppointment,
   type Member,
   type MemberCard,
@@ -141,10 +182,17 @@ const canUseCamera = !!navigator.mediaDevices?.getUserMedia
 const member = ref<Member | null>(null)
 const activeCards = ref<MemberCard[]>([])
 const templateMap = ref<Record<string, string>>({})
+const templateRuleMap = ref<Record<string, string[]>>({})
 const myApts = ref<TodayAppointment[]>([])
 const selectedAptId = ref('')
 const phoneMatches = ref<Member[]>([])
 const resultText = ref('')
+
+// 散客核销状态（D19）
+const walkIn = ref(false)
+const walkInCardId = ref('')
+const walkInServiceId = ref('')
+const serviceCatalog = ref<{ id: string; name: string; default_price: number; status: string }[]>([])
 
 let stream: MediaStream | null = null
 let raf = 0
@@ -155,6 +203,22 @@ const inServiceApts = computed(() =>
 const confirmableApt = computed(() => {
   const a = myApts.value.find((x) => x.id === selectedAptId.value)
   return a && a.status === 'CONFIRMED' ? a : null
+})
+
+// 散客模式下，所选卡规则允许的服务项（未配规则视为不限制则按后端校验兜底）
+const walkInServices = computed(() => {
+  const card = activeCards.value.find((c) => c.id === walkInCardId.value)
+  if (!card) return []
+  const allowed = templateRuleMap.value[card.card_template_id]
+  let list = serviceCatalog.value.filter((s) => s.status === 'ACTIVE')
+  if (allowed && allowed.length > 0) {
+    list = list.filter((s) => allowed.includes(s.id))
+  }
+  return list
+})
+
+watch(walkInCardId, () => {
+  walkInServiceId.value = ''
 })
 
 function templateName(id: string): string {
@@ -285,18 +349,24 @@ async function submitManual(): Promise<void> {
 async function resolveMember(memberId: string): Promise<void> {
   resolving.value = true
   try {
-    const [detail, cards, tpl, today] = await Promise.all([
+    const [detail, cards, tpl, today, svcs] = await Promise.all([
       getMember(memberId),
       listMemberCards(memberId),
       listCardTemplates(),
       getToday(todayStr()),
+      listServices(),
     ])
+    serviceCatalog.value = (svcs ?? []).map((s) => ({ id: s.id, name: s.name, default_price: s.default_price, status: s.status }))
     member.value = detail.member
     activeCards.value = (cards ?? []).filter((c) => c.status === 'ACTIVE')
     templateMap.value = Object.fromEntries((tpl ?? []).map((t) => [t.id, t.name]))
+    templateRuleMap.value = Object.fromEntries((tpl ?? []).map((t) => [t.id, t.service_ids ?? []]))
     myApts.value = (today.appointments ?? []).filter((a) => a.member_id === memberId)
     phoneMatches.value = []
     manual.value = ''
+    walkIn.value = myApts.value.length === 0
+    walkInCardId.value = ''
+    walkInServiceId.value = ''
     const preferred = myApts.value.find((a) => a.status === 'IN_SERVICE')
     selectedAptId.value = preferred?.id ?? myApts.value[0]?.id ?? ''
     step.value = 'resolved'
@@ -327,16 +397,33 @@ async function startService(): Promise<void> {
   }
 }
 
-async function doRedeem(card: MemberCard): Promise<void> {
-  if (!selectedAptId.value) {
-    ElMessage.warning('请先选择要结算的预约')
-    return
-  }
+async function doRedeem(card?: MemberCard): Promise<void> {
   resolving.value = true
   try {
-    const res = await redeemCard(selectedAptId.value, card.id)
-    const rd = res.redemption
-    resultText.value = `卡余额 ${rd.before_count} → ${rd.after_count} 次；预约已自动完成并记 CARD 收款。`
+    if (walkIn.value) {
+      // 散客核销：按卡直接扣次（D19）
+      const cid = card?.id ?? walkInCardId.value
+      if (!cid) {
+        ElMessage.warning('请先选择会员卡')
+        return
+      }
+      if (!walkInServiceId.value) {
+        ElMessage.warning('请选择本次服务项目')
+        return
+      }
+      const res = await redeemWalkIn(cid, walkInServiceId.value)
+      const rd = res.redemption
+      resultText.value = `卡余额 ${rd.before_count} → ${rd.after_count} 次；已记散客核销收款。`
+    } else {
+      if (!selectedAptId.value) {
+        ElMessage.warning('请先选择要结算的预约')
+        return
+      }
+      if (!card) return
+      const res = await redeemCard(selectedAptId.value, card.id)
+      const rd = res.redemption
+      resultText.value = `卡余额 ${rd.before_count} → ${rd.after_count} 次；预约已自动完成并记 CARD 收款。`
+    }
     step.value = 'result'
     emit('settled')
   } catch (e) {

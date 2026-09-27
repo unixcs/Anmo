@@ -1,4 +1,5 @@
 // components — 预约状态操作的公共封装（确认弹窗 + API + 提示 + 刷新）
+// 改期走独立的 RescheduleDialog（日期/时段控件），由页面级 @reschedule 事件触发。
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   confirmAppointment,
@@ -6,7 +7,6 @@ import {
   completeAppointment,
   cancelAppointment,
   noShowAppointment,
-  rescheduleAppointment,
 } from '../core/api/admin'
 
 export function useAptActions(refresh: () => void) {
@@ -58,16 +58,5 @@ export function useAptActions(refresh: () => void) {
       withPrompt('请输入取消原因', '如：顾客临时有事', () => null, (reason) => cancelAppointment(id, reason), '已取消'),
     noShowApt: (id: string) =>
       withConfirm('将该预约标记为顾客未到店？', () => noShowAppointment(id), '已标记未到店'),
-    rescheduleApt: (id: string) =>
-      withPrompt(
-        '输入新的开始时间（格式 YYYY-MM-DD HH:MM，30 分钟对齐）',
-        '2026-10-01 14:00',
-        (v) =>
-          /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(v)
-            ? null
-            : '格式应为 YYYY-MM-DD HH:MM',
-        (t) => rescheduleAppointment(id, t),
-        '已改期',
-      ),
   }
 }

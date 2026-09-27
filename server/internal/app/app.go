@@ -28,9 +28,21 @@ func Build(db shared.DB, cfg *config.Config, log *slog.Logger) http.Handler {
 	serviceMod := service.New(db, cfg)
 	identityMod := identity.New(db, cfg, memberMod, log)
 	cardMod := card.New(db, cfg)
-	appointmentMod := appointment.New(db, cfg, serviceMod)
-	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod, memberMod)
 	contentMod := content.New(db, cfg)
+	// D20: booking rules resolve in content (settings > cfg > default);
+	// appointment consumes them through the RulesSource interface.
+	bookingRules := appointment.RulesSourceFunc(func(ctx context.Context) (*appointment.BusinessRules, error) {
+		r, err := contentMod.BookingRules(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return &appointment.BusinessRules{
+			OpenTime: r.OpenTime, CloseTime: r.CloseTime, NoonSplit: r.NoonSplit,
+			SlotMinutes: r.SlotMinutes, SlotCapacity: r.SlotCapacity,
+		}, nil
+	})
+	appointmentMod := appointment.New(db, cfg, serviceMod, bookingRules)
+	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod, memberMod, serviceMod)
 	opsMod := ops.New(db, cfg, cardMod, appointmentMod, memberMod)
 
 	opLog := opsMod.NewLogWriter(log)

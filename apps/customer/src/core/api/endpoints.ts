@@ -2,7 +2,7 @@
  * core/api — endpoint catalog + typed wrappers.
  */
 import { http } from './http'
-import type { Appointment, Member, MemberCard, Page, ServiceCategory, ServiceItem } from '../models/models'
+import type { Appointment, Member, MemberCard, ServiceCategory, ServiceItem } from '../models/models'
 
 export const endpoints = {
   sendSms: '/api/auth/sms/send',
@@ -58,13 +58,46 @@ export const api = {
   updateProfile: (patch: Partial<Pick<Member, 'name' | 'gender' | 'birthday'>>) =>
     http.put<{ member: Member }>(endpoints.myProfile, patch),
   myCards: () => http.get<MemberCard[]>(endpoints.myCards),
+  // 注意：http 已解包包络，分页端点返回的就是 data 数组本身
   myAppointments: (status: string) =>
-    http.get<Page<Appointment>>(`${endpoints.appointments}?status=${status}&page=1&per_page=50`),
+    http.get<Appointment[]>(`${endpoints.appointments}?status=${status}&page=1&per_page=50`),
   appointment: (id: string) =>
     http.get<{ appointment: Appointment; services: { service_name_snapshot: string; duration_minutes_snapshot: number; price_snapshot: number }[] }>(endpoints.appointment(id)),
-  createAppointment: (serviceId: string, startTime: string, note: string) =>
-    http.post<Appointment>(endpoints.appointments, { service_id: serviceId, start_time: startTime, note }),
+  bookingOptions: (date: string) =>
+    http.get<BookingOptions>(`/api/booking-options?date=${date}`),
+  createAppointment: (serviceId: string, target: BookingTarget, note: string) =>
+    http.post<Appointment>(endpoints.appointments, {
+      service_id: serviceId,
+      ...target,
+      note,
+    }),
   cancelAppointment: (id: string) => http.put<Appointment>(endpoints.cancel(id)),
-  rescheduleAppointment: (id: string, startTime: string) =>
-    http.put<Appointment>(endpoints.reschedule(id), { start_time: startTime }),
+  rescheduleAppointment: (id: string, target: BookingTarget) =>
+    http.put<Appointment>(endpoints.reschedule(id), target),
+}
+
+/** 具体时间或模糊半天，二选一（D20）。 */
+export interface BookingTarget {
+  start_time?: string // "YYYY-MM-DD HH:MM"
+  date?: string // "YYYY-MM-DD"（配 day_part）
+  day_part?: 'AM' | 'PM'
+}
+
+export interface BookingSlot {
+  time: string
+  remaining: number
+}
+
+export interface BookingHalfDay {
+  closed: boolean
+  total: number
+  remaining: number
+  slots: BookingSlot[] | null
+}
+
+export interface BookingOptions {
+  date: string
+  open: boolean
+  am: BookingHalfDay
+  pm: BookingHalfDay
 }

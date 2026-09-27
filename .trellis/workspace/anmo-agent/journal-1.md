@@ -554,3 +554,13 @@ Phase 11 E2E
 - **HANDOFF.md**：新增仓库根交接文档（机器拓扑/多端工作流约定/各机环境备忘/必读顺序/已知约束），任何 Agent（Codex/OpenCode/ZCode）接手从它开始。
 - 工作流约定：pull --rebase 起手 → 小步提交 push → .trellis journal 即交接日志；两机严禁未推送并行改同一区域。
 - commit: a34e3c2(扫码拍照识别) / 41782fb(.gitignore) / d2ca257(router BASE_URL) / 本次(部署+迁移+HANDOFF)
+
+# PHASE RESULT — V1.x 预约体系升级 + 散客核销 + 核销码门槛 + 商家端控件打磨
+- 任务：`.trellis/tasks/2026-09-27-v1x-booking-redeem-ux/PRD.md`（含子代理对抗审查 10 条问题修订，2×P0 全落实）。
+- 决策增补：AGENTS.md D19（散客核销 NULL 预约 + 幂等键定位收款）/ D20（settings 驱动预约规则 + 模糊预约 + 名额池）/ D21（核销码门槛=持 ACTIVE 卡）/ D22（闭店日历知情闭店）。
+- migration 011：payment/redemption.appointment_id 可空、appointment.slot_type、appointment_closure 表。
+- 后端：content.BookingRules（settings>cfg>默认，20:00 新默认）+ PublicSettings 联动；appointment 域重构（planWindow/checkClosures/checkCapacity/BookingOptions/Closures CRUD）；transaction.RedeemWalkIn + Reverse/paymentForRedemption 改按 idempotency_key 定位（P0 修复）；POST /admin/cards/{id}/redeem；GET /api|admin/booking-options；appointment JSON 增 slot_type/day_part。
+- 顾客端：BookingPage 重做（日期→上下午必选→可选具体时间、满槽禁用、模糊预约提示"具体时间由店主安排"）；MyAppointments 修复 bug#5（http 已解包，myAppointments 直接返回数组——原 `page.data ?? []` 恒空）+ 模糊预约显示"X月X日 上午" + 改期底部抽屉（日期/上下午/时间槽）；QRCodePage 核销码门槛（无 ACTIVE 卡显示引导不出码）+ 实时秒级时钟 + 手机号。
+- 商家端：RescheduleDialog（日历控件+上下午+时间槽，替换手输）；AdjustCountDialog（±步进器+快捷 chips，替换手输正负数）；ClosureDialog（闭店设置/恢复营业）；ScanRedeemDialog 散客模式（无预约自动开启，选卡→选服务→核销）；Appointments/Dashboard 模糊徽标"上午到店/下午到店"；ContentPage 营业与预约配置卡片；RecordsPage 散客标记。
+- 验证：go build/vet + 全部测试包 -count=1 全绿（新增 TestHalfDayWindowAndPool/TestSpecificCoexistsWithFuzzy/TestFuzzyToSpecificReschedule/TestClosureBlocksAndReportsConflicts/TestBookingOptionsShape/TestWalkInRedeemAndReverse/TestWalkInRuleEnforcement；对抗包边界用例重校准至 20:00 打烊）；两端 vue-tsc + vite build 过；联调 E2E（/tmp/v1x-e2e.sh）8 步全过（booking-options 形状/模糊预约/确认+模糊改具体/闭店拒约/散客核销 5→4+收款 12800/撤销回 5+收款作废/记录 appointment null）。
+- 修的坑：BookingOptions SUM(NULL) 扫描失败 → COALESCE；alpine 时区/老 E2E 的 APPOINTMENT_CONFLICT → APT_SLOT_FULL 语义升级（容量模型）。

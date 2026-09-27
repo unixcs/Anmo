@@ -14,7 +14,7 @@ import (
 // Payment — payment row (§46). Only VALID rows count as income (D1).
 type Payment struct {
 	ID            string       `json:"id"`
-	AppointmentID string       `json:"appointment_id"`
+	AppointmentID *string      `json:"appointment_id"` // NULL = 散客核销（D19）
 	MemberID      string       `json:"member_id"`
 	AmountCents   int64        `json:"amount"`
 	Method        string       `json:"method"`
@@ -28,7 +28,7 @@ type Payment struct {
 // Redemption — redemption row (§52).
 type Redemption struct {
 	ID            string `json:"id"`
-	AppointmentID string `json:"appointment_id"`
+	AppointmentID *string `json:"appointment_id"` // NULL = 散客核销（D19）
 	MemberID      string `json:"member_id"`
 	MemberCardID  string `json:"member_card_id"`
 	ServiceID     string `json:"service_id"`
@@ -46,8 +46,13 @@ const (
 
 func scanRedemption(row interface{ Scan(...any) error }) (*Redemption, error) {
 	rd := &Redemption{}
-	err := row.Scan(&rd.ID, &rd.AppointmentID, &rd.MemberID, &rd.MemberCardID, &rd.ServiceID,
+	var aptID sql.NullString
+	err := row.Scan(&rd.ID, &aptID, &rd.MemberID, &rd.MemberCardID, &rd.ServiceID,
 		&rd.Quantity, &rd.BeforeCount, &rd.AfterCount, &rd.Status, &rd.IdemKey)
+	if aptID.Valid {
+		v := aptID.String
+		rd.AppointmentID = &v
+	}
 	return rd, err
 }
 
@@ -154,8 +159,9 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, 
 		}
 
 		// redemption row (active_lock UNIQUE guards the one-valid-per-apt invariant)
+		aptIDRef := aptID
 		redemption = &Redemption{
-			ID: shared.NewID(), AppointmentID: aptID, MemberID: apt.MemberID,
+			ID: shared.NewID(), AppointmentID: &aptIDRef, MemberID: apt.MemberID,
 			MemberCardID: cardID, ServiceID: svc.ServiceID,
 			Quantity: 1, BeforeCount: before, AfterCount: after,
 			Status: "SUCCESS", IdemKey: idemKey,
@@ -184,7 +190,7 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, 
 
 		// payment CARD (D1)
 		payment = &Payment{
-			ID: shared.NewID(), AppointmentID: aptID, MemberID: apt.MemberID,
+			ID: shared.NewID(), AppointmentID: &aptIDRef, MemberID: apt.MemberID,
 			AmountCents: svc.PriceSnapshot * int64(svc.Quantity), Method: "CARD",
 			Status: "VALID", Remark: "会员卡核销", IdemKey: idemKey,
 		}
@@ -199,6 +205,92 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, 
 
 		// last_visit (§12)
 		if err := p.members.TouchLastVisit(ctx, tx, apt.MemberID, shared.NowShanghai()); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return redemption, payment, nil
+}
+
+// RedeemWalkIn settles a walk-in service with a member card — no appointment
+// involved (D19): lock card → validate → deduct → REDEEM txn →
+// redemption(appointment NULL) → payment(CARD, amount = service list price)
+// → touch last_visit. Idempotent on idemKey; reversal reuses ReverseRedemption.
+func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operatorID, idemKey string) (*Redemption, *Payment, error) {
+	if idemKey == "" {
+		return nil, nil, shared.BadRequest("IDEM_KEY_REQUIRED", "缺少幂等键")
+	}
+	item, err := p.services.GetItem(ctx, serviceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if item.Status != "ACTIVE" {
+		return nil, nil, shared.Conflict("SERVICE_INACTIVE", "服务项目已停用")
+	}
+	var redemption *Redemption
+	var payment *Payment
+	err = shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
+		existing, err := p.findRedemptionByIdem(ctx, tx, idemKey)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			if existing.Status != "SUCCESS" {
+				return shared.Conflict("RDM_REVERSED", "该结算对应的核销已被撤销")
+			}
+			redemption = existing
+			payment = p.paymentForRedemption(ctx, tx, existing.ID)
+			return nil
+		}
+
+		c, err := p.cards.LockForRedeem(ctx, tx, cardID)
+		if err != nil {
+			return err
+		}
+		before, after, err := p.cards.ApplyRedeem(ctx, tx, cardID, serviceID, 1, "", operatorID)
+		if err != nil {
+			return err
+		}
+
+		redemption = &Redemption{
+			ID: shared.NewID(), AppointmentID: nil, MemberID: c.MemberID,
+			MemberCardID: cardID, ServiceID: serviceID,
+			Quantity: 1, BeforeCount: before, AfterCount: after,
+			Status: "SUCCESS", IdemKey: idemKey,
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO redemption (id, appointment_id, member_id, member_card_id, service_id, quantity, before_count, after_count, status, idempotency_key)
+			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			redemption.ID, redemption.AppointmentID, redemption.MemberID, redemption.MemberCardID,
+			redemption.ServiceID, redemption.Quantity, redemption.BeforeCount, redemption.AfterCount,
+			redemption.Status, redemption.IdemKey); err != nil {
+			if isDupKey(err) {
+				if winner, qerr := p.findRedemptionByIdem(ctx, tx, idemKey); qerr == nil && winner != nil {
+					if winner.Status == "SUCCESS" {
+						redemption = winner
+						payment = p.paymentForRedemption(ctx, tx, winner.ID)
+						return nil
+					}
+					return shared.Conflict("RDM_REVERSED", "该结算对应的核销已被撤销")
+				}
+				return shared.Conflict("RDM_DUPLICATE", "重复的核销请求")
+			}
+			return wrapTxErr("RDM_INSERT", err)
+		}
+
+		payment = &Payment{
+			ID: shared.NewID(), AppointmentID: nil, MemberID: c.MemberID,
+			AmountCents: item.PriceCents, Method: "CARD",
+			Status: "VALID", Remark: "散客核销", IdemKey: idemKey,
+		}
+		if err := insertPayment(ctx, tx, payment, operatorID); err != nil {
+			return err
+		}
+
+		if err := p.members.TouchLastVisit(ctx, tx, c.MemberID, shared.NowShanghai()); err != nil {
 			return err
 		}
 		return nil
@@ -256,7 +348,7 @@ func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amount
 			return shared.Conflict("APT_BAD_TRANSITION", "预约需处于服务中或已完成才能收款")
 		}
 		payment = &Payment{
-			ID: shared.NewID(), AppointmentID: aptID, MemberID: apt.MemberID,
+			ID: shared.NewID(), AppointmentID: &aptID, MemberID: apt.MemberID,
 			AmountCents: amountCents, Method: method, Status: "VALID",
 			ReferenceNo: refNo, Remark: remark, IdemKey: idemKey,
 		}
@@ -320,10 +412,11 @@ func (p *Provider) ReverseRedemption(ctx context.Context, redemptionID, reason, 
 		if _, _, err := p.cards.ApplyReversal(ctx, tx, rd.MemberCardID, rd.Quantity, rd.ID, operatorID); err != nil {
 			return err
 		}
-		// original CARD payment voided (D1)
+		// original CARD payment voided (D1). Located by the shared
+		// idempotency key — appointment_id is NULL for walk-in redemptions.
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE payment SET status = 'VOIDED', remark = CONCAT(remark, '；核销撤销')
-			 WHERE appointment_id = ? AND method = 'CARD' AND status = 'VALID'`, rd.AppointmentID); err != nil {
+			 WHERE idempotency_key = ? AND method = 'CARD' AND status = 'VALID'`, rd.IdemKey); err != nil {
 			return wrapTxErr("PAY_VOID", err)
 		}
 		return nil
@@ -345,8 +438,8 @@ func (p *Provider) findPaymentByIdem(ctx context.Context, tx shared.Tx, key stri
 
 func (p *Provider) paymentForRedemption(ctx context.Context, tx shared.Tx, redemptionID string) *Payment {
 	py, err := scanPayment(tx.QueryRowContext(ctx,
-		`SELECT `+paymentColumns+` FROM payment WHERE appointment_id =
-		 (SELECT appointment_id FROM redemption WHERE id = ?) AND method = 'CARD' AND status = 'VALID'`, redemptionID))
+		`SELECT `+paymentColumns+` FROM payment WHERE idempotency_key =
+		 (SELECT idempotency_key FROM redemption WHERE id = ?) AND method = 'CARD'`, redemptionID))
 	if err != nil {
 		return nil
 	}
@@ -371,7 +464,12 @@ func insertPayment(ctx context.Context, tx shared.Tx, py *Payment, operatorID st
 
 func scanPayment(row interface{ Scan(...any) error }) (*Payment, error) {
 	py := &Payment{}
-	err := row.Scan(&py.ID, &py.AppointmentID, &py.MemberID, &py.AmountCents, &py.Method,
+	var aptID sql.NullString
+	err := row.Scan(&py.ID, &aptID, &py.MemberID, &py.AmountCents, &py.Method,
 		&py.Status, &py.ReferenceNo, &py.Remark, &py.IdemKey, &py.RecordedAt)
+	if aptID.Valid {
+		v := aptID.String
+		py.AppointmentID = &v
+	}
 	return py, err
 }

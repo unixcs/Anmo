@@ -50,6 +50,8 @@ export interface Appointment {
   scheduled_start: string
   scheduled_end: string
   status: string
+  slot_type: 'SPECIFIC' | 'HALF_DAY'
+  day_part?: 'AM' | 'PM'
   customer_note: string
   // 注意：internal_note 后台内部备注不下发（§107）
   confirmed_at: string | null

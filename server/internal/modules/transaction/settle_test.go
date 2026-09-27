@@ -32,8 +32,8 @@ func newTxnEnv(t *testing.T) *txnEnv {
 	mem := member.New(db, cfg)
 	svc := svcmodule.New(db, cfg)
 	cards := card.New(db, cfg)
-	apt := appointment.New(db, cfg, svc)
-	e := &txnEnv{p: New(db, cfg, cards, apt, mem), cards: cards, apt: apt}
+	apt := appointment.New(db, cfg, svc, nil)
+	e := &txnEnv{p: New(db, cfg, cards, apt, mem, svc), cards: cards, apt: apt}
 
 	ctx := context.Background()
 	err := shared.RunInTx(ctx, e.p.db, func(tx shared.Tx) error {
@@ -75,7 +75,7 @@ func (e *txnEnv) bookInService(t *testing.T, day int, hh, mm int) string {
 	ctx := context.Background()
 	d := shared.NowShanghai().AddDate(0, 0, day)
 	slot := fmt.Sprintf("%04d-%02d-%02d %02d:%02d", d.Year(), d.Month(), d.Day(), hh, mm)
-	a, err := e.apt.Create(ctx, e.mbrID, e.svcID, slot, "")
+	a, err := e.apt.Create(ctx, e.mbrID, e.svcID, appointment.BookingReq{StartTime: slot}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestReverseRestoresAndSecondReverseFails(t *testing.T) {
 	// original CARD payment VOIDED (D1)
 	pays, _ := e.p.ListPayments(ctx, "VALID")
 	for _, py := range pays {
-		if py.AppointmentID == aptID {
+		if *py.AppointmentID == aptID {
 			t.Fatalf("VALID card payment remains after reversal: %+v", py)
 		}
 	}

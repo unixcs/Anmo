@@ -144,13 +144,14 @@
       </el-table-column>
     </el-table>
   </el-dialog>
+  <AdjustCountDialog v-model="adjustVisible" :card="adjustCardRow" :on-done="refreshCards" />
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import AdjustCountDialog from '../components/AdjustCountDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  adjustCard,
   cancelCard,
   createMember,
   getMember,
@@ -315,32 +316,12 @@ async function doIssue() {
   }
 }
 
-async function doAdjust(card: MemberCard) {
-  let value = ''
-  try {
-    const res = await ElMessageBox.prompt(
-      `当前剩余 ${card.remaining_count} 次。输入调整量（正数增加，负数扣减，如 -1 / +2）`,
-      '调整次数',
-      { inputPattern: /^[+-]?\d+$/, inputErrorMessage: '请输入整数（可带正负号）' },
-    )
-    value = res.value.trim()
-  } catch {
-    return
-  }
-  let remark = ''
-  try {
-    const res = await ElMessageBox.prompt('调整备注', '调整次数', { inputValue: '手工调整' })
-    remark = res.value.trim()
-  } catch {
-    return
-  }
-  try {
-    await adjustCard(card.id, Number(value), remark)
-    ElMessage.success('已调整')
-    await refreshCards()
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '调整失败')
-  }
+const adjustVisible = ref(false)
+const adjustCardRow = ref<MemberCard | null>(null)
+
+function doAdjust(card: MemberCard) {
+  adjustCardRow.value = card
+  adjustVisible.value = true
 }
 
 async function doCancelCard(card: MemberCard) {

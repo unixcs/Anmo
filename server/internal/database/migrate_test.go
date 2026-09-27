@@ -63,6 +63,7 @@ func TestMigrateIdempotentAndComplete(t *testing.T) {
 		"service_category": true, "service": true,
 		"card_template": true, "card_service_rule": true, "member_card": true, "card_transaction": true,
 		"appointment": true, "appointment_service": true, "appointment_status_log": true,
+		"appointment_closure": true, // 011: 闭店日历（D22）
 		"payment": true, "redemption": true, "redemption_reversal": true,
 		"content_page_config": true, "content_banner": true, "content_announcement": true, "content_system_setting": true,
 		"ops_operation_log": true, "ops_insight_snapshot": true,

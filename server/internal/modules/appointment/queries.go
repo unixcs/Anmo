@@ -106,7 +106,31 @@ func (p *Provider) queryList(ctx context.Context, f listFilter, limit, offset in
 		}
 		out = append(out, a)
 	}
+	p.decorateDayParts(ctx, out)
 	return out, total, nil
+}
+
+// decorateDayParts fills the display-only DayPart (AM/PM by the configured
+// noon split, D20). Only meaningful for fuzzy bookings, but filled for all.
+func (p *Provider) decorateDayParts(ctx context.Context, list []*Appointment) {
+	if len(list) == 0 {
+		return
+	}
+	rules, err := p.bizRules(ctx)
+	if err != nil {
+		return
+	}
+	for _, a := range list {
+		w, err := dayBounds(rules, a.ScheduledStart)
+		if err != nil {
+			continue
+		}
+		if a.ScheduledStart.Before(w.Noon) {
+			a.DayPart = "AM"
+		} else {
+			a.DayPart = "PM"
+		}
+	}
 }
 
 // ListMine returns a customer's appointments (newest start first).
@@ -230,6 +254,7 @@ func (p *Provider) Today(ctx context.Context, date string) (*TodaySummary, []*Ap
 			summary.NoShow++
 		}
 	}
+	p.decorateDayParts(ctx, list)
 	var details []*AppointmentDetail
 	for _, a := range list {
 		svcs, err := p.ServicesOf(ctx, a.ID)

@@ -26,7 +26,8 @@
         <el-empty v-if="today.length === 0" description="今日暂无预约" :image-size="70" />
         <div v-for="row in today" :key="row.id" class="apt-card">
           <div class="apt-top">
-            <span class="apt-time">{{ fmtTime(row.scheduled_start).slice(11) }}</span>
+            <span class="apt-time">{{ row.slot_type === 'HALF_DAY' ? (row.day_part === 'AM' ? '上午' : '下午') : fmtTime(row.scheduled_start).slice(11) }}</span>
+            <el-tag v-if="row.slot_type === 'HALF_DAY'" size="small" type="warning">{{ row.day_part === 'AM' ? '上午到店' : '下午到店' }}</el-tag>
             <el-tag :type="APT_STATUS_TAG[row.status]" size="small">{{ APT_STATUS_TEXT[row.status] }}</el-tag>
           </div>
           <div class="apt-main">
@@ -34,14 +35,17 @@
             <span class="apt-svc">{{ row.service ? row.service.service_name_snapshot : '-' }}</span>
           </div>
           <div class="apt-btns">
-            <AptActionButtons :row="row" :refresh="refresh" @settle="openSettle(row)" />
+            <AptActionButtons :row="row" :refresh="refresh" @settle="openSettle(row)" @reschedule="openReschedule(row)" />
           </div>
         </div>
       </template>
       <!-- 桌面：表格 -->
       <el-table v-else :data="today" v-loading="loading" size="default">
-        <el-table-column label="时间" width="110">
-          <template #default="{ row }">{{ fmtTime(row.scheduled_start).slice(11) }}</template>
+        <el-table-column label="时间" width="130">
+          <template #default="{ row }">
+            {{ row.slot_type === 'HALF_DAY' ? (row.day_part === 'AM' ? '上午' : '下午') : fmtTime(row.scheduled_start).slice(11) }}
+            <el-tag v-if="row.slot_type === 'HALF_DAY'" size="small" type="warning">模糊</el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="顾客" width="110">
           <template #default="{ row }">{{ memberName(row.member_id) }}</template>
@@ -58,7 +62,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="280">
           <template #default="{ row }">
-            <AptActionButtons :row="row" :refresh="refresh" @settle="openSettle(row)" />
+            <AptActionButtons :row="row" :refresh="refresh" @settle="openSettle(row)" @reschedule="openReschedule(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -122,6 +126,7 @@
       </el-table>
     </el-card>
 
+    <RescheduleDialog v-model="rescheduleVisible" :apt-id="rescheduleId" :on-done="refresh" />
     <SettleDialog v-model="settleVisible" :appointment="settleApt" :service="settleSvc"
       :member-name="settleApt ? memberName(settleApt.member_id) : ''" @settled="refresh" />
     <ScanRedeemDialog v-model="scanVisible" @settled="refresh" />
@@ -145,6 +150,7 @@ import { useIsMobile } from '../core/useMedia'
 import AptActionButtons from '../components/AptActionButtons.vue'
 import SettleDialog from '../components/SettleDialog.vue'
 import ScanRedeemDialog from '../components/ScanRedeemDialog.vue'
+import RescheduleDialog from '../components/RescheduleDialog.vue'
 
 const isMobile = useIsMobile()
 const date = ref(todayStr())
@@ -158,6 +164,13 @@ const memberMap = ref<Record<string, string>>({})
 const settleVisible = ref(false)
 const settleApt = ref<Appointment | null>(null)
 const settleSvc = ref<AppointmentService | null>(null)
+const rescheduleVisible = ref(false)
+const rescheduleId = ref('')
+
+function openReschedule(apt: Appointment) {
+  rescheduleId.value = apt.id
+  rescheduleVisible.value = true
+}
 
 function memberName(id: string): string {
   return memberMap.value[id] ?? id.slice(0, 8)

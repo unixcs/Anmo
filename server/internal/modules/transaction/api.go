@@ -10,6 +10,7 @@ import (
 	"anmo/server/internal/modules/appointment"
 	"anmo/server/internal/modules/card"
 	"anmo/server/internal/modules/member"
+	"anmo/server/internal/modules/service"
 	"anmo/server/internal/shared"
 )
 
@@ -20,11 +21,12 @@ type Provider struct {
 	cards        *card.Provider
 	appointments *appointment.Provider
 	members      *member.Provider
+	services     *service.Provider
 }
 
 // New builds the module Provider. Dependencies are injected by main.
-func New(db shared.DB, cfg *config.Config, cards *card.Provider, appointments *appointment.Provider, members *member.Provider) *Provider {
-	return &Provider{db: db, cfg: cfg, cards: cards, appointments: appointments, members: members}
+func New(db shared.DB, cfg *config.Config, cards *card.Provider, appointments *appointment.Provider, members *member.Provider, services *service.Provider) *Provider {
+	return &Provider{db: db, cfg: cfg, cards: cards, appointments: appointments, members: members, services: services}
 }
 
 // DB exposes the pool to the module's own handler/service files only.

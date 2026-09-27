@@ -31,7 +31,7 @@ func newAptEnv(t *testing.T, mutate func(*config.Config)) *aptEnv {
 	if mutate != nil {
 		mutate(cfg)
 	}
-	e := &aptEnv{p: New(db, cfg, svcmodule.New(db, cfg)), mem: member.New(db, cfg), svc: svcmodule.New(db, cfg), cfg: cfg}
+	e := &aptEnv{p: New(db, cfg, svcmodule.New(db, cfg), nil), mem: member.New(db, cfg), svc: svcmodule.New(db, cfg), cfg: cfg}
 
 	ctx := context.Background()
 	for i, ph := range []string{"13900000011", "13900000012"} {
@@ -73,7 +73,7 @@ func TestCreateAndConflictDetection(t *testing.T) {
 	ctx := context.Background()
 
 	// base booking 15:00-16:00 (2 days out to satisfy lead rules)
-	a, err := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 2, 15, 0), "")
+	a, err := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 2, 15, 0)}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -82,15 +82,15 @@ func TestCreateAndConflictDetection(t *testing.T) {
 	}
 
 	// §28: 15:30-16:30 overlaps → conflict
-	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, slotAt(t, 2, 15, 30), ""); !shared.Is(err, "APPOINTMENT_CONFLICT") {
+	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 2, 15, 30)}, ""); !shared.Is(err, "APT_SLOT_FULL") {
 		t.Fatalf("want conflict for overlap, got %v", err)
 	}
 	// §28: 16:00-17:00 adjacent → allowed
-	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, slotAt(t, 2, 16, 0), ""); err != nil {
+	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 2, 16, 0)}, ""); err != nil {
 		t.Fatalf("adjacent slot rejected: %v", err)
 	}
 	// same member cannot double-book either
-	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 2, 15, 30), ""); !shared.Is(err, "APPOINTMENT_CONFLICT") {
+	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 2, 15, 30)}, ""); !shared.Is(err, "APT_SLOT_FULL") {
 		t.Fatalf("want conflict for same member, got %v", err)
 	}
 }
@@ -100,16 +100,16 @@ func TestSlotAndWindowValidation(t *testing.T) {
 	ctx := context.Background()
 
 	// off-grid start (not aligned to 30min)
-	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 2, 15, 10), ""); !shared.Is(err, "APT_BAD_SLOT") {
+	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 2, 15, 10)}, ""); !shared.Is(err, "APT_BAD_SLOT") {
 		t.Fatalf("want APT_BAD_SLOT, got %v", err)
 	}
 	// too soon: with a 240h lead requirement, any in-hours slot is too soon
 	e2 := newAptEnv(t, func(c *config.Config) { c.Business.BookMinAheadHours = 240 })
-	if _, err := e2.p.Create(ctx, e2.mbr1, e2.svcID, slotAt(t, 2, 15, 0), ""); !shared.Is(err, "APT_TOO_SOON") {
+	if _, err := e2.p.Create(ctx, e2.mbr1, e2.svcID, BookingReq{StartTime: slotAt(t, 2, 15, 0)}, ""); !shared.Is(err, "APT_TOO_SOON") {
 		t.Fatalf("want APT_TOO_SOON, got %v", err)
 	}
 	// beyond closing: 20:30 + 60min = 21:30 > 21:00 (D15)
-	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 2, 20, 30), ""); !shared.Is(err, "APT_OUT_OF_HOURS") {
+	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 2, 20, 30)}, ""); !shared.Is(err, "APT_OUT_OF_HOURS") {
 		t.Fatalf("want APT_OUT_OF_HOURS, got %v", err)
 	}
 }
@@ -119,7 +119,7 @@ func TestStateGuardsAndCancelReleasesSlot(t *testing.T) {
 	ctx := context.Background()
 
 	// Case 9: create 18:00, cancel, re-book same slot by another member
-	a, err := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 3, 18, 0), "")
+	a, err := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 3, 18, 0)}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestStateGuardsAndCancelReleasesSlot(t *testing.T) {
 		t.Fatalf("complete after cancel must fail, got %v", err)
 	}
 	// cancelled slot no longer blocks (Case 9)
-	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, slotAt(t, 3, 18, 0), ""); err != nil {
+	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 3, 18, 0)}, ""); err != nil {
 		t.Fatalf("slot not released after cancel: %v", err)
 	}
 }
@@ -151,12 +151,12 @@ func TestCompleteIdempotentAndNoShowGuard(t *testing.T) {
 	e := newAptEnv(t, nil)
 	ctx := context.Background()
 
-	a, _ := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 4, 10, 0), "")
+	a, _ := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 4, 10, 0)}, "")
 	if _, err := e.p.Confirm(ctx, a.ID, "op"); err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
 	// no-show only from CONFIRMED
-	b, _ := e.p.Create(ctx, e.mbr2, e.svcID, slotAt(t, 4, 11, 0), "")
+	b, _ := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 4, 11, 0)}, "")
 	if _, err := e.p.Confirm(ctx, b.ID, "op"); err != nil {
 		t.Fatalf("confirm b: %v", err)
 	}
@@ -182,21 +182,21 @@ func TestRescheduleExcludesSelf(t *testing.T) {
 	e := newAptEnv(t, nil)
 	ctx := context.Background()
 
-	a, _ := e.p.Create(ctx, e.mbr1, e.svcID, slotAt(t, 5, 14, 0), "")
+	a, _ := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 5, 14, 0)}, "")
 	if _, err := e.p.Confirm(ctx, a.ID, "op"); err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
 	// b occupies 15:00
-	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, slotAt(t, 5, 15, 0), ""); err != nil {
+	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 5, 15, 0)}, ""); err != nil {
 		t.Fatalf("create b: %v", err)
 	}
 	// a reschedules onto its own current time is a no-op conflict-wise but
 	// moving onto 15:00 (b's slot) must fail
-	if _, err := e.p.Reschedule(ctx, e.mbr1, a.ID, slotAt(t, 5, 15, 0), true); !shared.Is(err, "APPOINTMENT_CONFLICT") {
+	if _, err := e.p.Reschedule(ctx, e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 5, 15, 0)}, true); !shared.Is(err, "APT_SLOT_FULL") {
 		t.Fatalf("want conflict, got %v", err)
 	}
 	// moving to a free slot works
-	moved, err := e.p.Reschedule(ctx, e.mbr1, a.ID, slotAt(t, 5, 16, 0), true)
+	moved, err := e.p.Reschedule(ctx, e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 5, 16, 0)}, true)
 	if err != nil {
 		t.Fatalf("reschedule: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestConcurrentBookingSameSlot(t *testing.T) {
 			if i%2 == 1 {
 				m = e.mbr2
 			}
-			_, err := e.p.Create(ctx, m, e.svcID, slot, "")
+			_, err := e.p.Create(ctx, m, e.svcID, BookingReq{StartTime: slot}, "")
 			results[i] = err
 		}(i)
 	}
@@ -230,7 +230,7 @@ func TestConcurrentBookingSameSlot(t *testing.T) {
 	for i, err := range results {
 		if err == nil {
 			successes++
-		} else if !shared.Is(err, "APPOINTMENT_CONFLICT") && !shared.Is(err, "APT_LOCK_BUSY") {
+		} else if !shared.Is(err, "APT_SLOT_FULL") && !shared.Is(err, "APT_LOCK_BUSY") {
 			t.Fatalf("unexpected error from goroutine %d: %v", i, err)
 		}
 	}

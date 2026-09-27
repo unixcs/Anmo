@@ -41,6 +41,28 @@ type settlePayReq struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
+// handleRedeemCardDirect — 散客核销（D19）：无预约、按卡直接扣次。
+func (p *Provider) handleRedeemCardDirect(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ServiceID      string `json:"service_id"`
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	if req.ServiceID == "" || req.IdempotencyKey == "" {
+		shared.BadRequest("RDM_BAD_REQ", "缺少 service_id 或 idempotency_key").Write(w)
+		return
+	}
+	rd, py, err := p.RedeemWalkIn(r.Context(), r.PathValue("id"), req.ServiceID, operatorOf(r), req.IdempotencyKey)
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]any{"redemption": rd, "payment": py})
+}
+
 func (p *Provider) handleSettlePay(w http.ResponseWriter, r *http.Request) {
 	var req settlePayReq
 	if err := shared.DecodeJSON(r, &req); err != nil {

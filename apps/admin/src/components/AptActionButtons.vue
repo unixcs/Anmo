@@ -10,7 +10,7 @@
   <el-button v-if="['IN_SERVICE', 'COMPLETED'].includes(row.status)" size="small" type="warning"
     @click="$emit('settle')">结算</el-button>
   <el-button v-if="['PENDING_CONFIRM', 'CONFIRMED'].includes(row.status)" size="small"
-    @click="act.rescheduleApt(row.id)">改期</el-button>
+    @click="$emit('reschedule', row.id)">改期</el-button>
   <el-button v-if="['PENDING_CONFIRM', 'CONFIRMED'].includes(row.status)" size="small" type="danger"
     @click="act.cancelApt(row.id)">取消</el-button>
 </template>
@@ -20,7 +20,7 @@ import { useAptActions } from './aptActions'
 import type { Appointment } from '../core/api/admin'
 
 const props = defineProps<{ row: Appointment; refresh: () => void }>()
-defineEmits<{ (e: 'settle'): void }>()
+defineEmits<{ (e: 'settle'): void; (e: 'reschedule', id: string): void }>()
 
 const act = useAptActions(() => props.refresh())
 </script>

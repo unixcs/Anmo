@@ -16,8 +16,14 @@ func operatorOf(r *http.Request) string {
 
 type createReq struct {
 	ServiceID string `json:"service_id"`
-	StartTime string `json:"start_time"` // YYYY-MM-DD HH:MM
+	StartTime string `json:"start_time"` // YYYY-MM-DD HH:MM（具体时间，与 date+day_part 二选一）
+	Date      string `json:"date"`       // YYYY-MM-DD（模糊预约，配 day_part）
+	DayPart   string `json:"day_part"`   // AM | PM（模糊预约）
 	Note      string `json:"note"`
+}
+
+func (c createReq) bookingReq() BookingReq {
+	return BookingReq{StartTime: c.StartTime, Date: c.Date, DayPart: c.DayPart}
 }
 
 // handleCustomerCreate: member identity from token only (§100).
@@ -28,7 +34,7 @@ func (p *Provider) handleCustomerCreate(w http.ResponseWriter, r *http.Request) 
 		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
 		return
 	}
-	a, err := p.Create(r.Context(), pr.ActorID, req.ServiceID, req.StartTime, req.Note)
+	a, err := p.Create(r.Context(), pr.ActorID, req.ServiceID, req.bookingReq(), req.Note)
 	if err != nil {
 		shared.Fail(w, err)
 		return
@@ -48,19 +54,73 @@ func (p *Provider) handleCustomerCancel(w http.ResponseWriter, r *http.Request) 
 
 func (p *Provider) handleCustomerReschedule(w http.ResponseWriter, r *http.Request) {
 	pr, _ := middleware.PrincipalFrom(r.Context())
-	var req struct {
-		StartTime string `json:"start_time"`
-	}
+	var req createReq
 	if err := shared.DecodeJSON(r, &req); err != nil {
 		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
 		return
 	}
-	a, err := p.Reschedule(r.Context(), pr.ActorID, r.PathValue("id"), req.StartTime, true)
+	a, err := p.Reschedule(r.Context(), pr.ActorID, r.PathValue("id"), req.bookingReq(), true)
 	if err != nil {
 		shared.Fail(w, err)
 		return
 	}
 	shared.OK(w, a)
+}
+
+// handleCustomerBookingOptions — 可约时段计算（D20 §3.4）。
+func (p *Provider) handleCustomerBookingOptions(w http.ResponseWriter, r *http.Request) {
+	opts, err := p.BookingOptions(r.Context(), r.URL.Query().Get("date"))
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, opts)
+}
+
+// --- admin ---
+
+func (p *Provider) handleAdminBookingOptions(w http.ResponseWriter, r *http.Request) {
+	opts, err := p.BookingOptions(r.Context(), r.URL.Query().Get("date"))
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, opts)
+}
+
+func (p *Provider) handleAdminListClosures(w http.ResponseWriter, r *http.Request) {
+	list, err := p.ListClosures(r.Context(), r.URL.Query().Get("from"))
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, list)
+}
+
+func (p *Provider) handleAdminCreateClosure(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Date    string `json:"date"`
+		DayPart string `json:"day_part"` // AM | PM | FULL
+		Remark  string `json:"remark"`
+	}
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	n, err := p.CreateClosure(r.Context(), req.Date, req.DayPart, req.Remark, operatorOf(r))
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]any{"saved": true, "conflict_count": n})
+}
+
+func (p *Provider) handleAdminDeleteClosure(w http.ResponseWriter, r *http.Request) {
+	if err := p.DeleteClosure(r.Context(), r.PathValue("id")); err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]any{"deleted": true})
 }
 
 func (p *Provider) handleCustomerList(w http.ResponseWriter, r *http.Request) {
@@ -136,14 +196,12 @@ func (p *Provider) handleAdminNoShow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Provider) handleAdminReschedule(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		StartTime string `json:"start_time"`
-	}
+	var req createReq
 	if err := shared.DecodeJSON(r, &req); err != nil {
 		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
 		return
 	}
-	a, err := p.Reschedule(r.Context(), "", r.PathValue("id"), req.StartTime, false)
+	a, err := p.Reschedule(r.Context(), "", r.PathValue("id"), req.bookingReq(), false)
 	if err != nil {
 		shared.Fail(w, err)
 		return

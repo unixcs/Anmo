@@ -21,8 +21,9 @@ log:
 
 business:
   open_time: "09:00"
-  close_time: "21:00"
+  close_time: "20:00"
   slot_minutes: 30
+  slot_capacity: 1
   book_ahead_days: 30
   book_min_ahead_hours: 2
   cancel_min_ahead_hours: 2

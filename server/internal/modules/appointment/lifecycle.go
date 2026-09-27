@@ -32,6 +32,8 @@ type Appointment struct {
 	ScheduledStart time.Time  `json:"scheduled_start"`
 	ScheduledEnd   time.Time  `json:"scheduled_end"`
 	Status         string     `json:"status"`
+	SlotType       string     `json:"slot_type"`               // SPECIFIC | HALF_DAY (D20)
+	DayPart        string     `json:"day_part,omitempty"`      // AM | PM，按上下午分界计算（展示用）
 	CustomerNote   string     `json:"customer_note"`
 	InternalNote   string     `json:"internal_note"`
 	ConfirmedAt    *time.Time `json:"confirmed_at"`
@@ -41,14 +43,14 @@ type Appointment struct {
 	CreatedAt      time.Time  `json:"created_at"`
 }
 
-const aptColumns = `id, appointment_no, member_id, scheduled_start, scheduled_end, status,
+const aptColumns = `id, appointment_no, member_id, scheduled_start, scheduled_end, status, slot_type,
  customer_note, internal_note, confirmed_at, started_at, completed_at, cancelled_at, created_at`
 
 func scanAppointment(row interface{ Scan(...any) error }) (*Appointment, error) {
 	a := &Appointment{}
 	var confirmed, started, completed, cancelled sql.NullTime
 	err := row.Scan(&a.ID, &a.No, &a.MemberID, &a.ScheduledStart, &a.ScheduledEnd,
-		&a.Status, &a.CustomerNote, &a.InternalNote,
+		&a.Status, &a.SlotType, &a.CustomerNote, &a.InternalNote,
 		&confirmed, &started, &completed, &cancelled, &a.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -97,32 +99,8 @@ func parseSlot(s string) (time.Time, error) {
 	return t, nil
 }
 
-// validateWindow enforces business hours and booking-lead rules (§19/§30, D15).
-func (p *Provider) validateWindow(start, end time.Time) error {
-	b := p.cfg.Business
-	loc := shared.NowShanghai().Location()
-	day := start.In(loc)
-	openT, _ := time.ParseInLocation("15:04", b.OpenTime, loc)
-	closeT, _ := time.ParseInLocation("15:04", b.CloseTime, loc)
-	open := time.Date(day.Year(), day.Month(), day.Day(), openT.Hour(), openT.Minute(), 0, 0, loc)
-	close := time.Date(day.Year(), day.Month(), day.Day(), closeT.Hour(), closeT.Minute(), 0, 0, loc)
-	if start.Before(open) || end.After(close) {
-		return shared.BadRequest("APT_OUT_OF_HOURS", "预约时间超出营业时间")
-	}
-	now := shared.NowShanghai()
-	if start.Before(now.Add(time.Duration(b.BookMinAheadHours) * time.Hour)) {
-		return shared.BadRequest("APT_TOO_SOON", "预约需至少提前 2 小时")
-	}
-	if start.After(now.AddDate(0, 0, b.BookAheadDays)) {
-		return shared.BadRequest("APT_TOO_FAR", fmt.Sprintf("最早可提前 %d 天预约", b.BookAheadDays))
-	}
-	// slot alignment (§19: fixed 30-minute grid)
-	slot := time.Duration(b.SlotMinutes) * time.Minute
-	if start.Sub(open)%slot != 0 {
-		return shared.BadRequest("APT_BAD_SLOT", "预约时间需对齐时间槽")
-	}
-	return nil
-}
+// validateWindow was replaced by planWindow/checkClosures/checkCapacity in
+// booking.go (D20).
 
 // nextAppointmentNo generates APT+yyyymmdd+seq via the atomic counter table
 // (no MAX+1 races; the row lock serializes writers until commit).
@@ -135,30 +113,10 @@ func (p *Provider) nextAppointmentNo(ctx context.Context, tx shared.Tx) (string,
 	return fmt.Sprintf("APT%s%04d", day, seq), nil
 }
 
-// activeExists reports overlapping active appointments (§71), excluding one id.
-func activeExists(ctx context.Context, tx shared.Tx, start, end time.Time, excludeID string) (bool, error) {
-	q := `SELECT COUNT(*) FROM appointment
-	      WHERE status IN ('PENDING_CONFIRM','CONFIRMED','IN_SERVICE')
-	        AND scheduled_start < ? AND scheduled_end > ?`
-	args := []any{end, start}
-	if excludeID != "" {
-		q += ` AND id <> ?`
-		args = append(args, excludeID)
-	}
-	var n int
-	if err := tx.QueryRowContext(ctx, q, args...).Scan(&n); err != nil {
-		return false, shared.Server("APT_CONFLICT_QUERY", err)
-	}
-	return n > 0, nil
-}
-
 // Create books a new appointment for a member: one transaction with the
-// calendar lock, conflict check, snapshot insert and status log.
-func (p *Provider) Create(ctx context.Context, memberID, serviceID, startStr, note string) (*Appointment, error) {
-	start, err := parseSlot(startStr)
-	if err != nil {
-		return nil, err
-	}
+// calendar lock, closure/capacity checks, snapshot insert and status log
+// (§53/D20). req is either an exact slot or a fuzzy half-day.
+func (p *Provider) Create(ctx context.Context, memberID, serviceID string, req BookingReq, note string) (*Appointment, error) {
 	item, err := p.services.GetItem(ctx, serviceID)
 	if err != nil {
 		return nil, err
@@ -166,8 +124,16 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID, startStr, no
 	if item.Status != "ACTIVE" {
 		return nil, shared.Conflict("SERVICE_INACTIVE", "服务项目已停用")
 	}
-	end := start.Add(time.Duration(item.DurationMin) * time.Minute)
-	if err := p.validateWindow(start, end); err != nil {
+	rules, err := p.bizRules(ctx)
+	if err != nil {
+		return nil, err
+	}
+	win, err := p.planWindow(ctx, rules, req, item.DurationMin)
+	if err != nil {
+		return nil, err
+	}
+	bounds, err := dayBounds(rules, win.Start)
+	if err != nil {
 		return nil, err
 	}
 
@@ -178,12 +144,11 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID, startStr, no
 	}
 	defer unlock()
 	err = shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		conflict, err := activeExists(ctx, tx, start, end, "")
-		if err != nil {
+		if err := checkClosures(ctx, tx, bounds, win); err != nil {
 			return err
 		}
-		if conflict {
-			return shared.Conflict("APPOINTMENT_CONFLICT", "该时间刚刚被预约，请重新选择")
+		if err := checkCapacity(ctx, tx, rules, bounds, win, ""); err != nil {
+			return err
 		}
 		no, err := p.nextAppointmentNo(ctx, tx)
 		if err != nil {
@@ -191,9 +156,9 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID, startStr, no
 		}
 		id := shared.NewID()
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO appointment (id, appointment_no, member_id, scheduled_start, scheduled_end, status, customer_note)
-			 VALUES (?,?,?,?,?,?,?)`,
-			id, no, memberID, start, end, StatusPendingConfirm, note); err != nil {
+			`INSERT INTO appointment (id, appointment_no, member_id, scheduled_start, scheduled_end, status, slot_type, customer_note)
+			 VALUES (?,?,?,?,?,?,?,?)`,
+			id, no, memberID, win.Start, win.End, StatusPendingConfirm, win.SlotType, note); err != nil {
 			return shared.Server("APT_INSERT", err)
 		}
 		if _, err := tx.ExecContext(ctx,
@@ -209,6 +174,7 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID, startStr, no
 		if err != nil {
 			return shared.Server("APT_QUERY", err)
 		}
+		out.DayPart = win.DayPart
 		return nil
 	})
 	if err != nil {
@@ -365,13 +331,10 @@ func (p *Provider) NoShow(ctx context.Context, id, operatorID string) (*Appointm
 	return out, err
 }
 
-// Reschedule moves an appointment to a new time on the same appointment
-// (§32/D8): cancel semantics not used; conflicts exclude the appointment itself.
-func (p *Provider) Reschedule(ctx context.Context, memberID, id, newStartStr string, byCustomer bool) (*Appointment, error) {
-	start, err := parseSlot(newStartStr)
-	if err != nil {
-		return nil, err
-	}
+// Reschedule moves an appointment to a new time or half-day on the same
+// appointment (§32/D8/D20): conflicts and capacity exclude the appointment
+// itself; fuzzy→specific and specific→fuzzy are both allowed.
+func (p *Provider) Reschedule(ctx context.Context, memberID, id string, req BookingReq, byCustomer bool) (*Appointment, error) {
 	var out *Appointment
 	unlock, err := p.acquireCalendar(ctx)
 	if err != nil {
@@ -395,26 +358,33 @@ func (p *Provider) Reschedule(ctx context.Context, memberID, id, newStartStr str
 		if byCustomer && a.ScheduledStart.Before(shared.NowShanghai().Add(time.Duration(p.cfg.Business.CancelMinAheadHrs)*time.Hour)) {
 			return shared.Conflict("APT_RESCHEDULE_TOO_LATE", "距开始不足 2 小时，请联系店家改期")
 		}
-		// duration comes from the snapshot
+		// duration comes from the snapshot (specific targets need it)
 		var dur int
 		if err := tx.QueryRowContext(ctx,
 			`SELECT duration_minutes_snapshot FROM appointment_service WHERE appointment_id = ? LIMIT 1`, id).Scan(&dur); err != nil {
 			return shared.Server("APT_SNAPSHOT_QUERY", err)
 		}
-		end := start.Add(time.Duration(dur) * time.Minute)
-		if err := p.validateWindow(start, end); err != nil {
-			return err
-		}
-		conflict, err := activeExists(ctx, tx, start, end, id)
+		rules, err := p.bizRules(ctx)
 		if err != nil {
 			return err
 		}
-		if conflict {
-			return shared.Conflict("APPOINTMENT_CONFLICT", "新时间已被预约，请重新选择")
+		win, err := p.planWindow(ctx, rules, req, dur)
+		if err != nil {
+			return err
+		}
+		bounds, err := dayBounds(rules, win.Start)
+		if err != nil {
+			return err
+		}
+		if err := checkClosures(ctx, tx, bounds, win); err != nil {
+			return err
+		}
+		if err := checkCapacity(ctx, tx, rules, bounds, win, id); err != nil {
+			return err
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE appointment SET scheduled_start = ?, scheduled_end = ? WHERE id = ?`,
-			start, end, id); err != nil {
+			`UPDATE appointment SET scheduled_start = ?, scheduled_end = ?, slot_type = ? WHERE id = ?`,
+			win.Start, win.End, win.SlotType, id); err != nil {
 			return shared.Server("APT_RESCHEDULE", err)
 		}
 		from := a.Status
@@ -422,7 +392,11 @@ func (p *Provider) Reschedule(ctx context.Context, memberID, id, newStartStr str
 			return err
 		}
 		out, err = scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
-		return err
+		if err != nil {
+			return err
+		}
+		out.DayPart = win.DayPart
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -46,8 +46,9 @@ type Log struct {
 
 type Business struct {
 	OpenTime          string `yaml:"open_time"`            // "09:00"
-	CloseTime         string `yaml:"close_time"`           // "21:00"
+	CloseTime         string `yaml:"close_time"`           // "20:00"
 	SlotMinutes       int    `yaml:"slot_minutes"`         // 30
+	SlotCapacity      int    `yaml:"slot_capacity"`        // 每时段并发容量（D20），默认 1
 	BookAheadDays     int    `yaml:"book_ahead_days"`      // 30
 	BookMinAheadHours int    `yaml:"book_min_ahead_hours"` // 2
 	CancelMinAheadHrs int    `yaml:"cancel_min_ahead_hours"`
@@ -98,6 +99,7 @@ var envOverrides = map[string]func(*Config, string){
 	"ANMO_LOG_LEVEL":                     func(c *Config, v string) { c.Log.Level = v },
 	"ANMO_BUSINESS_OPEN_TIME":            func(c *Config, v string) { c.Business.OpenTime = v },
 	"ANMO_BUSINESS_CLOSE_TIME":           func(c *Config, v string) { c.Business.CloseTime = v },
+	"ANMO_BUSINESS_SLOT_CAPACITY":        func(c *Config, v string) { c.Business.SlotCapacity = atoi(v) },
 	"ANMO_BUSINESS_BOOK_AHEAD_DAYS":      func(c *Config, v string) { c.Business.BookAheadDays = atoi(v) },
 	"ANMO_BUSINESS_BOOK_MIN_AHEAD_HOURS": func(c *Config, v string) { c.Business.BookMinAheadHours = atoi(v) },
 }
@@ -137,10 +139,13 @@ func setDefaults(cfg *Config) {
 		cfg.Business.OpenTime = "09:00"
 	}
 	if cfg.Business.CloseTime == "" {
-		cfg.Business.CloseTime = "21:00"
+		cfg.Business.CloseTime = "20:00"
 	}
 	if cfg.Business.SlotMinutes == 0 {
 		cfg.Business.SlotMinutes = 30
+	}
+	if cfg.Business.SlotCapacity == 0 {
+		cfg.Business.SlotCapacity = 1
 	}
 	if cfg.Business.BookAheadDays == 0 {
 		cfg.Business.BookAheadDays = 30

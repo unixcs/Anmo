@@ -16,11 +16,13 @@ type Provider struct {
 	db       shared.DB
 	cfg      *config.Config
 	services *service.Provider
+	rules    RulesSource // nil → cfg/defaults (unit tests)
 }
 
 // New builds the module Provider. Dependencies are injected by main.
-func New(db shared.DB, cfg *config.Config, services *service.Provider) *Provider {
-	return &Provider{db: db, cfg: cfg, services: services}
+// rules may be nil (tests) — booking rules then come from cfg/defaults.
+func New(db shared.DB, cfg *config.Config, services *service.Provider, rules RulesSource) *Provider {
+	return &Provider{db: db, cfg: cfg, services: services, rules: rules}
 }
 
 // DB exposes the pool to the module's own handler/service files only.

@@ -29,7 +29,9 @@
           </el-table-column>
           <el-table-column prop="reference_no" label="单号" min-width="120" show-overflow-tooltip />
           <el-table-column prop="remark" label="备注" min-width="110" show-overflow-tooltip />
-          <el-table-column prop="appointment_id" label="预约" width="120" show-overflow-tooltip />
+          <el-table-column label="预约" width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.appointment_id ?? '散客' }}</template>
+          </el-table-column>
         </el-table>
       </el-tab-pane>
 
@@ -59,7 +61,9 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="appointment_id" label="预约" min-width="120" show-overflow-tooltip />
+          <el-table-column label="预约" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.appointment_id ?? '散客' }}</template>
+          </el-table-column>
           <el-table-column label="操作" width="100" fixed="right">
             <template #default="{ row }">
               <el-button v-if="row.status === 'SUCCESS'" size="small" type="danger"

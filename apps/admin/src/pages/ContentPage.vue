@@ -72,6 +72,24 @@
 
       <!-- 系统设置 -->
       <el-tab-pane label="系统设置" name="settings">
+        <!-- 营业配置（D20）：预约窗口/时段间隔/每时段人数/上下午分界 -->
+        <el-card shadow="never" style="margin-bottom: 14px">
+          <template #header><b>营业与预约配置</b><span class="hint" style="margin-left: 10px">改后只影响新预约，不影响已约好的</span></template>
+          <el-form inline>
+            <el-form-item label="开门时间"><el-time-select v-model="biz.open" start="05:00" end="23:00" step="00:30" style="width: 110px" /></el-form-item>
+            <el-form-item label="关门时间"><el-time-select v-model="biz.close" start="06:00" end="23:59" step="00:30" style="width: 110px" /></el-form-item>
+            <el-form-item label="时段间隔">
+              <el-radio-group v-model="biz.slotMinutes">
+                <el-radio-button :value="30">30分钟</el-radio-button>
+                <el-radio-button :value="60">1小时</el-radio-button>
+                <el-radio-button :value="120">2小时</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="每时段可约人数"><el-input-number v-model="biz.capacity" :min="1" :max="20" /></el-form-item>
+            <el-form-item label="上下午分界"><el-time-select v-model="biz.noon" start="10:00" end="16:00" step="00:30" style="width: 110px" /></el-form-item>
+            <el-form-item><el-button type="primary" :loading="bizSaving" @click="saveBiz">保存营业配置</el-button></el-form-item>
+          </el-form>
+        </el-card>
         <div class="tab-head">
           <span class="hint">键值设置（如门店电话、地址等，供业务读取）。</span>
         </div>
@@ -179,6 +197,7 @@ async function load() {
     } else if (tab.value === 'settings') {
       const s = await getSettings()
       settingRows.value = Object.entries(s ?? {}).map(([key, value]) => ({ key, value }))
+      fillBiz(s ?? {})
     }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载失败')
@@ -291,6 +310,35 @@ async function saveBlocks() {
     ElMessage.error(e instanceof Error ? e.message : '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+// ---------- 营业配置（D20） ----------
+const biz = ref({ open: '09:00', close: '20:00', slotMinutes: 30, capacity: 1, noon: '12:00' })
+const bizSaving = ref(false)
+
+function fillBiz(map: Record<string, string>): void {
+  if (map['business_open_time']) biz.value.open = map['business_open_time']
+  if (map['business_close_time']) biz.value.close = map['business_close_time']
+  if (map['business_slot_minutes']) biz.value.slotMinutes = Number(map['business_slot_minutes'])
+  if (map['business_slot_capacity']) biz.value.capacity = Number(map['business_slot_capacity'])
+  if (map['business_noon_split']) biz.value.noon = map['business_noon_split']
+}
+
+async function saveBiz(): Promise<void> {
+  bizSaving.value = true
+  try {
+    await saveSetting('business_open_time', biz.value.open)
+    await saveSetting('business_close_time', biz.value.close)
+    await saveSetting('business_slot_minutes', String(biz.value.slotMinutes))
+    await saveSetting('business_slot_capacity', String(biz.value.capacity))
+    await saveSetting('business_noon_split', biz.value.noon)
+    ElMessage.success('营业配置已保存，即刻对新预约生效')
+    await load()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    bizSaving.value = false
   }
 }
 

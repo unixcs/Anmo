@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"anmo/server/internal/shared"
 )
@@ -232,6 +233,64 @@ func (p *Provider) SavePageConfig(ctx context.Context, page string, blocks []Pag
 
 // --- system settings (§84) ---
 
+// BusinessRules — effective booking window rules (D20). Resolution order:
+// settings key > cfg.Business (when non-zero) > hardcoded default.
+type BusinessRules struct {
+	OpenTime     string // "09:00"
+	CloseTime    string // "20:00"
+	NoonSplit    string // "12:00"
+	SlotMinutes  int    // 30 | 60 | 120
+	SlotCapacity int    // per-slot concurrency, ≥1
+}
+
+func businessDefault() BusinessRules {
+	return BusinessRules{OpenTime: "09:00", CloseTime: "20:00", NoonSplit: "12:00", SlotMinutes: 30, SlotCapacity: 1}
+}
+
+func pickStored(stored map[string]string, key, cfgVal, def string) string {
+	if v := stored[key]; v != "" {
+		return v
+	}
+	if cfgVal != "" {
+		return cfgVal
+	}
+	return def
+}
+
+func pickInt(stored map[string]string, key string, cfgVal, def int) int {
+	if v := stored[key]; v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	if cfgVal > 0 {
+		return cfgVal
+	}
+	return def
+}
+
+// BookingRules resolves the effective booking rules for D20 validation and
+// option computation. Read per call — the KV table is tiny; no caching.
+func (p *Provider) BookingRules(ctx context.Context) (BusinessRules, error) {
+	stored, err := p.Settings(ctx)
+	if err != nil {
+		return BusinessRules{}, err
+	}
+	def := businessDefault()
+	b := p.cfg.Business
+	slotMin := pickInt(stored, "business_slot_minutes", b.SlotMinutes, def.SlotMinutes)
+	if slotMin != 30 && slotMin != 60 && slotMin != 120 {
+		slotMin = def.SlotMinutes
+	}
+	return BusinessRules{
+		OpenTime:     pickStored(stored, "business_open_time", b.OpenTime, def.OpenTime),
+		CloseTime:    pickStored(stored, "business_close_time", b.CloseTime, def.CloseTime),
+		NoonSplit:    pickStored(stored, "business_noon_split", "", def.NoonSplit),
+		SlotMinutes:  slotMin,
+		SlotCapacity: pickInt(stored, "business_slot_capacity", b.SlotCapacity, def.SlotCapacity),
+	}, nil
+}
+
 // Settings returns all settings as a map.
 func (p *Provider) Settings(ctx context.Context) (map[string]string, error) {
 	rows, err := p.db.QueryContext(ctx, `SELECT setting_key, setting_value FROM content_system_setting`)
@@ -250,23 +309,26 @@ func (p *Provider) Settings(ctx context.Context) (map[string]string, error) {
 	return out, nil
 }
 
-// PublicSettings exposes only customer-safe keys with config fallbacks.
+// PublicSettings exposes only customer-safe keys with resolved business rules
+// (business_* settings > cfg > default) so the customer homepage and booking
+// page follow the merchant's configuration (D20).
 func (p *Provider) PublicSettings(ctx context.Context) (map[string]string, error) {
 	stored, err := p.Settings(ctx)
 	if err != nil {
 		return nil, err
 	}
-	b := p.cfg.Business
-	out := map[string]string{
-		"open_time":   b.OpenTime,
-		"close_time":  b.CloseTime,
-		"shop_phone":  stored["shop_phone"],
-		"shop_notice": stored["shop_notice"],
+	rules, err := p.BookingRules(ctx)
+	if err != nil {
+		return nil, err
 	}
-	for _, k := range []string{"open_time", "close_time", "shop_phone", "shop_notice"} {
-		if v, ok := stored[k]; ok && v != "" {
-			out[k] = v
-		}
+	out := map[string]string{
+		"open_time":     rules.OpenTime,
+		"close_time":    rules.CloseTime,
+		"noon_split":    rules.NoonSplit,
+		"slot_minutes":  strconv.Itoa(rules.SlotMinutes),
+		"slot_capacity": strconv.Itoa(rules.SlotCapacity),
+		"shop_phone":    stored["shop_phone"],
+		"shop_notice":   stored["shop_notice"],
 	}
 	return out, nil
 }

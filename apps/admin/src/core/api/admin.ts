@@ -100,6 +100,8 @@ export interface Appointment {
   scheduled_start: string
   scheduled_end: string
   status: AppointmentStatus
+  slot_type: 'SPECIFIC' | 'HALF_DAY'
+  day_part?: 'AM' | 'PM'
   customer_note: string
   internal_note: string
   confirmed_at: string | null
@@ -136,7 +138,7 @@ export interface TodayAppointment extends Appointment {
 
 export interface Payment {
   id: string
-  appointment_id: string
+  appointment_id: string | null // null = 散客核销（D19）
   member_id: string
   amount: number
   method: 'CARD' | 'WECHAT_TRANSFER' | 'CASH' | 'OTHER'
@@ -147,7 +149,7 @@ export interface Payment {
 
 export interface Redemption {
   id: string
-  appointment_id: string
+  appointment_id: string | null // null = 散客核销（D19）
   member_id: string
   member_card_id: string
   service_id: string
@@ -369,8 +371,64 @@ export function noShowAppointment(id: string) {
   return http.put<Appointment>(`/admin/appointments/${id}/no-show`)
 }
 
-export function rescheduleAppointment(id: string, startTime: string) {
-  return http.put<Appointment>(`/admin/appointments/${id}/reschedule`, { start_time: startTime })
+/** 改期目标：具体时间或模糊半天，二选一（D20）。 */
+export interface BookingTarget {
+  start_time?: string
+  date?: string
+  day_part?: 'AM' | 'PM'
+}
+
+export function rescheduleAppointment(id: string, target: BookingTarget) {
+  return http.put<Appointment>(`/admin/appointments/${id}/reschedule`, target)
+}
+
+// ---------- 可约时段 / 闭店（D20/D22） ----------
+
+export interface BookingSlot {
+  time: string
+  remaining: number
+}
+
+export interface BookingHalfDay {
+  closed: boolean
+  total: number
+  remaining: number
+  slots: BookingSlot[] | null
+}
+
+export interface BookingOptions {
+  date: string
+  open: boolean
+  am: BookingHalfDay
+  pm: BookingHalfDay
+}
+
+export function getBookingOptions(date: string) {
+  return http.get<BookingOptions>(`/admin/booking-options?date=${date}`)
+}
+
+export interface Closure {
+  id: string
+  closure_date: string
+  day_part: 'AM' | 'PM'
+  remark: string
+  created_at: string
+}
+
+export function listClosures(from = '') {
+  return http.get<Closure[]>(`/admin/closures${from ? `?from=${from}` : ''}`)
+}
+
+export function createClosure(date: string, dayPart: 'AM' | 'PM' | 'FULL', remark: string) {
+  return http.post<{ saved: boolean; conflict_count: number }>('/admin/closures', {
+    date,
+    day_part: dayPart,
+    remark,
+  })
+}
+
+export function deleteClosure(id: string) {
+  return http.delete<{ deleted: boolean }>(`/admin/closures/${id}`)
 }
 
 // ---------- 结算 / 收款 / 撤销 ----------
@@ -379,6 +437,14 @@ export function redeemCard(appointmentId: string, cardId: string) {
   return http.post<{ redemption: Redemption; payment: Payment }>(
     `/admin/appointments/${appointmentId}/redeem`,
     { card_id: cardId, idempotency_key: idemKey() },
+  )
+}
+
+/** 散客核销（D19）：无预约，按卡直接扣次，需指定服务（规则校验+金额）。 */
+export function redeemWalkIn(cardId: string, serviceId: string) {
+  return http.post<{ redemption: Redemption; payment: Payment }>(
+    `/admin/cards/${cardId}/redeem`,
+    { service_id: serviceId, idempotency_key: idemKey() },
   )
 }
 

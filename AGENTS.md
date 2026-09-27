@@ -92,7 +92,8 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 
 1. 发卡：member_card + card_transaction(ISSUE)
 2. 核销：锁卡 → 校验状态/有效期/卡服务规则/余额 → 扣次 → card_transaction(REDEEM) → redemption → payment(CARD) → appointment=COMPLETED → status log，任一步失败 ROLLBACK
-3. 撤销：锁卡 → 确认未撤销 → 恢复次数 → card_transaction(REVERSAL) → redemption_reversal → **同一事务将原核销的 payment(CARD) 置 VOIDED**。payment.status ∈ {VALID, VOIDED}；收款记录只统计 VALID；一个预约最多一笔 VALID payment
+3. 撤销：锁卡 → 确认未撤销 → 恢复次数 → card_transaction(REVERSAL) → redemption_reversal → **同一事务将原核销的 payment(CARD) 置 VOIDED（按 idempotency_key 定位，D19）**。payment.status ∈ {VALID, VOIDED}；收款记录只统计 VALID；一个预约最多一笔 VALID payment
+4. 散客核销（V1.x，D19）：锁卡 → 校验状态/有效期/卡规则/余额 → 扣次 → card_transaction(REDEEM) → redemption(appointment NULL) → payment(CARD, 金额=服务默认价) → last_visit，无预约、无 COMPLETED 迁移
 
 禁止异步事件扣卡。EventBus 仅用于通知/统计/洞察。
 
@@ -127,6 +128,10 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D16 | content_page_config 的 JSON block 引用 banner/announcement id，不复制正文 |
 | D17 | 顾客多时段待确认预约无上限限制，风险知情接受（"不做"原则） |
 | D18 | 撤销核销允许对 CANCELLED/EXPIRED 卡恢复次数（账目修正），但卡保持原状态不复活（对抗审查 W4/W5）；payment 表有生成列 valid_lock+UNIQUE 强制一预约一笔 VALID 收款（B1）及 idempotency_key 幂等（W2） |
+| D19 | 散客核销（V1.x）：redemption/payment.appointment_id 可空（NULL=无预约直接核销）；必须指定服务项（卡规则校验 + 金额=服务默认价）；payment 作废/回放定位一律按 idempotency_key（预约维度不变量只约束非空行）；有今日预约的会员不开放散客核销（防绕过 D9） |
+| D20 | 预约规则（V1.x）：营业时间/时段间隔(30|60|120)/每时段容量/上下午分界存 settings（business_* 键，缺失回落 cfg→硬编码 09:00/20:00/30/1/12:00）；appointment.slot_type ∈ {SPECIFIC, HALF_DAY}，HALF_DAY 落库窗口=半天边界；逐槽并发 ≤ capacity 仅约束 SPECIFIC，半日池（< 槽数×容量）对两者一体适用；SPECIFIC 保持 ≥2h 提前量，HALF_DAY 仅要求半天未结束；校验一律 NamedLock+事务内 |
+| D21 | 核销码门槛（V1.x）：顾客端仅对持有 ACTIVE member_card 的用户出示核销码；码内容协议不变（ANMO-MEMBER:<ulid>）；商家端后端校验兜底 |
+| D22 | 闭店日历（V1.x）：appointment_closure 按 (date, AM\|PM) 粒度，全天=两行；创建闭店在 calendar 锁内统计 conflict_count 返回给商家知情；不自动取消/改约；改营业配置不追溯已建预约 |
 
 参考报告：`.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md`、`.../09-27-phase0-review/REVIEW.md`
 
