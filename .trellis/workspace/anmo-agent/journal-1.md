@@ -500,3 +500,12 @@ Phase 11 E2E
 - 修复：router 注册 `GET /{$}`（精确匹配根路径，未知路径仍保持 404 语义），返回 JSON 服务索引（service/version/endpoints）。补 router 测试（根路径 200 + 未知路径 404）。
 - 验证：go build / go vet / go test ./... -count=1 全绿（13 包，含 adversarial）；重启后 curl 实测 / 200、/healthz 200、/nope 404、/admin 无 token 401。commit bf635bb。
 - 备注：顾客端 H5 是独立应用（Vite dev server 端口 5173，代理到本后端）；后端根路径不做 H5 静态托管（Plan 未定义，歧义选不做）。
+
+## 2026-09-27 POST-V1 ADD: 商家端 Web 管理界面（apps/admin）
+- 背景：V1 交付时商家能力全部为 /admin/ REST API（46 端点），无 Web 界面；用户反馈需要商家界面（控制用户端显示内容 + 管理预约等），按需补齐。
+- 新增 apps/admin（Vue3+Vite+TS+Element Plus，:5174，/api+/admin 代理到 :8080）：登录、今日工作台（概览+今日预约状态机操作+结算工作台）、预约管理（筛选/确认/开始/完成/取消/未到店/改期+核销收款弹窗）、会员管理（搜索/新建/详情抽屉：资料/标签/会员卡/开卡/调整/作废/流水）、会员卡模板（新建/上下架/可核销服务规则）、服务管理（分类+项目 CRUD、上下架=控制用户端目录）、内容管理（轮播图/公告/首页布局块/系统设置=控制用户端首页）、收款与核销记录（撤销）、运营洞察+日志+日常运维。幂等键 crypto.randomUUID；金额分↔元换算仅展示层。
+- 后端配套小改：card 模板列表回显 service_ids（D4 规则读取回显）；重名模板创建由 500 修正为 409 CARD_TEMPLATE_NAME_EXISTS（uk_card_template_name 1062 映射，UI 实测发现）。
+- 顾客端配套：HomePage 接入 GET /api/home（按商家配置的内容块顺序渲染 banner/公告/服务列表/活动/富文本）+ GET /api/settings（shop_phone、open/close_time）。
+- 验证：vue-tsc 两端全过、admin vite build 过；go build/vet/test ./... 13 包全绿（-count=1）；经 5174 代理的 14 步 UI 调用序列 E2E 全过（登录→建分类/服务→上下架→模板+规则→重名409→会员+开卡→顾客SMS预约→确认/开始→核销(自动完成)→VALID CARD 收款→重复完成409→撤销(次数退回+收款VOIDED)→内容四件套→洞察/运维/日志）。
+- 备注：本环境无浏览器后端（__no_browser_backend__），UI 视觉层以 API 序列 E2E + vue-tsc/build 代替浏览器验收；生产部署时改 config 的 auth.admin_password_seed。
+- commit: bf635bb(router根路径索引) / cfc6349(card service_ids+409) / e24427d(admin 界面+顾客端首页内容)
