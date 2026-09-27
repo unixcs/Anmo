@@ -46,9 +46,10 @@ else
   echo "[4/5] H5 已在运行"
 fi
 
-# 5) 商家端 dev server（已监听则跳过）
-if ! curl -sf -o /dev/null http://127.0.0.1:5174/; then
-  echo "[5/5] 启动商家端 :5174 ..."
+# 5) 商家端 dev server（HTTPS，手机摄像头扫码需要；已监听则跳过）
+bash "$ROOT/scripts/gen-dev-cert.sh"
+if ! curl -skf -o /dev/null https://127.0.0.1:5174/; then
+  echo "[5/5] 启动商家端 :5174 (HTTPS) ..."
   nohup npm --prefix "$ROOT/apps/admin" run dev \
     >> /tmp/anmo-admin.log 2>&1 &
   sleep 3
@@ -60,7 +61,7 @@ LAN_IP=$(hostname -I | awk '{print $1}')
 echo
 echo "✅ 全部就绪"
 echo "   手机/局域网访问 H5:  http://${LAN_IP}:5173"
-echo "   商家端管理界面:      http://${LAN_IP}:5174"
+echo "   商家端管理界面:      https://${LAN_IP}:5174 （手机首次打开请信任证书）"
 echo "   API:                 http://${LAN_IP}:8080"
 echo "   后台账号: 13800000000 / anmo-admin-2026"
 echo "   顾客短信验证码(dev): 123456"

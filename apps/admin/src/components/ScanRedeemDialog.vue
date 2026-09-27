@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="modelValue" title="扫码核销" width="600px"
+  <el-dialog :model-value="modelValue" title="扫码核销" width="min(600px, 94vw)"
     @update:model-value="$emit('update:modelValue', $event)" @open="onOpen" @close="onClose">
     <!-- 第一步：扫码 / 输入 -->
     <template v-if="step === 'scan'">
@@ -98,7 +98,6 @@ import {
   listMembers,
   redeemCard,
   startAppointment,
-  type Appointment,
   type Member,
   type MemberCard,
   type TodayAppointment,
@@ -161,7 +160,8 @@ async function startCamera() {
       tick()
     }, 60)
   } catch {
-    camError.value = '摄像头不可用（需在 localhost 或 HTTPS 下并授权）。请使用下方手动输入。'
+    camError.value =
+      '摄像头不可用：请确认已授权摄像头，并通过 https:// 地址访问（首次打开需信任自签名证书）。也可用下方手动输入手机号。'
   }
 }
 

@@ -21,7 +21,25 @@
     </el-card>
 
     <el-card shadow="never" class="block" header="今日预约">
-      <el-table :data="today" v-loading="loading" size="default">
+      <!-- 手机：卡片流 -->
+      <template v-if="isMobile">
+        <el-empty v-if="today.length === 0" description="今日暂无预约" :image-size="70" />
+        <div v-for="row in today" :key="row.id" class="apt-card">
+          <div class="apt-top">
+            <span class="apt-time">{{ fmtTime(row.scheduled_start).slice(11) }}</span>
+            <el-tag :type="APT_STATUS_TAG[row.status]" size="small">{{ APT_STATUS_TEXT[row.status] }}</el-tag>
+          </div>
+          <div class="apt-main">
+            <span class="apt-member">{{ memberName(row.member_id) }}</span>
+            <span class="apt-svc">{{ row.service ? row.service.service_name_snapshot : '-' }}</span>
+          </div>
+          <div class="apt-btns">
+            <AptActionButtons :row="row" :refresh="refresh" @settle="openSettle(row)" />
+          </div>
+        </div>
+      </template>
+      <!-- 桌面：表格 -->
+      <el-table v-else :data="today" v-loading="loading" size="default">
         <el-table-column label="时间" width="110">
           <template #default="{ row }">{{ fmtTime(row.scheduled_start).slice(11) }}</template>
         </el-table-column>
@@ -40,19 +58,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="280">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'PENDING_CONFIRM'" size="small" type="primary"
-              @click="act.confirmApt(row.id)">确认</el-button>
-            <el-button v-if="row.status === 'CONFIRMED'" size="small" type="primary"
-              @click="act.startApt(row.id)">开始服务</el-button>
-            <el-button v-if="row.status === 'CONFIRMED'" size="small" @click="act.noShowApt(row.id)">未到店</el-button>
-            <el-button v-if="row.status === 'IN_SERVICE'" size="small" type="success"
-              @click="act.completeApt(row.id)">完成</el-button>
-            <el-button v-if="['IN_SERVICE', 'COMPLETED'].includes(row.status)" size="small" type="warning"
-              @click="openSettle(row)">结算</el-button>
-            <el-button v-if="['PENDING_CONFIRM', 'CONFIRMED'].includes(row.status)" size="small"
-              @click="act.rescheduleApt(row.id)">改期</el-button>
-            <el-button v-if="['PENDING_CONFIRM', 'CONFIRMED'].includes(row.status)" size="small" type="danger"
-              @click="act.cancelApt(row.id)">取消</el-button>
+            <AptActionButtons :row="row" :refresh="refresh" @settle="openSettle(row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -60,6 +66,26 @@
 
     <el-card shadow="never" class="block" header="结算工作台">
       <el-empty v-if="workbench.length === 0" description="今日暂无待结算预约" :image-size="70" />
+      <template v-else-if="isMobile">
+        <div v-for="(row, i) in workbench" :key="i" class="apt-card">
+          <div class="apt-top">
+            <span class="apt-member">{{ row.member_name }}</span>
+            <el-tag :type="APT_STATUS_TAG[row.appointment.status]" size="small">
+              {{ APT_STATUS_TEXT[row.appointment.status] }}
+            </el-tag>
+          </div>
+          <div class="apt-main">
+            <span class="apt-svc">{{ row.service ? row.service.service_name_snapshot : '-' }}</span>
+            <span v-if="row.payment" class="apt-pay">{{ PAY_METHOD_TEXT[row.payment.method] }} {{ yuan(row.payment.amount) }} 已收</span>
+            <el-tag v-else size="small" type="info">未收款</el-tag>
+          </div>
+          <div class="apt-btns">
+            <el-button size="small" type="warning" @click="openSettle(row.appointment, row.service)">
+              {{ row.payment ? '查看/补收' : '去结算' }}
+            </el-button>
+          </div>
+        </div>
+      </template>
       <el-table v-else :data="workbench" size="default">
         <el-table-column label="预约号" width="170">
           <template #default="{ row }">{{ row.appointment.appointment_no }}</template>
@@ -115,10 +141,12 @@ import {
   type WorkbenchCard,
 } from '../core/api/admin'
 import { APT_STATUS_TAG, APT_STATUS_TEXT, PAY_METHOD_TEXT, fmtTime, todayStr, yuan } from '../core/format'
-import { useAptActions } from '../components/aptActions'
+import { useIsMobile } from '../core/useMedia'
+import AptActionButtons from '../components/AptActionButtons.vue'
 import SettleDialog from '../components/SettleDialog.vue'
 import ScanRedeemDialog from '../components/ScanRedeemDialog.vue'
 
+const isMobile = useIsMobile()
 const date = ref(todayStr())
 const scanVisible = ref(false)
 const summary = ref<TodaySummary | null>(null)
@@ -130,8 +158,6 @@ const memberMap = ref<Record<string, string>>({})
 const settleVisible = ref(false)
 const settleApt = ref<Appointment | null>(null)
 const settleSvc = ref<AppointmentService | null>(null)
-
-const act = useAptActions(refresh)
 
 function memberName(id: string): string {
   return memberMap.value[id] ?? id.slice(0, 8)
@@ -154,7 +180,6 @@ async function refresh() {
     summary.value = t.summary
     today.value = t.appointments ?? []
     workbench.value = w.cards ?? []
-    if (w.summary) summary.value = t.summary
     memberMap.value = Object.fromEntries(m.data.map((x) => [x.id, `${x.name}（${x.phone}）`]))
   } catch (e) {
     console.error(e)
@@ -175,18 +200,25 @@ onMounted(refresh)
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .stat-date {
   font-weight: 600;
 }
+.stat-ops {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .stats {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .stat {
   flex: 1;
-  min-width: 90px;
+  min-width: 76px;
   background: #f5f7fa;
   border-radius: 8px;
   padding: 12px 0;
@@ -211,5 +243,50 @@ onMounted(refresh)
 }
 .stat.bad b {
   color: #f56c6c;
+}
+/* 手机卡片流 */
+.apt-card {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.apt-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.apt-time {
+  font-weight: 600;
+  color: #303133;
+}
+.apt-main {
+  margin: 8px 0 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.apt-member {
+  font-size: 14px;
+  color: #303133;
+}
+.apt-svc {
+  color: #606266;
+  font-size: 13px;
+}
+.apt-pay {
+  color: #67c23a;
+  font-size: 13px;
+}
+.apt-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.apt-btns :deep(.el-button) {
+  margin-left: 0;
 }
 </style>

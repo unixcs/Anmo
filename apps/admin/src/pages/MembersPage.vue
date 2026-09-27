@@ -9,7 +9,16 @@
       <span class="total">共 {{ total }} 位</span>
     </div>
 
-    <el-table :data="rows" v-loading="loading" @row-click="openDetail">
+    <template v-if="isMobile">
+      <el-empty v-if="rows.length === 0" description="暂无会员" :image-size="70" />
+      <div v-for="row in rows" :key="row.id" class="m-card" @click="openDetail(row)">
+        <div class="m-top"><b>{{ row.name }}</b><span class="m-gender">{{ row.gender }}</span></div>
+        <div class="m-line"><span>{{ row.phone }}</span><span class="m-no">{{ row.member_no }}</span></div>
+        <div class="m-line"><span class="m-visit">最近到店 {{ fmtTime(row.last_visit_at) }}</span>
+          <el-button size="small" @click.stop="openDetail(row)">详情</el-button></div>
+      </div>
+    </template>
+    <el-table v-else :data="rows" v-loading="loading" @row-click="openDetail">
       <el-table-column prop="member_no" label="会员号" width="160" />
       <el-table-column prop="name" label="姓名" width="120" />
       <el-table-column prop="phone" label="手机号" width="130" />
@@ -30,7 +39,7 @@
   </el-card>
 
   <!-- 新建会员 -->
-  <el-dialog v-model="createVisible" title="新建会员" width="440px">
+  <el-dialog v-model="createVisible" title="新建会员" width="min(440px, 94vw)">
     <el-form label-width="80px">
       <el-form-item label="姓名" required><el-input v-model="form.name" /></el-form-item>
       <el-form-item label="手机号" required><el-input v-model="form.phone" maxlength="11" /></el-form-item>
@@ -51,7 +60,7 @@
   </el-dialog>
 
   <!-- 会员详情抽屉 -->
-  <el-drawer v-model="detailVisible" size="640px" :title="detail ? `${detail.member.name}（${detail.member.member_no}）` : ''">
+  <el-drawer v-model="detailVisible" :size="isMobile ? '100%' : '640px'" :title="detail ? `${detail.member.name}（${detail.member.member_no}）` : ''">
     <template v-if="detail">
       <h4 class="sec">基本资料</h4>
       <el-form label-width="80px" size="small">
@@ -105,7 +114,7 @@
   </el-drawer>
 
   <!-- 开卡 -->
-  <el-dialog v-model="issueVisible" title="为该会员开卡" width="420px">
+  <el-dialog v-model="issueVisible" title="为该会员开卡" width="min(420px, 94vw)">
     <el-form label-width="90px">
       <el-form-item label="卡模板" required>
         <el-select v-model="issueTemplateId" style="width: 100%" placeholder="选择已上架模板">
@@ -121,7 +130,7 @@
   </el-dialog>
 
   <!-- 卡流水 -->
-  <el-dialog v-model="txVisible" title="次数流水" width="620px">
+  <el-dialog v-model="txVisible" title="次数流水" width="min(620px, 94vw)">
     <el-table :data="txRows" size="small" max-height="420">
       <el-table-column label="类型" width="90">
         <template #default="{ row }">{{ CARD_TX_TYPE_TEXT[row.type] ?? row.type }}</template>
@@ -160,6 +169,7 @@ import {
   type Tag,
 } from '../core/api/admin'
 import { CARD_STATUS_TEXT, CARD_TX_TYPE_TEXT, CARD_TYPE_TEXT, fmtTime, yuan } from '../core/format'
+import { useIsMobile } from '../core/useMedia'
 
 const keyword = ref('')
 const page = ref(1)
@@ -168,6 +178,7 @@ const total = ref(0)
 const rows = ref<Member[]>([])
 const loading = ref(false)
 const saving = ref(false)
+const isMobile = useIsMobile()
 
 const createVisible = ref(false)
 const form = ref({ name: '', phone: '', gender: '女', birthday: '' as string | '', remark: '' })
@@ -380,6 +391,39 @@ onMounted(load)
 .pager {
   margin-top: 12px;
   justify-content: flex-end;
+}
+.m-card {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  cursor: pointer;
+}
+.m-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.m-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #606266;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.m-gender {
+  color: #909399;
+  font-size: 12px;
+}
+.m-no {
+  color: #b0b3b8;
+  font-size: 12px;
+}
+.m-visit {
+  color: #909399;
+  font-size: 12px;
 }
 .sec {
   margin: 6px 0 10px;

@@ -93,7 +93,7 @@
     </el-tabs>
   </el-card>
 
-  <el-dialog v-model="bannerVisible" :title="bannerForm.id ? '编辑轮播图' : '新建轮播图'" width="460px">
+  <el-dialog v-model="bannerVisible" :title="bannerForm.id ? '编辑轮播图' : '新建轮播图'" width="min(460px, 94vw)">
     <el-form label-width="80px">
       <el-form-item label="标题" required><el-input v-model="bannerForm.title" /></el-form-item>
       <el-form-item label="图片 URL" required><el-input v-model="bannerForm.image" /></el-form-item>
@@ -106,7 +106,7 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="annVisible" :title="annForm.id ? '编辑公告' : '新建公告'" width="460px">
+  <el-dialog v-model="annVisible" :title="annForm.id ? '编辑公告' : '新建公告'" width="min(460px, 94vw)">
     <el-form label-width="80px">
       <el-form-item label="标题" required><el-input v-model="annForm.title" /></el-form-item>
       <el-form-item label="内容" required><el-input v-model="annForm.content" type="textarea" :rows="3" /></el-form-item>

@@ -55,7 +55,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="catVisible" title="新建分类" width="380px">
+    <el-dialog v-model="catVisible" title="新建分类" width="min(380px, 94vw)">
       <el-form label-width="80px">
         <el-form-item label="分类名" required><el-input v-model="catForm.name" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="catForm.sort" :min="0" /></el-form-item>
@@ -66,7 +66,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="itemVisible" :title="editing ? '编辑项目' : '新建项目'" width="500px">
+    <el-dialog v-model="itemVisible" :title="editing ? '编辑项目' : '新建项目'" width="min(500px, 94vw)">
       <el-form label-width="100px">
         <el-form-item label="分类" required>
           <el-select v-model="itemForm.category_id" style="width: 100%">

@@ -37,7 +37,7 @@
     </el-table>
   </el-card>
 
-  <el-dialog v-model="createVisible" title="新建卡模板" width="480px">
+  <el-dialog v-model="createVisible" title="新建卡模板" width="min(480px, 94vw)">
     <el-form label-width="100px">
       <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
       <el-form-item label="类型">
@@ -73,7 +73,7 @@
     </template>
   </el-dialog>
 
-  <el-dialog v-model="rulesVisible" title="设置可核销服务" width="460px">
+  <el-dialog v-model="rulesVisible" title="设置可核销服务" width="min(460px, 94vw)">
     <el-select v-model="rulesIds" multiple style="width: 100%" placeholder="不选=该卡不能核销任何项目">
       <el-option v-for="s in services.filter((x) => x.status === 'ACTIVE')" :key="s.id" :label="s.name" :value="s.id" />
     </el-select>

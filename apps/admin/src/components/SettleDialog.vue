@@ -1,6 +1,6 @@
 <template>
   <el-dialog :model-value="modelValue" :title="`结算 — ${appointment?.appointment_no ?? ''}`"
-    width="520px" @update:model-value="$emit('update:modelValue', $event)" @open="onOpen">
+    width="min(520px, 94vw)" @update:model-value="$emit('update:modelValue', $event)" @open="onOpen">
     <el-tabs v-model="tab">
       <el-tab-pane label="次卡核销" name="redeem">
         <p class="hint" v-if="service">

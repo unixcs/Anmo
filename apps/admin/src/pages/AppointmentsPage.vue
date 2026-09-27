@@ -11,7 +11,26 @@
       <span class="total">共 {{ total }} 条</span>
     </div>
 
-    <el-table :data="rows" v-loading="loading" size="default">
+    <!-- 手机：卡片流 -->
+    <template v-if="isMobile">
+      <el-empty v-if="rows.length === 0" description="暂无预约" :image-size="70" />
+      <div v-for="row in rows" :key="row.id" class="apt-card">
+        <div class="apt-top">
+          <span class="apt-time">{{ fmtTime(row.scheduled_start).slice(5, 16) }}</span>
+          <el-tag :type="APT_STATUS_TAG[row.status]" size="small">{{ APT_STATUS_TEXT[row.status] }}</el-tag>
+        </div>
+        <div class="apt-main">
+          <span class="apt-member">{{ memberName(row.member_id) }}</span>
+          <span class="apt-no">{{ row.appointment_no }}</span>
+        </div>
+        <div v-if="row.customer_note" class="apt-note">备注：{{ row.customer_note }}</div>
+        <div class="apt-btns">
+          <AptActionButtons :row="row" :refresh="load" @settle="openSettle(row)" />
+        </div>
+      </div>
+    </template>
+    <!-- 桌面：表格 -->
+    <el-table v-else :data="rows" v-loading="loading" size="default">
       <el-table-column prop="appointment_no" label="预约号" width="170" />
       <el-table-column label="顾客" width="150">
         <template #default="{ row }">{{ memberName(row.member_id) }}</template>
@@ -30,19 +49,7 @@
       <el-table-column prop="customer_note" label="顾客备注" min-width="120" show-overflow-tooltip />
       <el-table-column label="操作" min-width="300" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="row.status === 'PENDING_CONFIRM'" size="small" type="primary"
-            @click="act.confirmApt(row.id)">确认</el-button>
-          <el-button v-if="row.status === 'CONFIRMED'" size="small" type="primary"
-            @click="act.startApt(row.id)">开始服务</el-button>
-          <el-button v-if="row.status === 'CONFIRMED'" size="small" @click="act.noShowApt(row.id)">未到店</el-button>
-          <el-button v-if="row.status === 'IN_SERVICE'" size="small" type="success"
-            @click="act.completeApt(row.id)">完成</el-button>
-          <el-button v-if="['IN_SERVICE', 'COMPLETED'].includes(row.status)" size="small" type="warning"
-            @click="openSettle(row)">结算</el-button>
-          <el-button v-if="['PENDING_CONFIRM', 'CONFIRMED'].includes(row.status)" size="small"
-            @click="act.rescheduleApt(row.id)">改期</el-button>
-          <el-button v-if="['PENDING_CONFIRM', 'CONFIRMED'].includes(row.status)" size="small" type="danger"
-            @click="act.cancelApt(row.id)">取消</el-button>
+          <AptActionButtons :row="row" :refresh="load" @settle="openSettle(row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -63,9 +70,11 @@ import {
   type Appointment,
 } from '../core/api/admin'
 import { APT_STATUS_TAG, APT_STATUS_TEXT, fmtTime } from '../core/format'
-import { useAptActions } from '../components/aptActions'
+import { useIsMobile } from '../core/useMedia'
+import AptActionButtons from '../components/AptActionButtons.vue'
 import SettleDialog from '../components/SettleDialog.vue'
 
+const isMobile = useIsMobile()
 const date = ref('')
 const status = ref('')
 const page = ref(1)
@@ -77,7 +86,6 @@ const memberMap = ref<Record<string, string>>({})
 
 const settleVisible = ref(false)
 const settleApt = ref<Appointment | null>(null)
-const act = useAptActions(load)
 
 function memberName(id: string): string {
   return memberMap.value[id] ?? id.slice(0, 8)
@@ -119,6 +127,7 @@ onMounted(load)
   gap: 10px;
   margin-bottom: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .spacer {
   flex: 1;
@@ -130,5 +139,49 @@ onMounted(load)
 .pager {
   margin-top: 12px;
   justify-content: flex-end;
+}
+.apt-card {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.apt-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.apt-time {
+  font-weight: 600;
+  color: #303133;
+}
+.apt-main {
+  margin: 8px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.apt-member {
+  font-size: 14px;
+  color: #303133;
+}
+.apt-no {
+  color: #b0b3b8;
+  font-size: 12px;
+}
+.apt-note {
+  color: #909399;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.apt-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.apt-btns :deep(.el-button) {
+  margin-left: 0;
 }
 </style>
