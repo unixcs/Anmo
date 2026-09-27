@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+__pycache__/
+scripts/certs/*
+!scripts/certs/.gitignore
+server/config.yaml
