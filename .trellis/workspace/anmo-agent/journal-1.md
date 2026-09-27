@@ -493,3 +493,10 @@ Phase 11 E2E
 ## 结论
 
 **V1 达成 Plan §140 定义的全部核心目标，验收通过。**
+
+## 2026-09-27 POST-V1 FIX: 根路径 404
+- 现象：打开 http://localhost:8080/ 显示 "404 page not found"。
+- 排查：/healthz 200、进程为最终验收二进制 → 服务本身健康；根因是 router.go 从未注册 `/` 路由（仅 /healthz、/admin/、/api/），Go ServeMux 对未注册路径返回默认 404。
+- 修复：router 注册 `GET /{$}`（精确匹配根路径，未知路径仍保持 404 语义），返回 JSON 服务索引（service/version/endpoints）。补 router 测试（根路径 200 + 未知路径 404）。
+- 验证：go build / go vet / go test ./... -count=1 全绿（13 包，含 adversarial）；重启后 curl 实测 / 200、/healthz 200、/nope 404、/admin 无 token 401。commit bf635bb。
+- 备注：顾客端 H5 是独立应用（Vite dev server 端口 5173，代理到本后端）；后端根路径不做 H5 静态托管（Plan 未定义，歧义选不做）。

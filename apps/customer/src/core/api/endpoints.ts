@@ -7,6 +7,8 @@ import type { Appointment, Member, MemberCard, Page, ServiceCategory, ServiceIte
 export const endpoints = {
   sendSms: '/api/auth/sms/send',
   verifySms: '/api/auth/sms/verify',
+  home: '/api/home',
+  publicSettings: '/api/settings',
   catalog: '/api/services',
   myProfile: '/api/me/profile',
   myCards: '/api/me/cards',
@@ -21,10 +23,36 @@ export interface Catalog {
   services: ServiceItem[]
 }
 
+export interface HomeBanner {
+  id: string
+  title: string
+  image: string
+  link: string
+}
+
+export interface HomeAnnouncement {
+  id: string
+  title: string
+  content: string
+}
+
+export interface HomeBlock {
+  type: string
+  data: Record<string, unknown>
+}
+
+export interface HomeContent {
+  blocks: HomeBlock[]
+  banners: HomeBanner[]
+  announcements: HomeAnnouncement[]
+}
+
 export const api = {
   sendSms: (phone: string) => http.post<{ sent: boolean }>(endpoints.sendSms, { phone }),
   verifySms: (phone: string, code: string) =>
     http.post<{ token: string; member_id: string }>(endpoints.verifySms, { phone, code }),
+  home: () => http.get<HomeContent>(endpoints.home),
+  publicSettings: () => http.get<Record<string, string>>(endpoints.publicSettings),
   catalog: () => http.get<Catalog>(endpoints.catalog),
   myProfile: () => http.get<{ member: Member; tags: { id: string; name: string }[] }>(endpoints.myProfile),
   updateProfile: (patch: Partial<Pick<Member, 'name' | 'gender' | 'birthday'>>) =>
