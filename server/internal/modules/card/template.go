@@ -6,20 +6,23 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
+
 	"anmo/server/internal/shared"
 )
 
 // Template — card_template row (§35). type carries no behavior (D11).
 type Template struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Type         string  `json:"type"` // COUNT | ACTIVITY
-	TotalCount   int     `json:"total_count"`
-	ValidityType string  `json:"validity_type"` // PERMANENT | FIXED
-	ValidFrom    *string `json:"valid_from"`
-	ValidUntil   *string `json:"valid_until"`
-	PriceCents   int64   `json:"price"`
-	Status       string  `json:"status"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"` // COUNT | ACTIVITY
+	TotalCount   int      `json:"total_count"`
+	ValidityType string   `json:"validity_type"` // PERMANENT | FIXED
+	ValidFrom    *string  `json:"valid_from"`
+	ValidUntil   *string  `json:"valid_until"`
+	PriceCents   int64    `json:"price"`
+	Status       string   `json:"status"`
+	ServiceIDs   []string `json:"service_ids,omitempty"` // 可核销服务（D4，列表回显）
 }
 
 type NewTemplate struct {
@@ -58,6 +61,10 @@ func (p *Provider) CreateTemplate(ctx context.Context, in NewTemplate) (*Templat
 		 VALUES (?,?,?,?,?,?,?,?)`,
 		t.ID, t.Name, t.Type, t.TotalCount, t.ValidityType, t.ValidFrom, t.ValidUntil, t.PriceCents)
 	if err != nil {
+		var me *mysql.MySQLError
+		if errors.As(err, &me) && me.Number == 1062 {
+			return nil, shared.Conflict("CARD_TEMPLATE_NAME_EXISTS", "模板名称已存在")
+		}
 		return nil, shared.Server("CARD_TEMPLATE_INSERT", err)
 	}
 	return t, nil
@@ -85,6 +92,31 @@ func (p *Provider) ListTemplates(ctx context.Context) ([]*Template, error) {
 			t.ValidUntil = strPtr(vu.String)
 		}
 		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, shared.Server("CARD_TEMPLATE_SCAN", err)
+	}
+	if len(out) > 0 {
+		ruleRows, err := p.db.QueryContext(ctx,
+			`SELECT card_template_id, service_id FROM card_service_rule ORDER BY created_at`)
+		if err != nil {
+			return nil, shared.Server("CARD_TEMPLATE_LIST", err)
+		}
+		defer ruleRows.Close()
+		rules := make(map[string][]string, len(out))
+		for ruleRows.Next() {
+			var tid, sid string
+			if err := ruleRows.Scan(&tid, &sid); err != nil {
+				return nil, shared.Server("CARD_TEMPLATE_SCAN", err)
+			}
+			rules[tid] = append(rules[tid], sid)
+		}
+		if err := ruleRows.Err(); err != nil {
+			return nil, shared.Server("CARD_TEMPLATE_SCAN", err)
+		}
+		for _, t := range out {
+			t.ServiceIDs = rules[t.ID]
+		}
 	}
 	return out, nil
 }
