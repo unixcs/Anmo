@@ -3,7 +3,7 @@ import { getToken } from '../platform/auth'
 import AdminLayout from '../layout/AdminLayout.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/login', component: () => import('../pages/LoginPage.vue') },
     {
