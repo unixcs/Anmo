@@ -8,6 +8,7 @@ const routes = [
   { path: '/login', name: 'login', component: () => import('../pages/LoginPage.vue') },
   { path: '/me', name: 'me', component: () => import('../pages/MePage.vue'), meta: { auth: true } },
   { path: '/me/cards', name: 'cards', component: () => import('../pages/CardsPage.vue'), meta: { auth: true } },
+  { path: '/me/qrcode', name: 'qrcode', component: () => import('../pages/QRCodePage.vue'), meta: { auth: true } },
   { path: '/me/appointments', name: 'my-appointments', component: () => import('../pages/MyAppointmentsPage.vue'), meta: { auth: true } },
   { path: '/me/history', name: 'history', component: () => import('../pages/HistoryPage.vue'), meta: { auth: true } },
   { path: '/me/profile', name: 'profile', component: () => import('../pages/ProfilePage.vue'), meta: { auth: true } },

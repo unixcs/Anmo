@@ -3,8 +3,11 @@
     <el-card shadow="never" class="block">
       <div class="stat-head">
         <span class="stat-date">{{ summary?.date ?? todayStr() }} 今日概览</span>
-        <el-date-picker v-model="date" type="date" value-format="YYYY-MM-DD" :clearable="false"
-          style="width: 150px" @change="refresh" />
+        <div class="stat-ops">
+          <el-button type="primary" @click="scanVisible = true">扫码核销</el-button>
+          <el-date-picker v-model="date" type="date" value-format="YYYY-MM-DD" :clearable="false"
+            style="width: 150px" @change="refresh" />
+        </div>
       </div>
       <div class="stats">
         <div class="stat"><b>{{ summary?.total ?? 0 }}</b><span>预约总数</span></div>
@@ -95,6 +98,7 @@
 
     <SettleDialog v-model="settleVisible" :appointment="settleApt" :service="settleSvc"
       :member-name="settleApt ? memberName(settleApt.member_id) : ''" @settled="refresh" />
+    <ScanRedeemDialog v-model="scanVisible" @settled="refresh" />
   </div>
 </template>
 
@@ -113,8 +117,10 @@ import {
 import { APT_STATUS_TAG, APT_STATUS_TEXT, PAY_METHOD_TEXT, fmtTime, todayStr, yuan } from '../core/format'
 import { useAptActions } from '../components/aptActions'
 import SettleDialog from '../components/SettleDialog.vue'
+import ScanRedeemDialog from '../components/ScanRedeemDialog.vue'
 
 const date = ref(todayStr())
+const scanVisible = ref(false)
 const summary = ref<TodaySummary | null>(null)
 const today = ref<TodayAppointment[]>([])
 const workbench = ref<WorkbenchCard[]>([])

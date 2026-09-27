@@ -19,23 +19,27 @@
         <span class="title">{{ title }}</span>
         <span class="spacer" />
         <span class="user">{{ user?.name }}（{{ roleText }}）</span>
+        <el-button type="primary" size="small" @click="scanVisible = true">扫码核销</el-button>
         <el-button link type="danger" @click="logout">退出登录</el-button>
       </el-header>
       <el-main class="main">
         <router-view />
       </el-main>
     </el-container>
+    <ScanRedeemDialog v-model="scanVisible" @settled="() => {}" />
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUser, clearSession } from '../platform/auth'
+import ScanRedeemDialog from '../components/ScanRedeemDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const user = getUser()
+const scanVisible = ref(false)
 
 const roleText = computed(() => (user?.role === 'OWNER' ? '老板' : '店员'))
 const title = computed(() => {

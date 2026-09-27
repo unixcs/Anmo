@@ -36,6 +36,7 @@ function logout(): void {
     </div>
     <div class="menu">
       <RouterLink to="/me/cards" class="row">💳 我的会员卡 <span class="arrow">›</span></RouterLink>
+      <RouterLink to="/me/qrcode" class="row">🔳 我的核销码 <span class="arrow">›</span></RouterLink>
       <RouterLink to="/me/appointments" class="row">📅 我的预约 <span class="arrow">›</span></RouterLink>
       <RouterLink to="/me/history" class="row">📖 历史记录 <span class="arrow">›</span></RouterLink>
       <RouterLink to="/me/profile" class="row">✏️ 个人资料 <span class="arrow">›</span></RouterLink>
