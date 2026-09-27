@@ -581,3 +581,10 @@ Phase 11 E2E
 - Tests：全量 go test ./... -count=1 14 包全绿（含新 TestSlotCapacityConfigurable/TestStoreStatusThreeStates/TestBookingRulesCapacityFromSettings/TestUpdateCredentials/TestListFiltersByTag/TestSettleByCardWithActualServiceOverride/TestSettleByPayCompletesAndSingleValid）；两端 vue-tsc 过。
 - Risk：散客现金收款无端点（明确不做）；深色模式依赖页面 var() 覆盖度（主路径已覆盖）。
 - Next：B——GitHub 提交 + yun1 部署验证。
+
+# PHASE RESULT — V1.x 第二轮 Phase B：GitHub + yun1 生产部署验证
+- 提交链：dd344c9（V1.x 第二轮全量功能）→ c672f66（migration 012 就地修正：先 DROP 旧 CHECK 再 UPDATE——MySQL CHECK 对 UPDATE 生效，yun1 含历史行库首应用失败实证；012 从未成功应用过故允许就地修）。
+- yun1 部署：WSL 三件套构建（admin --base=/admin-ui/、customer、linux/amd64）→ docker save|scp|load → force-recreate；migration applied count=1；历史数据迁移验证（5 条 PENDING/CONFIRMED → WAITING，状态分布 WAITING 5/COMPLETED 7/CANCELLED 2，新 CHECK 生效）。
+- 生产端点实测：管理员登录 ✓、GET /admin/tags 200、credentials 空参 400（路由活）、booking-options（capacity=2 配置生效回读）、顾客端 GET /api/store/status 返回 BUSY（07:26 早于开门 09:00，计算正确）、GET /api/settings 暴露 home_*/shop_*/slot_capacity、静态两端 200。
+- health-yun.sh yun1 ALL GREEN；Tencent git pull --rebase 至 c672f66，三方一致。
+- 用户验收路径：顾客端 18090（首页门店状态徽标+门店卡片导航/拨号、预约成功页、核销码页含预约单码 ANMO-APT、卡使用明细、深色模式）；商家端 18091/admin-ui/（扫码结算页分流、今日预约自动选、实际服务改选、结算选卡、账号设置改手机号/密码、内容页首页文案+门店信息+营业配置、会员标签管理+组合筛选、手机端无横向溢出）。
