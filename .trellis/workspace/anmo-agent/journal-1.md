@@ -509,3 +509,12 @@ Phase 11 E2E
 - 验证：vue-tsc 两端全过、admin vite build 过；go build/vet/test ./... 13 包全绿（-count=1）；经 5174 代理的 14 步 UI 调用序列 E2E 全过（登录→建分类/服务→上下架→模板+规则→重名409→会员+开卡→顾客SMS预约→确认/开始→核销(自动完成)→VALID CARD 收款→重复完成409→撤销(次数退回+收款VOIDED)→内容四件套→洞察/运维/日志）。
 - 备注：本环境无浏览器后端（__no_browser_backend__），UI 视觉层以 API 序列 E2E + vue-tsc/build 代替浏览器验收；生产部署时改 config 的 auth.admin_password_seed。
 - commit: bf635bb(router根路径索引) / cfc6349(card service_ids+409) / e24427d(admin 界面+顾客端首页内容)
+
+## 2026-09-27 POST-V1 ADD: 扫码核销 + 小白教程
+- 用户确认核销交互缺口：原流程为商家后台手动定位预约/按手机号搜会员再核销，无扫码。按用户口径补齐：
+- 顾客端：新增 /me/qrcode 核销码页（qrcode 库生成，内容 ANMO-MEMBER:<member_id>，固定前缀+ULID）；"我的"页加入口。核销仍由商家确认后生效（资金类操作不开放给顾客端自扫）。
+- 商家端：新增 ScanRedeemDialog（jsqr 摄像头逐帧扫码 + 手动手机号输入兜底 + 多会员/多预约消歧 + CONFIRMED 可一键"开始服务" + 核销结果显示新余额）；入口=全局头部按钮+今日工作台按钮。复用既有 POST /admin/appointments/{id}/redeem 幂等链路，后端零改动。
+- 验证：qrcode↔jsqr node 双库互验闭环（生成/解码内容一致、前缀与 ID 解析正确，带静区与 8x 放大）；两端 vue-tsc + vite build 全过；后端未改动无需重跑 go test。
+- 已知约束：浏览器 getUserMedia 需 localhost/HTTPS，局域网 http 访问时用手动输入兜底（TUTORIAL.md 已注明）。
+- 文档：新增 TUTORIAL.md（系统组成/开店准备/完整业务流七步/每日巡检/报错人话对照表/上线须知/收银台速查页）。
+- commit: 9945b36
