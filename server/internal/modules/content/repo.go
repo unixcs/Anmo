@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 
 	"anmo/server/internal/shared"
 )
@@ -282,13 +283,30 @@ func (p *Provider) BookingRules(ctx context.Context) (BusinessRules, error) {
 	if slotMin != 30 && slotMin != 60 && slotMin != 120 {
 		slotMin = def.SlotMinutes
 	}
-	return BusinessRules{
+	rules := BusinessRules{
 		OpenTime:     pickStored(stored, "business_open_time", b.OpenTime, def.OpenTime),
 		CloseTime:    pickStored(stored, "business_close_time", b.CloseTime, def.CloseTime),
 		NoonSplit:    pickStored(stored, "business_noon_split", "", def.NoonSplit),
 		SlotMinutes:  slotMin,
 		SlotCapacity: pickInt(stored, "business_slot_capacity", b.SlotCapacity, def.SlotCapacity),
-	}, nil
+	}
+	// 半天长度必须被时段间隔整除，否则名额池与槽位数不一致；
+	// 30 分钟间隔对任意 30 分钟对齐的边界恒整除，兜底安全（审查 P2-5）。
+	openM := minutesOfDay(rules.OpenTime)
+	closeM := minutesOfDay(rules.CloseTime)
+	noonM := minutesOfDay(rules.NoonSplit)
+	if (noonM-openM)%rules.SlotMinutes != 0 || (closeM-noonM)%rules.SlotMinutes != 0 {
+		rules.SlotMinutes = def.SlotMinutes
+	}
+	return rules, nil
+}
+
+func minutesOfDay(hhmm string) int {
+	t, err := time.ParseInLocation("15:04", hhmm, time.Local)
+	if err != nil {
+		return 0
+	}
+	return t.Hour()*60 + t.Minute()
 }
 
 // Settings returns all settings as a map.

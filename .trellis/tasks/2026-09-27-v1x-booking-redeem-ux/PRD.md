@@ -92,7 +92,7 @@ settings 新键（经现有 PUT /admin/settings 保存）。**读取层（conten
 
 ### 3.5 闭店管理（商家）
 - `GET /admin/closures?from=`（默认今天起）列表；`POST /admin/closures {date, day_part: AM|PM|FULL, remark}`（FULL=写两行）；`DELETE /admin/closures/{id}`。
-- POST 的 conflict_count 统计与写入在 D5 同一把 calendar 锁内完成（消除与顾客下单的竞态窗口）；返回 `{conflict_count}` = 该半天 active 预约数；前端 >0 时弹确认："该半天已有 N 个预约，闭店后需手动联系顾客改期"（允许继续创建——知情操作，符合"配置不追溯"）。
+- POST 的 conflict_count 统计与写入在 D5 同一把 calendar 锁内完成（消除与顾客下单的竞态窗口）；返回 `{conflict_count}` = 该半天 active 预约数；前端 >0 时警告提示"该半天已有 N 个预约，闭店后需手动联系顾客改期"（闭店即时生效，商家可"恢复营业"撤销——验收审查 P2-2 确认的简化口径）。
 - 顾客端创建/改期命中 closure → APT_CLOSED。
 
 ### 3.6 展示

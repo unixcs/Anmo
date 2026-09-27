@@ -250,6 +250,19 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 		if err != nil {
 			return err
 		}
+		// D19: 该会员今日已有有效预约时不得散客核销（走预约核销链路，D9）
+		day := shared.NowShanghai().Format("2006-01-02")
+		var nApt int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM appointment WHERE member_id = ?
+			   AND status IN ('PENDING_CONFIRM','CONFIRMED','IN_SERVICE')
+			   AND scheduled_start >= ? AND scheduled_start < ? + INTERVAL 1 DAY`,
+			c.MemberID, day, day).Scan(&nApt); err != nil {
+			return shared.Server("RDM_WALKIN_APT_QUERY", err)
+		}
+		if nApt > 0 {
+			return shared.Conflict("RDM_WALKIN_BLOCKED", "该会员今日已有预约，请从预约结算")
+		}
 		before, after, err := p.cards.ApplyRedeem(ctx, tx, cardID, serviceID, 1, "", operatorID)
 		if err != nil {
 			return err

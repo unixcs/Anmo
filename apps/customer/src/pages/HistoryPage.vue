@@ -9,8 +9,8 @@ const list = ref<Appointment[]>([])
 
 onMounted(async () => {
   try {
-    const page = await api.myAppointments('COMPLETED')
-    list.value = page.data ?? []
+    const arr = await api.myAppointments('COMPLETED')
+    list.value = [...(arr ?? [])].sort((a, b) => b.scheduled_start.localeCompare(a.scheduled_start))
   } catch (e) {
     notify((e as Error).message)
   }

@@ -14,6 +14,10 @@
       <div class="quick">
         <el-button v-for="q in QUICK" :key="q" size="small" round @click="delta = q">{{ q > 0 ? `+${q}` : q }}</el-button>
       </div>
+      <div class="manual-row">
+        <span class="manual-label">或手动输入调整量（正加负减）：</span>
+        <el-input-number v-model="delta" :step="1" step-strictly style="width: 140px" />
+      </div>
       <el-input v-model="remark" placeholder="调整备注（如：手工调整、活动补偿）" style="margin-top: 14px" />
     </template>
     <template #footer>
@@ -73,4 +77,6 @@ async function submit(): Promise<void> {
 .now { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .meta { color: #999; font-size: 12px; margin-top: 2px; }
 .quick { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.manual-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
+.manual-label { color: #999; font-size: 12px; }
 </style>
