@@ -28,6 +28,20 @@ func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.R
 		shared.OK(w, map[string]string{"status": "ok"})
 	})
 
+	// service index for the bare root path (exact match only; unknown paths
+	// still fall through to 404)
+	root.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		shared.OK(w, map[string]any{
+			"service": "anmo",
+			"version": "v1",
+			"endpoints": map[string]string{
+				"health":   "GET /healthz",
+				"customer": "/api/  (JWT 顾客端)",
+				"admin":    "/admin/ (JWT OWNER/OPERATOR 管理端)",
+			},
+		})
+	})
+
 	for _, m := range mods {
 		m.Mount(root, admin, api)
 	}

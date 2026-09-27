@@ -25,6 +25,28 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestRootIndex(t *testing.T) {
+	h := New(slog.Default(), noopVerify, nil, noopModule{})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	if rec.Code != 200 {
+		t.Fatalf("root status = %d", rec.Code)
+	}
+	for _, want := range []string{`"service":"anmo"`, `"health"`, `"customer"`, `"admin"`} {
+		if !contains(rec.Body.String(), want) {
+			t.Fatalf("root body = %s, missing %s", rec.Body.String(), want)
+		}
+	}
+
+	// exact-match only: unknown paths must keep their 404
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/nope", nil))
+	if rec.Code != 404 {
+		t.Fatalf("unknown path status = %d, want 404", rec.Code)
+	}
+}
+
 func contains(s, sub string) bool {
 	return len(s) >= len(sub) && (func() bool {
 		for i := 0; i+len(sub) <= len(s); i++ {
