@@ -123,15 +123,12 @@ func (e *env) newCard(memberID string, total int) string {
 	return c.ID
 }
 
-// bookInService 建+确认+开始一个预约（可直接结算）。
+// bookInService 建+开始一个预约（可直接结算，V1.x 免确认）。
 func (e *env) bookInService(memberID, svcID string, day, hh, mm int) string {
 	ctx := e.ctx()
 	a, err := e.apt.Create(ctx, memberID, svcID, appointment.BookingReq{StartTime: e.slot(day, hh, mm)}, "")
 	if err != nil {
 		e.t.Fatalf("create: %v", err)
-	}
-	if _, err := e.apt.Confirm(ctx, a.ID, e.opID); err != nil {
-		e.t.Fatalf("confirm: %v", err)
 	}
 	if _, err := e.apt.Start(ctx, a.ID, e.opID); err != nil {
 		e.t.Fatalf("start: %v", err)
@@ -244,7 +241,7 @@ func TestGUARD_A1_CardConcurrentMixedOps(t *testing.T) {
 			barrier()
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			_, _, err := e.tx.SettleByCard(ctx, aptIDs[i], cardID, e.opID, fmt.Sprintf("adv-a1-%d", i))
+			_, _, err := e.tx.SettleByCard(ctx, aptIDs[i], cardID, "", e.opID, fmt.Sprintf("adv-a1-%d", i))
 			results[i] = result{fmt.Sprintf("redeem#%d", i), err}
 		}(i)
 	}
@@ -321,7 +318,7 @@ func TestGUARD_A2_CancelledCardRejectsRedeem(t *testing.T) {
 	if err := e.cards.Cancel(ctx, cardID, e.opID); !shared.Is(err, "CARD_ALREADY_CANCELLED") {
 		t.Errorf("重复作废未拦截: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-a2"); !shared.Is(err, "CARD_NOT_ACTIVE") {
+	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a2"); !shared.Is(err, "CARD_NOT_ACTIVE") {
 		t.Errorf("作废卡核销未被拦截: %v", err)
 	}
 	if _, err := e.cards.Adjust(ctx, cardID, 5, "", e.opID); !shared.Is(err, "CARD_CANCELLED") {
@@ -346,7 +343,7 @@ func TestREVEAL_A3_ReplayFirstKeyAfterReverse(t *testing.T) {
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 10, 0)
 	ctx := e.ctx()
 
-	rd1, pay1, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-key-1")
+	rd1, pay1, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1")
 	if err != nil {
 		t.Fatalf("first settle: %v", err)
 	}
@@ -354,7 +351,7 @@ func TestREVEAL_A3_ReplayFirstKeyAfterReverse(t *testing.T) {
 		t.Fatalf("reverse: %v", err)
 	}
 	// FIXED（W1）：撤销后重放旧 key 必须显式报 RDM_REVERSED，而不是 200+REVERSED+错配 payment
-	_, _, err = e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-key-1") // 重放旧 key
+	_, _, err = e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1") // 重放旧 key
 	if !shared.Is(err, "RDM_REVERSED") {
 		t.Fatalf("撤销后重放旧 key 应返回 RDM_REVERSED，实际: %v", err)
 	}
@@ -373,10 +370,10 @@ func TestREVEAL_A3_ReplayFirstKeyAfterReverse(t *testing.T) {
 		t.Errorf("重放改动了余额: %d", got)
 	}
 	// 再重新核销，第三次重放旧 key 仍必须 RDM_REVERSED（不存在错配可能）
-	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-key-2"); err != nil {
+	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-2"); err != nil {
 		t.Fatalf("re-settle: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-key-1"); !shared.Is(err, "RDM_REVERSED") {
+	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1"); !shared.Is(err, "RDM_REVERSED") {
 		t.Fatalf("重新核销后重放旧 key 应仍返回 RDM_REVERSED，实际: %v", err)
 	}
 }
@@ -504,7 +501,7 @@ func TestGUARD_A6_ConcurrentRedeemSameAppointment(t *testing.T) {
 			<-start
 			c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			_, _, err := e.tx.SettleByCard(c, aptID, cardID, e.opID, fmt.Sprintf("adv-a6-%d", i))
+			_, _, err := e.tx.SettleByCard(c, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a6-%d", i))
 			errs[i] = err
 		}(i)
 	}
@@ -534,7 +531,7 @@ func TestGUARD_A7_ConcurrentReverse(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 15, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-a7")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a7")
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -583,7 +580,7 @@ func TestGUARD_A8_ReverseVsResettleRace(t *testing.T) {
 		cardID := e.newCard(e.mbrA, 10)
 		aptID := e.bookInService(e.mbrA, e.svc60, 2+round/4, 10+(round%4), 0)
 		ctx := e.ctx()
-		rd1, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, fmt.Sprintf("adv-a8-%d-1", round))
+		rd1, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a8-%d-1", round))
 		if err != nil {
 			t.Fatalf("round %d settle: %v", round, err)
 		}
@@ -604,7 +601,7 @@ func TestGUARD_A8_ReverseVsResettleRace(t *testing.T) {
 			<-start
 			c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			_, _, reErr = e.tx.SettleByCard(c, aptID, cardID, e.opID, fmt.Sprintf("adv-a8-%d-2", round))
+			_, _, reErr = e.tx.SettleByCard(c, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a8-%d-2", round))
 		}()
 		close(start)
 		wg.Wait()
@@ -675,7 +672,7 @@ func TestGUARD_A9_ConcurrentCreateAndRescheduleSameSlot(t *testing.T) {
 	}
 	// DB 层复核：与 target 重叠的 active 预约只能有一个
 	if n := e.countSQL(`SELECT COUNT(*) FROM appointment
-		WHERE status IN ('PENDING_CONFIRM','CONFIRMED','IN_SERVICE')
+		WHERE status IN ('WAITING','IN_SERVICE')
 		  AND scheduled_start < ? AND scheduled_end > ?`, endOf(target, 60), target); n != 1 {
 		t.Errorf("时段重叠 active 预约 = %d（应为 1）", n)
 	}
@@ -701,7 +698,7 @@ func TestGUARD_A10_RescheduleConflictAfterLockWait(t *testing.T) {
 	// 第三方预约（绕过 provider 直接落库、立即提交）
 	if _, err := conn.ExecContext(e.ctx(),
 		`INSERT INTO appointment (id, appointment_no, member_id, scheduled_start, scheduled_end, status)
-		 VALUES (?,?,?,?,?, 'CONFIRMED')`,
+		 VALUES (?,?,?,?,?, 'WAITING')`,
 		shared.NewID(), fmt.Sprintf("APT%sX%d", shared.NowShanghai().Format("20060102"), 999), e.mbrB, target, targetEnd); err != nil {
 		t.Fatalf("insert rival: %v", err)
 	}
@@ -732,9 +729,6 @@ func TestGUARD_A11_TerminalStatusNoConflict(t *testing.T) {
 	a1, err := e.apt.Create(ctx, e.mbrA, e.svc60, appointment.BookingReq{StartTime: s}, "")
 	if err != nil {
 		t.Fatalf("create1: %v", err)
-	}
-	if _, err := e.apt.Confirm(ctx, a1.ID, e.opID); err != nil {
-		t.Fatalf("confirm: %v", err)
 	}
 	if _, err := e.apt.NoShow(ctx, a1.ID, e.opID); err != nil {
 		t.Fatalf("noshow: %v", err)
@@ -838,7 +832,7 @@ func TestREVEAL_A14_CrossMemberCard(t *testing.T) {
 	aptA := e.bookInService(e.mbrA, e.svc60, 2, 10, 0)
 	ctx := e.ctx()
 	// FIXED（W3）：跨会员核销必须 403 CARD_NOT_YOURS
-	if _, _, err := e.tx.SettleByCard(ctx, aptA, cardB, e.opID, "adv-a14"); !shared.Is(err, "CARD_NOT_YOURS") {
+	if _, _, err := e.tx.SettleByCard(ctx, aptA, cardB, "", e.opID, "adv-a14"); !shared.Is(err, "CARD_NOT_YOURS") {
 		t.Fatalf("跨会员核销应被拒绝（CARD_NOT_YOURS），实际: %v", err)
 	}
 	if got := e.cardOf(e.mbrB).RemainingCount; got != 10 {
@@ -852,7 +846,7 @@ func TestREVEAL_A15_ReverseBlockedByCancelledCard(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 11, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-a15")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a15")
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -877,7 +871,7 @@ func TestREVEAL_A16_ReverseRevivesExpiredCard(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 12, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-a16")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a16")
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -911,7 +905,7 @@ func TestREVEAL_A17_ReverseLongReasonMisdiagnosed(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 13, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, e.opID, "adv-a17")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a17")
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -933,32 +927,36 @@ func TestREVEAL_A17_ReverseLongReasonMisdiagnosed(t *testing.T) {
 	}
 }
 
-// A18：结算入口的状态机边界。PENDING_CONFIRM 必须拒绝；CONFIRMED 直接核销
-// 会触发 CONFIRMED → COMPLETED —— 冻结状态机（AGENTS.md）没有这条迁移，
-// 这里捕获该偏离作为证据。
-func TestREVEAL_A18_SettleFromConfirmedSkipsInService(t *testing.T) {
+// A18：结算入口的状态机边界（V1.x WAITING 口径，用户决策 2026-09-28）：
+// WAITING 可直接核销并置 COMPLETED（免确认）；CANCELLED 预约必须拒绝走散客结算。
+func TestREVEAL_A18_SettleWaitingOkCancelledRejected(t *testing.T) {
 	e := newEnv(t)
 	cardID := e.newCard(e.mbrA, 10)
 	ctx := e.ctx()
-	pending, err := e.apt.Create(ctx, e.mbrA, e.svc60, appointment.BookingReq{StartTime: e.slot(2, 10, 0)}, "")
+	waiting, err := e.apt.Create(ctx, e.mbrA, e.svc60, appointment.BookingReq{StartTime: e.slot(2, 10, 0)}, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, pending.ID, cardID, e.opID, "adv-a18-1"); err == nil {
-		t.Errorf("PENDING_CONFIRM 预约被核销")
+	if _, _, err := e.tx.SettleByCard(ctx, waiting.ID, cardID, "", e.opID, "adv-a18-1"); err != nil {
+		t.Errorf("WAITING 预约应可直接核销: %v", err)
 	}
-	if got := e.cardOf(e.mbrA).RemainingCount; got != 10 {
-		t.Errorf("PENDING 拒绝后余额被改动: %d", got)
+	st := e.strSQL(`SELECT status FROM appointment WHERE id = ?`, waiting.ID)
+	if st != "COMPLETED" {
+		t.Errorf("WAITING 核销后状态 = %s（应为 COMPLETED）", st)
 	}
-	if _, err := e.apt.Confirm(ctx, pending.ID, e.opID); err != nil {
-		t.Fatalf("confirm: %v", err)
+	cardB := e.newCard(e.mbrB, 10)
+	cxl, err := e.apt.Create(ctx, e.mbrB, e.svc60, appointment.BookingReq{StartTime: e.slot(3, 10, 0)}, "")
+	if err != nil {
+		t.Fatalf("create b: %v", err)
 	}
-	// FIXED（W8）：CONFIRMED 直接核销必须被拒（冻结状态机无 CONFIRMED→COMPLETED）
-	if _, _, err := e.tx.SettleByCard(ctx, pending.ID, cardID, e.opID, "adv-a18-2"); err == nil {
-		t.Fatal("CONFIRMED 预约被直接核销（应拒绝）")
+	if _, err := e.apt.CancelByAdmin(ctx, cxl.ID, e.opID, "test"); err != nil {
+		t.Fatalf("cancel: %v", err)
 	}
-	if got := e.cardOf(e.mbrA).RemainingCount; got != 10 {
-		t.Errorf("CONFIRMED 拒绝后余额被改动: %d", got)
+	if _, _, err := e.tx.SettleByCard(ctx, cxl.ID, cardB, "", e.opID, "adv-a18-2"); err == nil {
+		t.Fatal("CANCELLED 预约被预约核销（应拒绝，走散客结算）")
+	}
+	if got := e.cardOf(e.mbrB).RemainingCount; got != 10 {
+		t.Errorf("CANCELLED 拒绝后余额被改动: %d", got)
 	}
 }
 

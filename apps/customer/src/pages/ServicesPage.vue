@@ -41,10 +41,10 @@ function byCategory(): Record<string, typeof catalog.value.services> {
 <style scoped>
 .services { padding: 20px 16px; }
 h1 { font-size: 20px; }
-.group h2 { font-size: 15px; color: #999; margin: 18px 0 8px; }
-.item { background: #fff; border-radius: 12px; padding: 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.group h2 { font-size: 15px; color: var(--muted-foreground); margin: 18px 0 8px; }
+.item { background: var(--card); border-radius: 12px; padding: 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .name { font-weight: 600; }
-.desc { color: #999; font-size: 13px; margin: 4px 0; }
-.meta { color: #c85f5f; font-size: 14px; }
-.book { background: #c85f5f; color: #fff; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; }
+.desc { color: var(--muted-foreground); font-size: 13px; margin: 4px 0; }
+.meta { color: var(--primary); font-size: 14px; }
+.book { background: var(--primary); color: var(--card); text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; }
 </style>

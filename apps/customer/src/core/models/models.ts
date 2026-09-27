@@ -41,6 +41,8 @@ export interface MemberCard {
   valid_from: string
   valid_until: string | null
   status: string
+  // 动态取自 card_template.name（§15 卡名不写死）；历史流水另存 card_name 快照
+  card_name: string
 }
 
 export interface Appointment {

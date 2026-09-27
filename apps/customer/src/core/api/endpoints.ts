@@ -12,10 +12,24 @@ export const endpoints = {
   catalog: '/api/services',
   myProfile: '/api/me/profile',
   myCards: '/api/me/cards',
+  myCardTransactions: (id: string) => `/api/me/cards/${id}/transactions`,
   appointments: '/api/appointments',
   appointment: (id: string) => `/api/appointments/${id}`,
   cancel: (id: string) => `/api/appointments/${id}/cancel`,
   reschedule: (id: string) => `/api/appointments/${id}/reschedule`,
+}
+
+export interface CardTx {
+  id: string
+  member_card_id: string
+  card_name: string
+  type: string
+  quantity: number
+  before_count: number
+  after_count: number
+  reference_type: string
+  remark: string
+  created_at: string
 }
 
 export interface Catalog {
@@ -47,17 +61,28 @@ export interface HomeContent {
   announcements: HomeAnnouncement[]
 }
 
+/** 门店当前状态（§17：动态计算，不落库） */
+export interface StoreStatus {
+  status: 'FREE' | 'SERVING' | 'BUSY'
+  free_at?: string
+  open_time: string
+  close_time: string
+}
+
 export const api = {
   sendSms: (phone: string) => http.post<{ sent: boolean }>(endpoints.sendSms, { phone }),
   verifySms: (phone: string, code: string) =>
     http.post<{ token: string; member_id: string }>(endpoints.verifySms, { phone, code }),
   home: () => http.get<HomeContent>(endpoints.home),
   publicSettings: () => http.get<Record<string, string>>(endpoints.publicSettings),
+  storeStatus: () => http.get<StoreStatus>('/api/store/status'),
   catalog: () => http.get<Catalog>(endpoints.catalog),
   myProfile: () => http.get<{ member: Member; tags: { id: string; name: string }[] }>(endpoints.myProfile),
   updateProfile: (patch: Partial<Pick<Member, 'name' | 'gender' | 'birthday'>>) =>
     http.put<{ member: Member }>(endpoints.myProfile, patch),
   myCards: () => http.get<MemberCard[]>(endpoints.myCards),
+  // §14 使用明细：开卡/核销/调整/撤销全量流水（含无预约的散客核销）
+  myCardTransactions: (cardId: string) => http.get<CardTx[]>(endpoints.myCardTransactions(cardId)),
   // 注意：http 已解包包络，分页端点返回的就是 data 数组本身
   myAppointments: (status: string) =>
     http.get<Appointment[]>(`${endpoints.appointments}?status=${status}&page=1&per_page=50`),

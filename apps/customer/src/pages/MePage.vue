@@ -40,6 +40,7 @@ function logout(): void {
       <RouterLink to="/me/appointments" class="row">📅 我的预约 <span class="arrow">›</span></RouterLink>
       <RouterLink to="/me/history" class="row">📖 历史记录 <span class="arrow">›</span></RouterLink>
       <RouterLink to="/me/profile" class="row">✏️ 个人资料 <span class="arrow">›</span></RouterLink>
+      <RouterLink to="/about" class="row">ℹ️ 关于我们 <span class="arrow">›</span></RouterLink>
     </div>
     <button class="logout" @click="logout">退出登录</button>
   </div>
@@ -47,12 +48,12 @@ function logout(): void {
 
 <style scoped>
 .me { padding: 20px 16px; }
-.head { display: flex; align-items: center; gap: 14px; background: #fff; padding: 18px; border-radius: 12px; }
+.head { display: flex; align-items: center; gap: 14px; background: var(--card); padding: 18px; border-radius: 12px; }
 .avatar { font-size: 34px; }
 .name { font-size: 17px; font-weight: 600; }
-.no { color: #999; font-size: 13px; }
-.menu { margin-top: 14px; background: #fff; border-radius: 12px; overflow: hidden; }
-.row { display: flex; justify-content: space-between; padding: 15px 16px; color: #333; text-decoration: none; border-bottom: 1px solid #f4f4f4; }
-.arrow { color: #ccc; }
-.logout { width: 100%; margin-top: 20px; height: 44px; background: #fff; color: #c85f5f; border: none; border-radius: 12px; }
+.no { color: var(--muted-foreground); font-size: 13px; }
+.menu { margin-top: 14px; background: var(--card); border-radius: 12px; overflow: hidden; }
+.row { display: flex; justify-content: space-between; padding: 15px 16px; color: var(--foreground); text-decoration: none; border-bottom: 1px solid var(--border); }
+.arrow { color: var(--border); }
+.logout { width: 100%; margin-top: 20px; height: 44px; background: var(--card); color: var(--primary); border: none; border-radius: 12px; }
 </style>

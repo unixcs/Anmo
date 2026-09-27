@@ -11,8 +11,7 @@
       </div>
       <div class="stats">
         <div class="stat"><b>{{ summary?.total ?? 0 }}</b><span>预约总数</span></div>
-        <div class="stat warn"><b>{{ summary?.pending_confirm ?? 0 }}</b><span>待确认</span></div>
-        <div class="stat info"><b>{{ summary?.confirmed ?? 0 }}</b><span>已确认</span></div>
+        <div class="stat warn"><b>{{ summary?.waiting ?? 0 }}</b><span>待到店</span></div>
         <div class="stat ok"><b>{{ summary?.in_service ?? 0 }}</b><span>服务中</span></div>
         <div class="stat"><b>{{ summary?.completed ?? 0 }}</b><span>已完成</span></div>
         <div class="stat bad"><b>{{ summary?.cancelled ?? 0 }}</b><span>已取消</span></div>

@@ -41,6 +41,44 @@ func (p *Provider) CreateTag(ctx context.Context, name string) (*Tag, error) {
 	return t, nil
 }
 
+// RenameTag renames a tag (goal §32).
+func (p *Provider) RenameTag(ctx context.Context, id, name string) error {
+	if name == "" {
+		return shared.BadRequest("TAG_EMPTY", "标签名不能为空")
+	}
+	res, err := p.db.ExecContext(ctx,
+		`UPDATE member_tag SET name = ? WHERE id = ?`, name, id)
+	if err != nil {
+		return shared.Conflict("TAG_EXISTS", "标签已存在")
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return shared.NotFound("TAG_NOT_FOUND", "标签不存在")
+	}
+	return nil
+}
+
+// DeleteTag removes a tag; refused while any member still uses it (goal §32).
+func (p *Provider) DeleteTag(ctx context.Context, id string) error {
+	return shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
+		var n int64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM member_tag_rel WHERE tag_id = ?`, id).Scan(&n); err != nil {
+			return shared.Server("TAG_COUNT", err)
+		}
+		if n > 0 {
+			return shared.Conflict("TAG_IN_USE", "该标签仍被会员使用，请先移除会员标签")
+		}
+		res, err := tx.ExecContext(ctx, `DELETE FROM member_tag WHERE id = ?`, id)
+		if err != nil {
+			return shared.Server("TAG_DELETE", err)
+		}
+		if affected, _ := res.RowsAffected(); affected == 0 {
+			return shared.NotFound("TAG_NOT_FOUND", "标签不存在")
+		}
+		return nil
+	})
+}
+
 // TagsOf returns the tags attached to a member.
 func (p *Provider) TagsOf(ctx context.Context, memberID string) ([]*Tag, error) {
 	rows, err := p.db.QueryContext(ctx,

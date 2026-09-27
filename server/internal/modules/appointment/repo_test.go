@@ -77,7 +77,7 @@ func TestCreateAndConflictDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if a.Status != StatusPendingConfirm || a.No == "" {
+	if a.Status != StatusWaiting || a.No == "" {
 		t.Fatalf("appointment = %+v", a)
 	}
 
@@ -123,16 +123,7 @@ func TestStateGuardsAndCancelReleasesSlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := e.p.Start(ctx, a.ID, "op"); !shared.Is(err, "APT_BAD_TRANSITION") {
-		t.Fatalf("start before confirm must fail, got %v", err)
-	}
-	if _, err := e.p.Confirm(ctx, a.ID, "op"); err != nil {
-		t.Fatalf("confirm: %v", err)
-	}
-	// double confirm rejected
-	if _, err := e.p.Confirm(ctx, a.ID, "op"); !shared.Is(err, "APT_BAD_TRANSITION") {
-		t.Fatalf("double confirm must fail, got %v", err)
-	}
+	// WAITING 可直接开始服务（V1.x 免确认）
 	// customer cancel inside 2h → rejected (slot is 3 days out so bypass: cancel by admin semantics on customer path use now; instead verify release via admin cancel)
 	if _, err := e.p.CancelByAdmin(ctx, a.ID, "op", "释放时段"); err != nil {
 		t.Fatalf("cancel: %v", err)
@@ -152,14 +143,9 @@ func TestCompleteIdempotentAndNoShowGuard(t *testing.T) {
 	ctx := context.Background()
 
 	a, _ := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 4, 10, 0)}, "")
-	if _, err := e.p.Confirm(ctx, a.ID, "op"); err != nil {
-		t.Fatalf("confirm: %v", err)
-	}
-	// no-show only from CONFIRMED
+	_ = a
+	// no-show only from WAITING
 	b, _ := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 4, 11, 0)}, "")
-	if _, err := e.p.Confirm(ctx, b.ID, "op"); err != nil {
-		t.Fatalf("confirm b: %v", err)
-	}
 	if _, err := e.p.NoShow(ctx, b.ID, "op"); err != nil {
 		t.Fatalf("no-show from confirmed: %v", err)
 	}
@@ -183,9 +169,6 @@ func TestRescheduleExcludesSelf(t *testing.T) {
 	ctx := context.Background()
 
 	a, _ := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 5, 14, 0)}, "")
-	if _, err := e.p.Confirm(ctx, a.ID, "op"); err != nil {
-		t.Fatalf("confirm: %v", err)
-	}
 	// b occupies 15:00
 	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 5, 15, 0)}, ""); err != nil {
 		t.Fatalf("create b: %v", err)

@@ -6,6 +6,7 @@ import "net/http"
 func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	api.HandleFunc("GET /api/home", p.handleHome)
 	api.HandleFunc("GET /api/settings", p.handlePublicSettings)
+	api.HandleFunc("GET /api/store/status", p.HandleStoreStatus)
 
 	admin.HandleFunc("GET /admin/content/pages", p.handleGetPageConfig)
 	admin.HandleFunc("PUT /admin/content/pages", p.handleSavePageConfig)

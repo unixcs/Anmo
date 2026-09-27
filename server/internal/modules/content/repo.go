@@ -347,14 +347,25 @@ func (p *Provider) PublicSettings(ctx context.Context) (map[string]string, error
 		"slot_capacity": strconv.Itoa(rules.SlotCapacity),
 		"shop_phone":    stored["shop_phone"],
 		"shop_notice":   stored["shop_notice"],
+		// 门店信息（goal §18-§22：地址/经纬度/电话，轻量不做地图 SDK）
+		"shop_address":   stored["shop_address"],
+		"shop_latitude":  stored["shop_latitude"],
+		"shop_longitude": stored["shop_longitude"],
+		// 首页文案（goal §31：后台可编辑，前端动态渲染）
+		"home_title": stored["home_title"],
+		"home_body":  stored["home_body"],
 	}
 	return out, nil
 }
 
-// SaveSetting upserts one setting.
+// SaveSetting upserts one setting. business_* keys are validated server-side
+// so a bad value can never reach the booking engine (goal §29 full chain).
 func (p *Provider) SaveSetting(ctx context.Context, key, value, operatorID string) error {
 	if key == "" {
 		return shared.BadRequest("SETTING_BAD_KEY", "设置项不能为空")
+	}
+	if err := validateSetting(key, value); err != nil {
+		return err
 	}
 	_, err := p.db.ExecContext(ctx,
 		`INSERT INTO content_system_setting (id, setting_key, setting_value, updated_by, updated_at)
@@ -365,4 +376,54 @@ func (p *Provider) SaveSetting(ctx context.Context, key, value, operatorID strin
 		return shared.Server("SETTING_SAVE", err)
 	}
 	return nil
+}
+
+// validateSetting enforces the domain of known keys; unknown keys pass through
+// as free-form KV (shop_phone / shop_notice / future keys).
+func validateSetting(key, value string) error {
+	bad := func(msg string) error { return shared.BadRequest("SETTING_BAD_VALUE", msg) }
+	switch key {
+	case "business_open_time", "business_close_time", "business_noon_split":
+		if len(value) != 5 || value[2] != ':' || !allDigits(value[:2]) || !allDigits(value[3:]) {
+			return bad("时间格式应为 HH:MM，如 09:00")
+		}
+		if atoi(value[:2]) > 23 || atoi(value[3:]) > 59 {
+			return bad("时间超出 24 小时范围")
+		}
+	case "business_slot_minutes":
+		if value != "30" && value != "60" && value != "120" {
+			return bad("时段间隔仅支持 30 / 60 / 120 分钟")
+		}
+	case "business_slot_capacity":
+		if value == "" || !allDigits(value) || atoi(value) < 1 || atoi(value) > 999 {
+			return bad("可约人数须为 1~999 的整数")
+		}
+	case "shop_latitude", "shop_longitude":
+		f, err := strconv.ParseFloat(value, 64)
+		if err != nil || f < -180 || f > 180 {
+			return bad("经纬度应为 -180~180 的数字")
+		}
+	case "shop_phone":
+		if len(value) > 32 {
+			return bad("电话过长")
+		}
+	}
+	return nil
+}
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func atoi(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }

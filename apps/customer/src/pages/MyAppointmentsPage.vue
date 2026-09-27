@@ -40,7 +40,7 @@ async function load(): Promise<void> {
 onMounted(load)
 
 function canCancel(a: Appointment): boolean {
-  return a.status === 'PENDING_CONFIRM' || a.status === 'CONFIRMED'
+  return a.status === 'WAITING'
 }
 
 async function cancel(a: Appointment): Promise<void> {
@@ -203,36 +203,36 @@ async function submitEdit(): Promise<void> {
 <style scoped>
 .appts { padding: 20px 16px; }
 h1 { font-size: 20px; }
-.empty { color: #999; text-align: center; padding: 60px 0; }
-.item { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.empty { color: var(--muted-foreground); text-align: center; padding: 60px 0; }
+.item { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
 .top { display: flex; justify-content: space-between; align-items: center; }
 .time { font-weight: 600; }
-.badge { font-size: 12px; padding: 3px 10px; border-radius: 10px; background: #f2f2f2; color: #666; }
+.badge { font-size: 12px; padding: 3px 10px; border-radius: 10px; background: var(--border); color: var(--muted-foreground); }
 .badge[data-status='COMPLETED'] { background: #e8f6e8; color: #3a8f3a; }
-.badge[data-status='CANCELLED'], .badge[data-status='NO_SHOW'] { background: #fdeaea; color: #c85f5f; }
-.no { color: #bbb; font-size: 12px; margin-top: 4px; }
+.badge[data-status='CANCELLED'], .badge[data-status='NO_SHOW'] { background: #fdeaea; color: var(--primary); }
+.no { color: var(--muted-foreground); font-size: 12px; margin-top: 4px; }
 .fuzzy-tag { display: inline-block; margin-top: 6px; font-size: 11px; color: #b8860b; background: #fdf6e3; border-radius: 8px; padding: 2px 8px; }
 .note { color: #888; font-size: 13px; margin-top: 6px; }
 .ops { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
-.ops button { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 7px 14px; font-size: 13px; }
-.ops .danger { color: #c85f5f; border-color: #c85f5f; }
+.ops button { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 7px 14px; font-size: 13px; }
+.ops .danger { color: var(--primary); border-color: var(--primary); }
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; z-index: 30; }
-.sheet { background: #fff; border-radius: 16px 16px 0 0; padding: 16px; width: 100%; max-width: 420px; max-height: 80vh; overflow-y: auto; }
+.sheet { background: var(--card); border-radius: 16px 16px 0 0; padding: 16px; width: 100%; max-width: 420px; max-height: 80vh; overflow-y: auto; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; }
-.close { border: none; background: none; font-size: 16px; color: #999; }
-.sec { font-size: 13px; color: #666; margin: 12px 0 6px; }
+.close { border: none; background: none; font-size: 16px; color: var(--muted-foreground); }
+.sec { font-size: 13px; color: var(--muted-foreground); margin: 12px 0 6px; }
 .day-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-.day { flex: 0 0 auto; border: 1px solid #eee; background: #fff; border-radius: 8px; padding: 7px 9px; font-size: 12px; }
-.day.picked { border-color: #c85f5f; background: #fdf3f3; color: #c85f5f; }
+.day { flex: 0 0 auto; border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 7px 9px; font-size: 12px; }
+.day.picked { border-color: var(--primary); background: var(--primary-muted); color: var(--primary); }
 .part-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.part { border: 1px solid #eee; background: #fff; border-radius: 10px; padding: 10px 0; font-size: 14px; }
-.part small { color: #999; font-size: 11px; }
-.part.picked { border-color: #c85f5f; background: #fdf3f3; color: #c85f5f; }
-.part.picked small { color: #c85f5f; }
+.part { border: 1px solid var(--border); background: var(--card); border-radius: 10px; padding: 10px 0; font-size: 14px; }
+.part small { color: var(--muted-foreground); font-size: 11px; }
+.part.picked { border-color: var(--primary); background: var(--primary-muted); color: var(--primary); }
+.part.picked small { color: var(--primary); }
 .slot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.slot { border: 1px solid #eee; background: #fff; border-radius: 8px; padding: 8px 0; font-size: 13px; }
+.slot { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 8px 0; font-size: 13px; }
 .slot.full { opacity: .4; }
-.slot.picked { border-color: #c85f5f; background: #c85f5f; color: #fff; }
-.primary { width: 100%; height: 44px; background: #c85f5f; color: #fff; border: none; border-radius: 12px; font-size: 15px; margin-top: 14px; }
+.slot.picked { border-color: var(--primary); background: var(--primary); color: var(--card); }
+.primary { width: 100%; height: 44px; background: var(--primary); color: var(--card); border: none; border-radius: 12px; font-size: 15px; margin-top: 14px; }
 .primary:disabled { opacity: .5; }
 </style>

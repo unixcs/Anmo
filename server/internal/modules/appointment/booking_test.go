@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"anmo/server/internal/config"
 	"anmo/server/internal/shared"
 )
 
@@ -159,5 +160,57 @@ func TestBookingOptionsShape(t *testing.T) {
 	}
 	if !opts.PM.Closed || len(opts.PM.Slots) != 0 || !opts.Open {
 		t.Fatalf("pm closed = %v slots %d open %v", opts.PM.Closed, len(opts.PM.Slots), opts.Open)
+	}
+}
+
+// capacity 可配置（goal §29/§30）：逐槽并发与半日池都跟随设置，不再硬编码 1。
+func TestSlotCapacityConfigurable(t *testing.T) {
+	e := newAptEnv(t, func(c *config.Config) { c.Business.SlotCapacity = 2 })
+	ctx := context.Background()
+
+	// 额外成员（同会员不可同时段重叠，需要独立会员各占一单）
+	extra := make([]string, 0, 3)
+	for _, ph := range []string{"13900000013", "13900000014", "13900000015"} {
+		var id string
+		if err := shared.RunInTx(ctx, e.p.db, func(tx shared.Tx) error {
+			var er error
+			id, _, er = e.mem.EnsureByPhone(ctx, tx, ph, "顾客X")
+			return er
+		}); err != nil {
+			t.Fatalf("member: %v", err)
+		}
+		extra = append(extra, id)
+	}
+
+	// 逐槽：10:00 两单成功（capacity=2），第三单 APT_SLOT_FULL
+	if _, err := e.p.Create(ctx, e.mbr1, e.svcID, BookingReq{StartTime: slotAt(t, 2, 10, 0)}, ""); err != nil {
+		t.Fatalf("first booking: %v", err)
+	}
+	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{StartTime: slotAt(t, 2, 10, 0)}, ""); err != nil {
+		t.Fatalf("second booking should fit capacity=2: %v", err)
+	}
+	if _, err := e.p.Create(ctx, extra[0], e.svcID, BookingReq{StartTime: slotAt(t, 2, 10, 0)}, ""); !shared.Is(err, "APT_SLOT_FULL") {
+		t.Fatalf("want APT_SLOT_FULL for 3rd same-slot booking, got %v", err)
+	}
+	// 不重叠的 11:30 槽不受影响（60 分钟服务下 10:30 与 10:00 物理重叠，必然受限）
+	if _, err := e.p.Create(ctx, extra[0], e.svcID, BookingReq{StartTime: slotAt(t, 2, 11, 30)}, ""); err != nil {
+		t.Fatalf("non-overlapping slot: %v", err)
+	}
+
+	// 半日池 = 槽数 × capacity：AM 09:00-12:00 6 槽 × 2 = 12。
+	// 已占 3 单（10:00×2 + 11:30×1）→ 再约 9 个模糊 AM 成功，第 10 个 APT_HALFDAY_FULL。
+	for i := 0; i < 9; i++ {
+		m := e.mbr1
+		if i%2 == 0 {
+			m = extra[1]
+		} else {
+			m = extra[2]
+		}
+		if _, err := e.p.Create(ctx, m, e.svcID, BookingReq{Date: dateAt(t, 2), DayPart: "AM"}, ""); err != nil {
+			t.Fatalf("fuzzy #%d should fit pool 12: %v", i+1, err)
+		}
+	}
+	if _, err := e.p.Create(ctx, e.mbr2, e.svcID, BookingReq{Date: dateAt(t, 2), DayPart: "AM"}, ""); !shared.Is(err, "APT_HALFDAY_FULL") {
+		t.Fatalf("want APT_HALFDAY_FULL when pool 12 exhausted, got %v", err)
 	}
 }

@@ -32,9 +32,9 @@ onMounted(async () => {
 <style scoped>
 .history { padding: 20px 16px; }
 h1 { font-size: 20px; }
-.empty { color: #999; text-align: center; padding: 60px 0; }
-.item { background: #fff; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.empty { color: var(--muted-foreground); text-align: center; padding: 60px 0; }
+.item { background: var(--card); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
 .time { font-weight: 600; }
-.no { color: #bbb; font-size: 12px; margin: 4px 0; }
+.no { color: var(--muted-foreground); font-size: 12px; margin: 4px 0; }
 .badge { font-size: 12px; padding: 3px 10px; border-radius: 10px; background: #e8f6e8; color: #3a8f3a; }
 </style>

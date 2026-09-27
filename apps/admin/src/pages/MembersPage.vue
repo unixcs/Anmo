@@ -1,10 +1,18 @@
 <template>
   <el-card shadow="never">
     <div class="toolbar">
-      <el-input v-model="keyword" placeholder="姓名 / 手机号" clearable style="width: 220px"
+      <el-input v-model="keyword" placeholder="姓名 / 手机号" clearable style="width: 200px"
         @keyup.enter="search" />
+      <el-select v-model="tagFilter" placeholder="按标签" clearable style="width: 140px" @change="search">
+        <el-option v-for="t in tags" :key="t.id" :label="t.name" :value="t.id" />
+      </el-select>
+      <el-select v-model="cardTypeFilter" placeholder="按卡类型" clearable style="width: 130px" @change="search">
+        <el-option label="次卡" value="COUNT" />
+        <el-option label="活动卡" value="ACTIVITY" />
+      </el-select>
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="createVisible = true">新建会员</el-button>
+      <el-button plain @click="openTagManager">标签管理</el-button>
       <span class="spacer" />
       <span class="total">共 {{ total }} 位</span>
     </div>
@@ -16,6 +24,9 @@
         <div class="m-line"><span>{{ row.phone }}</span><span class="m-no">{{ row.member_no }}</span></div>
         <div class="m-line"><span class="m-visit">最近到店 {{ fmtTime(row.last_visit_at) }}</span>
           <el-button size="small" @click.stop="openDetail(row)">详情</el-button></div>
+        <div v-if="(row.tags ?? []).length" class="m-tags">
+          <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-chip">{{ t }}</el-tag>
+        </div>
       </div>
     </template>
     <el-table v-else :data="rows" v-loading="loading" @row-click="openDetail">
@@ -27,6 +38,11 @@
         <template #default="{ row }">{{ fmtTime(row.last_visit_at) }}</template>
       </el-table-column>
       <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+      <el-table-column label="标签" min-width="120">
+        <template #default="{ row }">
+          <el-tag v-for="t in row.tags ?? []" :key="t" size="small" class="tag-chip">{{ t }}</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="90" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click.stop="openDetail(row)">详情</el-button>
@@ -113,6 +129,23 @@
     </template>
   </el-drawer>
 
+  <!-- 标签管理（goal §32：新增/改名/删除，有关联禁删） -->
+  <el-dialog v-model="tagMgrVisible" title="标签管理" width="min(460px, 94vw)">
+    <div class="tag-new">
+      <el-input v-model="newTagName" placeholder="新标签名" maxlength="20" @keyup.enter="doCreateTag" />
+      <el-button type="primary" :loading="saving" @click="doCreateTag">新增</el-button>
+    </div>
+    <el-table :data="tags" size="small">
+      <el-table-column prop="name" label="标签名" min-width="140" />
+      <el-table-column label="操作" width="140">
+        <template #default="{ row }">
+          <el-button size="small" link type="primary" @click="doRenameTag(row)">改名</el-button>
+          <el-button size="small" link type="danger" @click="doDeleteTag(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+  </el-dialog>
+
   <!-- 开卡 -->
   <el-dialog v-model="issueVisible" title="为该会员开卡" width="min(420px, 94vw)">
     <el-form label-width="90px">
@@ -154,6 +187,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cancelCard,
   createMember,
+  createTag,
+  deleteTag,
   getMember,
   issueCard,
   listCardTransactions,
@@ -161,6 +196,7 @@ import {
   listMemberCards,
   listMembers,
   listTags,
+  renameTag,
   setMemberTags,
   updateMember,
   type Member,
@@ -173,6 +209,8 @@ import { CARD_STATUS_TEXT, CARD_TX_TYPE_TEXT, CARD_TYPE_TEXT, fmtTime, yuan } fr
 import { useIsMobile } from '../core/useMedia'
 
 const keyword = ref('')
+const tagFilter = ref('')
+const cardTypeFilter = ref('')
 const page = ref(1)
 const perPage = 20
 const total = ref(0)
@@ -214,13 +252,76 @@ function search() {
 async function load() {
   loading.value = true
   try {
-    const res = await listMembers(keyword.value.trim(), page.value, perPage)
+    const res = await listMembers(keyword.value.trim(), page.value, perPage, {
+      tag_id: tagFilter.value || undefined,
+      card_type: cardTypeFilter.value || undefined,
+    })
     rows.value = res.data
     total.value = res.total
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+// ---------- 标签管理（§32） ----------
+const tagMgrVisible = ref(false)
+const newTagName = ref('')
+
+async function ensureTags(): Promise<void> {
+  if (tags.value.length === 0) tags.value = (await listTags()) ?? []
+}
+
+async function openTagManager(): Promise<void> {
+  await ensureTags()
+  tagMgrVisible.value = true
+}
+
+async function doCreateTag(): Promise<void> {
+  const name = newTagName.value.trim()
+  if (!name) {
+    ElMessage.warning('请输入标签名')
+    return
+  }
+  saving.value = true
+  try {
+    await createTag(name)
+    newTagName.value = ''
+    tags.value = (await listTags()) ?? []
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '新增失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function doRenameTag(t: Tag): Promise<void> {
+  try {
+    const { value } = await ElMessageBox.prompt(`修改标签「${t.name}」`, '标签改名', {
+      inputValue: t.name,
+      inputValidator: (v: string) => (v.trim() ? true : '标签名不能为空'),
+    })
+    await renameTag(t.id, value.trim())
+    tags.value = (await listTags()) ?? []
+    await load()
+  } catch {
+    /* 取消 */
+  }
+}
+
+async function doDeleteTag(t: Tag): Promise<void> {
+  try {
+    await ElMessageBox.confirm(`删除标签「${t.name}」？仅当没有会员使用时可删。`, '删除标签', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteTag(t.id)
+    tags.value = (await listTags()) ?? []
+    ElMessage.success('已删除')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '删除失败')
   }
 }
 
@@ -352,7 +453,10 @@ async function showTx(card: MemberCard) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void ensureTags()
+})
 </script>
 
 <style scoped>
@@ -405,6 +509,20 @@ onMounted(load)
 .m-visit {
   color: #909399;
   font-size: 12px;
+}
+.m-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.tag-chip {
+  margin-right: 4px;
+}
+.tag-new {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 .sec {
   margin: 6px 0 10px;

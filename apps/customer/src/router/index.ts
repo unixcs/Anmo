@@ -12,6 +12,7 @@ const routes = [
   { path: '/me/appointments', name: 'my-appointments', component: () => import('../pages/MyAppointmentsPage.vue'), meta: { auth: true } },
   { path: '/me/history', name: 'history', component: () => import('../pages/HistoryPage.vue'), meta: { auth: true } },
   { path: '/me/profile', name: 'profile', component: () => import('../pages/ProfilePage.vue'), meta: { auth: true } },
+  { path: '/about', name: 'about', component: () => import('../pages/AboutPage.vue') },
 ]
 
 export const router = createRouter({

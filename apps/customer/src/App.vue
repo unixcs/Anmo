@@ -37,12 +37,12 @@ function active(tab: { match: string[] }): boolean {
 .app-main { flex: 1; padding-bottom: 64px; }
 .tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; height: 60px;
-  display: flex; background: #fff; border-top: 1px solid #eee;
+  display: flex; background: var(--card); border-top: 1px solid var(--border);
 }
 .tab {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-size: 12px; color: #999; text-decoration: none; gap: 2px;
+  font-size: 12px; color: var(--muted-foreground); text-decoration: none; gap: 2px;
 }
-.tab.active { color: #c85f5f; }
+.tab.active { color: var(--primary); }
 .tab-icon { font-size: 20px; }
 </style>

@@ -572,3 +572,12 @@ Phase 11 E2E
 - yun1 同步：WSL 构建（admin --base=/admin-ui/、customer、linux/amd64 二进制）→ docker save|scp|load → force-recreate server；migration 011 自动应用（count=1）；公网 https://121.41.206.32:18091 实测 booking-options/closures 新端点正常；ops/health-yun.sh yun1 ALL GREEN。
 - Tencent 同步：git pull --rebase 至 e170bc4，开发环境与 WSL/GitHub 三方一致。
 - 用户实测入口：顾客端（5173/18090）注册→预约（上下午模糊）→我的核销码（无卡不出码）；商家端（5174/18091）扫码→散客核销、改期控件、闭店设置、营业配置。
+
+# PHASE RESULT — V1.x 第二轮：模型修正全链收口 + 门店信息/移动端/深色模式（A1-A9）
+- Changed/Why：目标 88 节 V1.x 第一阶段全部落地——状态机 WAITING 收紧前后端对齐（admin format/按钮/路由/summary、customer 文案/可取消条件清零 PENDING_CONFIRM，/confirm 端点断言 404）；统一结算页（扫码 ANMO-MEMBER/ANMO-APT 前缀分流、今日预约自动选/散客自动兜底、实际服务可改、结算时选卡、现金/微信同事务完成）；顾客端卡使用明细（GET /api/me/cards/{id}/transactions 归属校验）+ card_name 动态 + 有效期格式；capacity 双断点修复（ContentPage 挂载回填 + saveSetting 服务端校验 1~999/30|60|120/HH:MM，前端上限 999）；首页文案 home_title/home_body + 标签改名/删除/组合搜索(tag_id/card_type)+列表标签装饰；门店信息 shop_address/latitude/longitude + GET /api/store/status 动态三态（FREE/SERVING+free_at/BUSY，content.Wire 二阶段装配）+ ShopCard 三处落点（首页/预约成功页/关于我们，高德 marker 导航+tel: 拨号）；后台移动端（Records/CardTemplates/Services 手机卡片流、inline 表单单列、toolbar 换行、body overflow-x hidden、.fixed-bar safe-area）；顾客端 Design Tokens（style.css 全量重写 + 11 页硬编码色值批量 token 化 + 深色模式 prefers-color-scheme）；商家改手机号/密码 PUT /admin/auth/credentials（热生效，JWT 按 user id）。
+- Files：server（identity/member/card/content/appointment/transaction + e2e/adversarial 测试迁移）+ apps/admin（10 页/组件）+ apps/customer（11 页/组件）+ AGENTS.md（D8/D9 修订、核心事务 2/5）+ appointment/AGENTS.md + PRD 增量修订。
+- DB：无新 migration（012 已由前序建立并应用）。
+- API：+GET /admin/appointments/{id}、+GET /api/me/cards/{id}/transactions、+GET /api/store/status、+PUT /admin/auth/credentials、+PUT/DELETE /admin/tags/{id}、/admin/members 增 tag_id/card_type 参数、redeem 增 service_id；-PUT /admin/appointments/{id}/confirm（删除）。
+- Tests：全量 go test ./... -count=1 14 包全绿（含新 TestSlotCapacityConfigurable/TestStoreStatusThreeStates/TestBookingRulesCapacityFromSettings/TestUpdateCredentials/TestListFiltersByTag/TestSettleByCardWithActualServiceOverride/TestSettleByPayCompletesAndSingleValid）；两端 vue-tsc 过。
+- Risk：散客现金收款无端点（明确不做）；深色模式依赖页面 var() 覆盖度（主路径已覆盖）。
+- Next：B——GitHub 提交 + yun1 部署验证。

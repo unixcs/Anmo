@@ -22,6 +22,7 @@ export interface Member {
   last_visit_at: string | null
   created_at: string
   updated_at: string
+  tags?: string[] // 列表装饰字段（§32）
 }
 
 export interface Tag {
@@ -86,8 +87,7 @@ export interface CardTransaction {
 }
 
 export type AppointmentStatus =
-  | 'PENDING_CONFIRM'
-  | 'CONFIRMED'
+  | 'WAITING'
   | 'IN_SERVICE'
   | 'COMPLETED'
   | 'CANCELLED'
@@ -124,8 +124,7 @@ export interface AppointmentService {
 export interface TodaySummary {
   date: string
   total: number
-  pending_confirm: number
-  confirmed: number
+  waiting: number
   in_service: number
   completed: number
   cancelled: number
@@ -211,15 +210,30 @@ export interface LoggedOperation {
 
 // ---------- 认证 ----------
 
+export function updateCredentials(body: {
+  current_password: string
+  new_phone?: string
+  new_password?: string
+}) {
+  return http.put<{ updated: boolean }>('/admin/auth/credentials', body)
+}
+
 export function login(phone: string, password: string) {
   return http.post<{ token: string; user: AdminUser }>('/admin/auth/login', { phone, password })
 }
 
 // ---------- 会员 / 标签 ----------
 
-export function listMembers(keyword: string, page: number, perPage: number) {
+export function listMembers(
+  keyword: string,
+  page: number,
+  perPage: number,
+  filters?: { tag_id?: string; card_type?: string },
+) {
   const q = new URLSearchParams({ page: String(page), per_page: String(perPage) })
   if (keyword) q.set('keyword', keyword)
+  if (filters?.tag_id) q.set('tag_id', filters.tag_id)
+  if (filters?.card_type) q.set('card_type', filters.card_type)
   return http.getPage<Member>(`/admin/members?${q}`)
 }
 
@@ -254,6 +268,14 @@ export function listTags() {
 
 export function createTag(name: string) {
   return http.post<Tag>('/admin/tags', { name })
+}
+
+export function renameTag(id: string, name: string) {
+  return http.put<{ renamed: boolean }>(`/admin/tags/${id}`, { name })
+}
+
+export function deleteTag(id: string) {
+  return http.delete<{ deleted: boolean }>(`/admin/tags/${id}`)
 }
 
 // ---------- 服务分类 / 项目 ----------
@@ -346,13 +368,14 @@ export function listAppointments(query: { status?: string; date?: string; page: 
   return http.getPage<Appointment>(`/admin/appointments?${q}`)
 }
 
+/** 单查预约（含服务快照）——扫码 ANMO-APT 预约单码后解析用 */
+export function getAppointment(id: string) {
+  return http.get<Appointment & { service: AppointmentService | null }>(`/admin/appointments/${id}`)
+}
+
 export function getToday(date?: string) {
   const q = date ? `?date=${date}` : ''
   return http.get<{ summary: TodaySummary; appointments: TodayAppointment[] }>(`/admin/today${q}`)
-}
-
-export function confirmAppointment(id: string) {
-  return http.put<Appointment>(`/admin/appointments/${id}/confirm`)
 }
 
 export function startAppointment(id: string) {
@@ -433,10 +456,11 @@ export function deleteClosure(id: string) {
 
 // ---------- 结算 / 收款 / 撤销 ----------
 
-export function redeemCard(appointmentId: string, cardId: string) {
+/** 预约卡结算：serviceId 可指定实际服务（≠预约服务，goal §11） */
+export function redeemCard(appointmentId: string, cardId: string, serviceId?: string) {
   return http.post<{ redemption: Redemption; payment: Payment }>(
     `/admin/appointments/${appointmentId}/redeem`,
-    { card_id: cardId, idempotency_key: idemKey() },
+    { card_id: cardId, service_id: serviceId || undefined, idempotency_key: idemKey() },
   )
 }
 

@@ -7,8 +7,10 @@ export function yuan(cents: number): string {
 
 export function statusText(status: string): string {
   const map: Record<string, string> = {
-    PENDING_CONFIRM: '待确认',
-    CONFIRMED: '已确认',
+    WAITING: '待到店',
+    // 状态机收紧前的历史值（旧状态日志展示）
+    PENDING_CONFIRM: '待确认(历史)',
+    CONFIRMED: '已确认(历史)',
     IN_SERVICE: '服务中',
     COMPLETED: '已完成',
     CANCELLED: '已取消',

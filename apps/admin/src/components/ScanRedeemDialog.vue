@@ -1,7 +1,7 @@
 <template>
-  <el-dialog :model-value="modelValue" title="扫码核销" width="min(600px, 94vw)"
+  <el-dialog :model-value="modelValue" title="扫码结算" width="min(600px, 94vw)"
     @update:model-value="$emit('update:modelValue', $event)" @open="onOpen" @close="onClose">
-    <!-- 第一步：扫码 / 输入 -->
+    <!-- 第一步：扫码 / 输入（识别 ANMO-MEMBER 会员卡码 与 ANMO-APT 预约单码） -->
     <template v-if="step === 'scan'">
       <div class="cam-wrap">
         <video v-show="camReady" ref="videoEl" class="cam" muted playsinline />
@@ -24,7 +24,7 @@
         </el-button>
         <el-button type="success" :loading="qrDecoding" @click="fileEl?.click()">📷 拍照识别二维码</el-button>
       </div>
-      <p class="hint">现场扫码：打开摄像头对准顾客"我的核销码"；HTTP 页面请用「拍照识别二维码」（对顾客手机上的核销码拍照）。也可在下方手动输入手机号。</p>
+      <p class="hint">扫顾客「核销码」（按卡结算）或「预约单码」（关联该预约结算）；无预约扫卡也能直接扣卡结算。也可在下方手动输入手机号。</p>
 
       <div class="manual">
         <el-input v-model="manual" placeholder="手动输入：手机号（11位）" clearable
@@ -42,94 +42,67 @@
       </template>
     </template>
 
-    <!-- 第二步：会员 + 预约 + 选卡 -->
-    <template v-else-if="step === 'resolved' && member">
+    <!-- 第二步：统一结算页（会员 + 今日预约 + 实际服务 + 结算方式） -->
+    <template v-else-if="step === 'settle' && member">
       <div class="member-box">
         <b>{{ member.name }}</b>
         <span class="sub">（{{ member.phone }} · {{ member.member_no }}）</span>
         <el-button size="small" link @click="resetToScan">重新扫码</el-button>
       </div>
 
-      <!-- 散客模式：今日无预约，直接按卡扣次（D19） -->
-      <template v-if="walkIn">
-        <el-alert type="info" :closable="false" show-icon
-          title="今日无预约 · 散客直接核销" description="选择会员卡和本次服务项目即可扣次收款。" style="margin-bottom: 10px" />
-        <el-table :data="activeCards" size="small" v-loading="resolving" highlight-current-row
-          @row-click="(row: MemberCard) => (walkInCardId = row.id)">
-          <el-table-column label="卡" min-width="120">
-            <template #default="{ row }">{{ templateName(row.card_template_id) }}</template>
-          </el-table-column>
-          <el-table-column label="剩余/总" width="90">
-            <template #default="{ row }">{{ row.remaining_count }}/{{ row.total_count }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="110">
-            <template #default="{ row }">
-              <el-button size="small" :type="walkInCardId === row.id ? 'success' : 'default'"
-                @click.stop="walkInCardId = row.id">{{ walkInCardId === row.id ? '已选' : '选这张' }}</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-if="activeCards.length === 0" description="该会员没有可用会员卡" :image-size="60" />
+      <!-- 今日预约：0 个=散客；1 个自动选；多个让老板选（goal §10） -->
+      <el-form label-width="82px" class="pick">
+        <el-form-item label="今日预约">
+          <el-select v-model="selectedAptId" style="width: 100%"
+            :placeholder="walkIn ? '今日无待服务预约' : '选择要结算的预约'">
+            <el-option v-for="a in myApts" :key="a.id" :value="a.id" :label="aptLabel(a)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="实际服务">
+          <el-select v-model="serviceId" style="width: 100%" placeholder="选择本次实际服务">
+            <el-option v-for="s in settleServices" :key="s.id" :value="s.id"
+              :label="`${s.name}（¥${fen(s.default_price)}）`" />
+          </el-select>
+          <div v-if="snapshotName && serviceId === snapshotServiceId" class="field-hint">
+            默认为预约服务「{{ snapshotName }}」，可改成实际服务
+          </div>
+        </el-form-item>
+        <el-form-item label="结算方式">
+          <el-radio-group v-model="mode">
+            <el-radio-button value="card" :disabled="activeCards.length === 0">会员卡</el-radio-button>
+            <el-radio-button value="CASH" :disabled="!canCash">现金</el-radio-button>
+            <el-radio-button value="WECHAT_TRANSFER" :disabled="!canCash">微信</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="mode === 'card'" label="扣哪张卡">
+          <el-select v-model="cardId" style="width: 100%" placeholder="选择会员卡（结算时才扣次）">
+            <el-option v-for="c in activeCards" :key="c.id" :value="c.id"
+              :label="`${cardName(c)} · 剩 ${c.remaining_count}/${c.total_count} 次`" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-else label="金额">
+          <el-input v-model="cashAmount" type="number" :min="0" style="width: 160px">
+            <template #append>元</template>
+          </el-input>
+        </el-form-item>
+      </el-form>
 
-        <el-form label-width="90px" class="pick" v-if="walkInCardId">
-          <el-form-item label="服务项目">
-            <el-select v-model="walkInServiceId" style="width: 100%" placeholder="选择本次服务（按卡规则可选）">
-              <el-option v-for="s in walkInServices" :key="s.id" :value="s.id"
-                :label="`${s.name}（¥${(s.default_price / 100).toFixed(0)}）`" />
-            </el-select>
-          </el-form-item>
-        </el-form>
-        <div class="actions">
-          <el-button type="primary" :loading="resolving" :disabled="!walkInServiceId" @click="doRedeem">
-            核销 1 次
-          </el-button>
-        </div>
-      </template>
+      <el-alert v-if="walkIn" type="info" :closable="false" show-icon style="margin-bottom: 10px"
+        title="散客直接结算" :description="walkInHint" />
+      <p v-if="mode === 'card' && !cardId && activeCards.length === 0" class="warn">
+        该会员没有可用会员卡，请改用现金/微信，或先在「会员」页发卡。
+      </p>
 
-      <!-- 预约模式：定位今日预约（核销需服务中，D9） -->
-      <template v-else>
-        <el-form label-width="90px" class="pick">
-          <el-form-item label="今日预约">
-            <el-select v-model="selectedAptId" style="width: 100%" placeholder="该会员今日暂无预约">
-              <el-option v-for="a in myApts" :key="a.id" :value="a.id"
-                :label="`${fmtTime(a.scheduled_start).slice(11)} ${a.service?.service_name_snapshot ?? ''}（${APT_STATUS_TEXT[a.status]}）`" />
-            </el-select>
-          </el-form-item>
-        </el-form>
-        <p v-if="myApts.length > 0 && !inServiceApts.includes(selectedAptId ?? '')" class="warn">
-          核销需要预约处于"服务中"状态；可先在下方开始服务，或到"预约管理"操作。
-        </p>
-
-        <el-table :data="activeCards" size="small" v-loading="resolving">
-          <el-table-column label="卡" min-width="130">
-            <template #default="{ row }">{{ templateName(row.card_template_id) }}</template>
-          </el-table-column>
-          <el-table-column label="剩余/总" width="90">
-            <template #default="{ row }">{{ row.remaining_count }}/{{ row.total_count }}</template>
-          </el-table-column>
-          <el-table-column label="有效期至" width="110">
-            <template #default="{ row }">{{ row.valid_until ?? '永久' }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="100">
-            <template #default="{ row }">
-              <el-button size="small" type="primary" :disabled="row.remaining_count < 1 || !selectedAptId"
-                @click="doRedeem(row)">核销 1 次</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-if="activeCards.length === 0" description="该会员没有可用会员卡" :image-size="60" />
-
-        <div class="actions">
-          <el-button v-if="confirmableApt" size="default" type="success" @click="startService">开始服务</el-button>
-          <el-button size="default" @click="refreshMember">刷新</el-button>
-        </div>
-      </template>
+      <div class="actions">
+        <el-button type="primary" size="large" :loading="resolving" :disabled="!canSubmit" class="go"
+          @click="doSettle">完成并结算</el-button>
+        <el-button size="large" @click="refreshMember">刷新</el-button>
+      </div>
     </template>
 
     <!-- 第三步：结果 -->
     <template v-else-if="step === 'result'">
-      <el-result icon="success" title="核销成功"
-        :sub-title="resultText" />
+      <el-result icon="success" title="结算成功" :sub-title="resultText" />
       <div class="actions center">
         <el-button type="primary" @click="resetToScan">继续扫码</el-button>
         <el-button @click="$emit('update:modelValue', false)">关闭</el-button>
@@ -143,6 +116,7 @@ import { computed, ref, watch } from 'vue'
 import jsQR from 'jsqr'
 import { ElMessage } from 'element-plus'
 import {
+  getAppointment,
   getMember,
   getToday,
   listCardTemplates,
@@ -151,14 +125,17 @@ import {
   listServices,
   redeemCard,
   redeemWalkIn,
-  startAppointment,
+  settlePayment,
+  type Appointment,
+  type AppointmentService,
   type Member,
   type MemberCard,
   type TodayAppointment,
 } from '../core/api/admin'
 import { APT_STATUS_TEXT, fmtTime, todayStr } from '../core/format'
 
-const QR_PREFIX = 'ANMO-MEMBER:'
+const MEMBER_PREFIX = 'ANMO-MEMBER:'
+const APT_PREFIX = 'ANMO-APT:'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -166,7 +143,7 @@ const emit = defineEmits<{
   (e: 'settled'): void
 }>()
 
-const step = ref<'scan' | 'resolved' | 'result'>('scan')
+const step = ref<'scan' | 'settle' | 'result'>('scan')
 const videoEl = ref<HTMLVideoElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const fileEl = ref<HTMLInputElement | null>(null)
@@ -184,46 +161,83 @@ const activeCards = ref<MemberCard[]>([])
 const templateMap = ref<Record<string, string>>({})
 const templateRuleMap = ref<Record<string, string[]>>({})
 const myApts = ref<TodayAppointment[]>([])
-const selectedAptId = ref('')
+const serviceCatalog = ref<{ id: string; name: string; default_price: number; status: string }[]>([])
 const phoneMatches = ref<Member[]>([])
 const resultText = ref('')
 
-// 散客核销状态（D19）
-const walkIn = ref(false)
-const walkInCardId = ref('')
-const walkInServiceId = ref('')
-const serviceCatalog = ref<{ id: string; name: string; default_price: number; status: string }[]>([])
+// 结算单状态（goal §8-§11：预约可选关联；实际服务可改；结算时才选卡，服务过程不锁卡）
+const selectedAptId = ref('')
+const mode = ref<'card' | 'CASH' | 'WECHAT_TRANSFER'>('card')
+const cardId = ref('')
+const serviceId = ref('')
+const cashAmount = ref('')
 
 let stream: MediaStream | null = null
 let raf = 0
 
-const inServiceApts = computed(() =>
-  myApts.value.filter((a) => a.status === 'IN_SERVICE').map((a) => a.id),
+const activeApts = computed(() =>
+  myApts.value.filter((a) => a.status === 'WAITING' || a.status === 'IN_SERVICE'),
 )
-const confirmableApt = computed(() => {
-  const a = myApts.value.find((x) => x.id === selectedAptId.value)
-  return a && a.status === 'CONFIRMED' ? a : null
+const walkIn = computed(() => activeApts.value.length === 0)
+const selectedApt = computed(() => myApts.value.find((a) => a.id === selectedAptId.value) ?? null)
+const snapshotServiceId = computed(() => selectedApt.value?.service?.service_id ?? '')
+const snapshotName = computed(() => selectedApt.value?.service?.service_name_snapshot ?? '')
+
+// 结算方式可用性：现金/微信走预约收款（散客现金收款无端点，明确提示不做）
+const canCash = computed(() => !walkIn.value)
+const walkInHint = computed(() => {
+  if (activeCards.value.length > 0) return '无待服务预约：选卡与本次服务即可扣次结算。'
+  return '该会员今日无待服务预约且无可用卡；现金/微信收款需关联预约，请先让顾客预约或先发卡。'
 })
 
-// 散客模式下，所选卡规则允许的服务项（未配规则视为不限制则按后端校验兜底）
-const walkInServices = computed(() => {
-  const card = activeCards.value.find((c) => c.id === walkInCardId.value)
-  if (!card) return []
-  const allowed = templateRuleMap.value[card.card_template_id]
+// 可选实际服务：按所选卡的服务规则过滤（未配规则=不限制，后端兜底）
+const settleServices = computed(() => {
   let list = serviceCatalog.value.filter((s) => s.status === 'ACTIVE')
-  if (allowed && allowed.length > 0) {
-    list = list.filter((s) => allowed.includes(s.id))
+  const card = activeCards.value.find((c) => c.id === cardId.value)
+  if (card) {
+    const allowed = templateRuleMap.value[card.card_template_id]
+    if (allowed && allowed.length > 0) list = list.filter((s) => allowed.includes(s.id))
+  }
+  // 预约模式把预约快照服务排最前（即使 catalog 已下架也保留快照可选）
+  if (selectedApt.value?.service) {
+    const svc = selectedApt.value.service
+    if (!list.some((s) => s.id === svc.service_id)) {
+      list = [{ id: svc.service_id, name: `${svc.service_name_snapshot}（预约快照）`, default_price: svc.price_snapshot, status: 'ACTIVE' }, ...list]
+    }
   }
   return list
 })
 
-watch(walkInCardId, () => {
-  walkInServiceId.value = ''
+const canSubmit = computed(() => {
+  if (mode.value === 'card') {
+    // 卡结算：选卡 + 选服务；预约模式还需定位到预约（散客不需要）
+    return !!cardId.value && !!serviceId.value && (walkIn.value || !!selectedAptId.value)
+  }
+  return selectedAptId.value !== '' && Number(cashAmount.value) > 0
 })
 
-function templateName(id: string): string {
-  return templateMap.value[id] ?? id.slice(0, 8)
+function aptLabel(a: TodayAppointment): string {
+  const time = a.slot_type === 'HALF_DAY' ? (a.day_part === 'AM' ? '上午' : '下午') : fmtTime(a.scheduled_start).slice(11)
+  return `${time} ${a.service?.service_name_snapshot ?? ''}（${APT_STATUS_TEXT[a.status] ?? a.status}）`
 }
+
+function cardName(c: MemberCard): string {
+  return templateMap.value[c.card_template_id] ?? c.card_template_id.slice(0, 8)
+}
+
+function fen(v: number): string {
+  return (v / 100).toFixed(v % 100 === 0 ? 0 : 2)
+}
+
+watch([cardId, selectedAptId], () => {
+  // 换卡/换单后重算可选服务；默认落在预约快照服务，否则第一项
+  const keep = settleServices.value.some((s) => s.id === serviceId.value)
+  if (!keep) serviceId.value = snapshotServiceId.value || settleServices.value[0]?.id || ''
+})
+
+watch(walkIn, (w) => {
+  if (w && mode.value !== 'card') mode.value = activeCards.value.length > 0 ? 'card' : 'CASH'
+})
 
 // ---------- 摄像头 ----------
 async function startCamera() {
@@ -287,7 +301,7 @@ async function onPickImage(e: Event): Promise<void> {
   try {
     const code = await decodeImageFile(file)
     if (!code?.data) {
-      ElMessage.warning('未能从这张照片识别出二维码，请正对核销码、避免反光后重拍')
+      ElMessage.warning('未能从这张照片识别出二维码，请正对二维码、避免反光后重拍')
       return
     }
     await handleCode(code.data)
@@ -314,15 +328,19 @@ async function decodeImageFile(file: File): Promise<{ data: string } | null> {
   return jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })
 }
 
-// ---------- 识别与解析 ----------
+// ---------- 识别与解析：按前缀分流（卡码 → 会员；预约单码 → 预约） ----------
 async function handleCode(raw: string): Promise<void> {
   const content = raw.trim()
-  if (!content.startsWith(QR_PREFIX)) {
-    ElMessage.warning('不是本店核销码（应为 ANMO-MEMBER 开头）')
-    if (canUseCamera) await startCamera()
+  if (content.startsWith(APT_PREFIX)) {
+    await resolveFromAppointment(content.slice(APT_PREFIX.length))
     return
   }
-  await resolveMember(content.slice(QR_PREFIX.length))
+  if (content.startsWith(MEMBER_PREFIX)) {
+    await resolveMember(content.slice(MEMBER_PREFIX.length))
+    return
+  }
+  ElMessage.warning('不是本店二维码（应为 ANMO-MEMBER 或 ANMO-APT 开头）')
+  if (canUseCamera) await startCamera()
 }
 
 async function submitManual(): Promise<void> {
@@ -342,37 +360,27 @@ async function submitManual(): Promise<void> {
     }
     return
   }
-  ElMessage.warning('请输入 11 位手机号，或扫描顾客核销码')
+  ElMessage.warning('请输入 11 位手机号，或扫描顾客二维码')
 }
 
-// ---------- 会员定位 ----------
+// ---------- 结算单装配 ----------
+async function resolveFromAppointment(aptId: string): Promise<void> {
+  resolving.value = true
+  try {
+    const d = await getAppointment(aptId)
+    await assemble(d.member_id, d)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '预约单解析失败')
+    if (canUseCamera) await startCamera()
+  } finally {
+    resolving.value = false
+  }
+}
+
 async function resolveMember(memberId: string): Promise<void> {
   resolving.value = true
   try {
-    const [detail, cards, tpl, today, svcs] = await Promise.all([
-      getMember(memberId),
-      listMemberCards(memberId),
-      listCardTemplates(),
-      getToday(todayStr()),
-      listServices(),
-    ])
-    serviceCatalog.value = (svcs ?? []).map((s) => ({ id: s.id, name: s.name, default_price: s.default_price, status: s.status }))
-    member.value = detail.member
-    activeCards.value = (cards ?? []).filter((c) => c.status === 'ACTIVE')
-    templateMap.value = Object.fromEntries((tpl ?? []).map((t) => [t.id, t.name]))
-    templateRuleMap.value = Object.fromEntries((tpl ?? []).map((t) => [t.id, t.service_ids ?? []]))
-    myApts.value = (today.appointments ?? []).filter((a) => a.member_id === memberId)
-    phoneMatches.value = []
-    manual.value = ''
-    walkIn.value = myApts.value.length === 0
-    walkInCardId.value = ''
-    walkInServiceId.value = ''
-    const preferred = myApts.value.find((a) => a.status === 'IN_SERVICE')
-    selectedAptId.value = preferred?.id ?? myApts.value[0]?.id ?? ''
-    step.value = 'resolved'
-    if (myApts.value.length === 0) {
-      ElMessage.info('该会员今日暂无预约')
-    }
+    await assemble(memberId, null)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '识别失败')
     if (canUseCamera) await startCamera()
@@ -381,53 +389,114 @@ async function resolveMember(memberId: string): Promise<void> {
   }
 }
 
-async function refreshMember(): Promise<void> {
-  if (member.value) await resolveMember(member.value.id)
-}
+/** 拉齐会员/卡/预约/服务目录并初始化结算单；scanned 非空时为预约单码入口 */
+async function assemble(memberId: string, scanned: (Appointment & { service: AppointmentService | null }) | null): Promise<void> {
+  const [detail, cards, tpl, today, svcs] = await Promise.all([
+    getMember(memberId),
+    listMemberCards(memberId),
+    listCardTemplates(),
+    getToday(todayStr()),
+    listServices(),
+  ])
+  serviceCatalog.value = (svcs ?? []).map((s) => ({ id: s.id, name: s.name, default_price: s.default_price, status: s.status }))
+  member.value = detail.member
+  activeCards.value = (cards ?? []).filter((c) => c.status === 'ACTIVE')
+  templateMap.value = Object.fromEntries((tpl ?? []).map((t) => [t.id, t.name]))
+  templateRuleMap.value = Object.fromEntries((tpl ?? []).map((t) => [t.id, t.service_ids ?? []]))
+  myApts.value = (today.appointments ?? []).filter((a) => a.member_id === memberId)
+  phoneMatches.value = []
+  manual.value = ''
+  step.value = 'settle'
 
-async function startService(): Promise<void> {
-  const apt = confirmableApt.value
-  if (!apt) return
-  try {
-    await startAppointment(apt.id)
-    ElMessage.success('已开始服务')
-    await refreshMember()
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '开始服务失败')
+  // 扫预约单码：把该预约放进选项并预选（含非今日预约/已取消——后者按散客结算）
+  if (scanned && !myApts.value.some((a) => a.id === scanned.id)) {
+    myApts.value = [{ ...scanned, service: scanned.service ?? null } as TodayAppointment, ...myApts.value]
+  }
+
+  const preferred = scanned?.id
+    ?? activeApts.value.find((a) => a.status === 'IN_SERVICE')?.id
+    ?? activeApts.value[0]?.id
+    ?? ''
+  selectedAptId.value = preferred
+  cardId.value = activeCards.value[0]?.id ?? ''
+  mode.value = activeCards.value.length > 0
+    ? 'card'
+    : (activeApts.value.length > 0 ? 'CASH' : 'card')
+  serviceId.value = ''
+  cashAmount.value = ''
+  // 默认实际服务 = 预约快照服务；散客默认第一项
+  applyServiceDefault()
+  if (walkIn.value && activeCards.value.length === 0) {
+    ElMessage.info('该会员今日无待服务预约且无可用卡')
   }
 }
 
-async function doRedeem(card?: MemberCard): Promise<void> {
+function applyServiceDefault(): void {
+  serviceId.value = snapshotServiceId.value || settleServices.value[0]?.id || ''
+  syncCashDefault()
+}
+
+function syncCashDefault(): void {
+  if (mode.value === 'card') return
+  const svc = serviceCatalog.value.find((s) => s.id === serviceId.value)
+  if (svc && !cashAmount.value) cashAmount.value = String(fen(svc.default_price))
+}
+
+watch(serviceId, () => syncCashDefault())
+watch(mode, () => syncCashDefault())
+
+async function refreshMember(): Promise<void> {
+  if (member.value) {
+    resolving.value = true
+    try {
+      await assemble(member.value.id, null)
+    } finally {
+      resolving.value = false
+    }
+  }
+}
+
+// ---------- 提交：一条链路分发到三个后端事务 ----------
+async function doSettle(): Promise<void> {
   resolving.value = true
   try {
-    if (walkIn.value) {
-      // 散客核销：按卡直接扣次（D19）
-      const cid = card?.id ?? walkInCardId.value
-      if (!cid) {
-        ElMessage.warning('请先选择会员卡')
+    if (mode.value === 'card') {
+      if (!cardId.value) {
+        ElMessage.warning('请选择会员卡')
         return
       }
-      if (!walkInServiceId.value) {
-        ElMessage.warning('请选择本次服务项目')
+      if (!serviceId.value) {
+        ElMessage.warning('请选择本次实际服务')
         return
       }
-      const res = await redeemWalkIn(cid, walkInServiceId.value)
-      const rd = res.redemption
-      resultText.value = `卡余额 ${rd.before_count} → ${rd.after_count} 次；已记散客核销收款。`
+      if (walkIn.value) {
+        // 散客核销（D19）：无预约按卡扣次
+        const res = await redeemWalkIn(cardId.value, serviceId.value)
+        resultText.value = `卡余额 ${res.redemption.before_count} → ${res.redemption.after_count} 次；已记散客核销收款。`
+      } else {
+        if (!selectedAptId.value) {
+          ElMessage.warning('请选择要结算的预约')
+          return
+        }
+        const res = await redeemCard(selectedAptId.value, cardId.value, serviceId.value)
+        resultText.value = `卡余额 ${res.redemption.before_count} → ${res.redemption.after_count} 次；预约已完成并记 CARD 收款。`
+      }
     } else {
+      // 现金 / 微信：关联预约收款，同事务完成预约（§8）
       if (!selectedAptId.value) {
-        ElMessage.warning('请先选择要结算的预约')
+        ElMessage.warning('请选择要结算的预约')
         return
       }
-      if (!card) return
-      const res = await redeemCard(selectedAptId.value, card.id)
-      const rd = res.redemption
-      resultText.value = `卡余额 ${rd.before_count} → ${rd.after_count} 次；预约已自动完成并记 CARD 收款。`
+      await settlePayment(selectedAptId.value, {
+        method: mode.value,
+        amount: Math.round(Number(cashAmount.value) * 100),
+      })
+      resultText.value = `已记 ${mode.value === 'CASH' ? '现金' : '微信'}收款，预约已完成。`
     }
     step.value = 'result'
     emit('settled')
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '核销失败')
+    ElMessage.error(e instanceof Error ? e.message : '结算失败')
   } finally {
     resolving.value = false
   }
@@ -439,6 +508,9 @@ function resetToScan(): void {
   myApts.value = []
   activeCards.value = []
   selectedAptId.value = ''
+  cardId.value = ''
+  serviceId.value = ''
+  cashAmount.value = ''
   phoneMatches.value = []
   if (canUseCamera) void startCamera()
 }
@@ -514,6 +586,7 @@ watch(
   align-items: baseline;
   gap: 6px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 .sub {
   color: #909399;
@@ -521,6 +594,11 @@ watch(
 }
 .pick {
   margin-top: 4px;
+}
+.field-hint {
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.4;
 }
 .warn {
   color: #e6a23c;
@@ -531,6 +609,9 @@ watch(
   margin-top: 12px;
   display: flex;
   gap: 10px;
+}
+.actions .go {
+  flex: 1;
 }
 .actions.center {
   justify-content: center;

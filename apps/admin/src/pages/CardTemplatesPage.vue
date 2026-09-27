@@ -6,7 +6,23 @@
       <el-button type="primary" @click="openCreate">新建卡模板</el-button>
     </div>
 
-    <el-table :data="rows" v-loading="loading">
+    <template v-if="isMobile">
+      <el-empty v-if="rows.length === 0" description="暂无卡模板" :image-size="70" />
+      <div v-for="row in rows" :key="row.id" class="ct-card">
+        <div class="ct-top">
+          <b>{{ row.name }}</b>
+          <el-switch :model-value="row.status === 'ACTIVE'"
+            @change="(v: string | number | boolean) => toggle(row, Boolean(v))" />
+        </div>
+        <div class="ct-meta">{{ CARD_TYPE_TEXT[row.type] }} · {{ row.total_count }}次 · {{ yuan(row.price) }}</div>
+        <div class="ct-meta">有效期：{{ row.validity_type === 'PERMANENT' ? '永久' : `${row.valid_from ?? ''} ~ ${row.valid_until ?? ''}` }}</div>
+        <div class="ct-meta">可核销：{{ rulesText(row.id) || '未配置' }}</div>
+        <div class="ct-btns">
+          <el-button size="small" @click="openRules(row)">可核销服务</el-button>
+        </div>
+      </div>
+    </template>
+    <el-table v-else :data="rows" v-loading="loading">
       <el-table-column prop="name" label="名称" min-width="130" />
       <el-table-column label="类型" width="90">
         <template #default="{ row }">{{ CARD_TYPE_TEXT[row.type] }}</template>
@@ -97,11 +113,13 @@ import {
   type ServiceItem,
 } from '../core/api/admin'
 import { CARD_TYPE_TEXT, toFen, yuan } from '../core/format'
+import { useIsMobile } from '../core/useMedia'
 
 const rows = ref<CardTemplate[]>([])
 const services = ref<ServiceItem[]>([])
 const rulesMap = ref<Record<string, string[]>>({})
 const loading = ref(false)
+const isMobile = useIsMobile()
 const saving = ref(false)
 
 const createVisible = ref(false)
@@ -226,4 +244,10 @@ onMounted(load)
 .spacer {
   flex: 1;
 }
+</style>
+<style scoped>
+.ct-card { border: 1px solid #ebeef5; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #fff; }
+.ct-top { display: flex; justify-content: space-between; align-items: center; }
+.ct-meta { color: #606266; font-size: 13px; margin-top: 4px; }
+.ct-btns { margin-top: 8px; display: flex; gap: 8px; }
 </style>

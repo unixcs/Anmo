@@ -29,22 +29,28 @@ export function todayStr(): string {
 }
 
 export const APT_STATUS_TEXT: Record<string, string> = {
-  PENDING_CONFIRM: '待确认',
-  CONFIRMED: '已确认',
+  WAITING: '待到店',
   IN_SERVICE: '服务中',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
   NO_SHOW: '未到店',
+  // 状态机收紧（migration 012）前的历史值，仅用于展示旧状态日志
+  PENDING_CONFIRM: '待确认(历史)',
+  CONFIRMED: '已确认(历史)',
 }
 
 export const APT_STATUS_TAG: Record<string, 'info' | 'primary' | 'warning' | 'success' | 'danger'> = {
-  PENDING_CONFIRM: 'warning',
-  CONFIRMED: 'primary',
+  WAITING: 'warning',
   IN_SERVICE: 'success',
   COMPLETED: 'info',
   CANCELLED: 'danger',
   NO_SHOW: 'danger',
+  PENDING_CONFIRM: 'info',
+  CONFIRMED: 'info',
 }
+
+/** 列表筛选用：仅当前状态机的值（不含历史值） */
+export const APT_FILTER_STATUSES = ['WAITING', 'IN_SERVICE', 'COMPLETED', 'CANCELLED', 'NO_SHOW'] as const
 
 export const PAY_METHOD_TEXT: Record<string, string> = {
   CARD: '次卡核销',

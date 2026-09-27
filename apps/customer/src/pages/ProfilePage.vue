@@ -62,9 +62,9 @@ async function save(): Promise<void> {
 <style scoped>
 .profile { padding: 20px 16px; }
 h1 { font-size: 20px; }
-.form { display: flex; flex-direction: column; gap: 8px; background: #fff; border-radius: 12px; padding: 16px; }
-label { color: #999; font-size: 13px; }
-input, select { height: 42px; border: 1px solid #ddd; border-radius: 8px; padding: 0 10px; font-size: 15px; }
-input:disabled { background: #f7f7f7; color: #999; }
-.primary { margin-top: 12px; height: 44px; background: #c85f5f; color: #fff; border: none; border-radius: 10px; font-size: 16px; }
+.form { display: flex; flex-direction: column; gap: 8px; background: var(--card); border-radius: 12px; padding: 16px; }
+label { color: var(--muted-foreground); font-size: 13px; }
+input, select { height: 42px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 15px; }
+input:disabled { background: #f7f7f7; color: var(--muted-foreground); }
+.primary { margin-top: 12px; height: 44px; background: var(--primary); color: var(--card); border: none; border-radius: 10px; font-size: 16px; }
 </style>

@@ -5,7 +5,10 @@
 package content
 
 import (
+	"context"
+
 	"anmo/server/internal/config"
+	"anmo/server/internal/modules/appointment"
 	"anmo/server/internal/shared"
 )
 
@@ -13,6 +16,13 @@ import (
 type Provider struct {
 	db  shared.DB
 	cfg *config.Config
+	// store-status read-only deps (set via Wire, goal §17)
+	appts    interface {
+		ServingNow(ctx context.Context) (*appointment.ServingSlot, error)
+	}
+	services interface {
+		MinActiveDuration(ctx context.Context) (int, error)
+	}
 }
 
 // New builds the module Provider. Dependencies are injected by main.

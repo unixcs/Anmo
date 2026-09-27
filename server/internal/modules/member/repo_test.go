@@ -108,3 +108,46 @@ func TestUpdateProfileValidation(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// §32 组合搜索：tag_id 过滤 + 列表标签装饰。
+func TestListFiltersByTag(t *testing.T) {
+	p, _ := newTestProvider(t)
+	ctx := context.Background()
+
+	a, err := p.Create(ctx, NewMember{Name: "张三", Phone: "13911110001"})
+	if err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	if _, err := p.Create(ctx, NewMember{Name: "李四", Phone: "13911110002"}); err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+
+	tags, err := p.ListTags(ctx)
+	if err != nil {
+		t.Fatalf("tags: %v", err)
+	}
+	if err := p.SetTags(ctx, a.ID, []string{tags[0].ID}); err != nil {
+		t.Fatalf("set tags: %v", err)
+	}
+
+	// tag 过滤：只命中 A；列表行带标签装饰
+	onlyTagged, total, err := p.List(ctx, ListParams{TagID: tags[0].ID, Page: shared.PageParams{Page: 1, PerPage: 20}})
+	if err != nil {
+		t.Fatalf("list by tag: %v", err)
+	}
+	if total != 1 || len(onlyTagged) != 1 || onlyTagged[0].ID != a.ID {
+		t.Fatalf("tag filter = %d rows, want only A", total)
+	}
+	if len(onlyTagged[0].Tags) == 0 {
+		t.Fatal("list row should carry decorated tags")
+	}
+
+	// tag + keyword 组合：keyword 不匹配 → 空
+	_, total, err = p.List(ctx, ListParams{Keyword: "不存在", TagID: tags[0].ID, Page: shared.PageParams{Page: 1, PerPage: 20}})
+	if err != nil {
+		t.Fatalf("combined list: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("combined filter total = %d, want 0", total)
+	}
+}

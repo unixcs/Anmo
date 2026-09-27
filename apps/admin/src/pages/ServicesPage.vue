@@ -7,7 +7,16 @@
           <el-button size="small" type="primary" @click="catVisible = true">新建分类</el-button>
         </div>
       </template>
-      <el-table :data="categories" size="default" v-loading="loading">
+      <template v-if="isMobile">
+        <div v-for="row in categories" :key="row.id" class="sv-card">
+          <div class="sv-top"><b>{{ row.name }}</b>
+            <el-switch :model-value="row.status === 'ACTIVE'"
+              @change="(v: string | number | boolean) => toggleCat(row, Boolean(v))" />
+          </div>
+          <div class="sv-meta">排序 {{ row.sort }}</div>
+        </div>
+      </template>
+      <el-table v-else :data="categories" size="default" v-loading="loading">
         <el-table-column prop="name" label="分类名" min-width="140" />
         <el-table-column prop="sort" label="排序" width="80" />
         <el-table-column label="状态" width="120">
@@ -27,7 +36,18 @@
           <el-button size="small" type="primary" @click="openCreate">新建项目</el-button>
         </div>
       </template>
-      <el-table :data="items" size="default" v-loading="loading">
+      <template v-if="isMobile">
+        <div v-for="row in items" :key="row.id" class="sv-card">
+          <div class="sv-top"><b>{{ row.name }}</b>
+            <el-switch :model-value="row.status === 'ACTIVE'"
+              @change="(v: string | number | boolean) => toggleItem(row, Boolean(v))" />
+          </div>
+          <div class="sv-meta">{{ catName(row.category_id) }} · {{ row.duration_minutes }} 分钟 · {{ yuan(row.default_price) }}</div>
+          <div v-if="row.description" class="sv-meta">描述：{{ row.description }}</div>
+          <div class="sv-btns"><el-button size="small" @click="openEdit(row)">编辑</el-button></div>
+        </div>
+      </template>
+      <el-table v-else :data="items" size="default" v-loading="loading">
         <el-table-column label="分类" width="120">
           <template #default="{ row }">{{ catName(row.category_id) }}</template>
         </el-table-column>
@@ -107,10 +127,12 @@ import {
   type ServiceItem,
 } from '../core/api/admin'
 import { toFen, yuan } from '../core/format'
+import { useIsMobile } from '../core/useMedia'
 
 const categories = ref<ServiceCategory[]>([])
 const items = ref<ServiceItem[]>([])
 const loading = ref(false)
+const isMobile = useIsMobile()
 const saving = ref(false)
 
 const catVisible = ref(false)
@@ -253,4 +275,10 @@ onMounted(load)
   color: #909399;
   font-size: 12px;
 }
+</style>
+<style scoped>
+.sv-card { border: 1px solid #ebeef5; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #fff; }
+.sv-top { display: flex; justify-content: space-between; align-items: center; }
+.sv-meta { color: #606266; font-size: 13px; margin-top: 4px; }
+.sv-btns { margin-top: 8px; display: flex; gap: 8px; }
 </style>

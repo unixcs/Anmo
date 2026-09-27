@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { api, type BookingHalfDay, type BookingOptions } from '../core/api/endpoints'
 import type { ServiceItem } from '../core/models/models'
 import { candidateDays, type DayOption } from '../core/logic/booking'
 import { yuan } from '../core/utils/format'
 import { notify } from '../platform/notify/toast'
+import ShopCard from '../components/ShopCard.vue'
 
 const route = useRoute()
-const router = useRouter()
 
 const services = ref<ServiceItem[]>([])
 const serviceId = ref('')
@@ -20,6 +20,10 @@ const slotTime = ref('')
 const note = ref('')
 const busy = ref(false)
 const loadingOptions = ref(false)
+
+// 预约成功页（goal §19/§66）：页内成功态，展示服务/日期/时间 + 门店信息卡
+const success = ref<{ name: string; date: string; time: string; fuzzy: boolean } | null>(null)
+const shop = ref({ address: '', phone: '', latitude: '', longitude: '' })
 
 const selectedService = computed(() => services.value.find((s) => s.id === serviceId.value))
 const half = computed<BookingHalfDay | null>(() => {
@@ -78,12 +82,24 @@ async function submit(): Promise<void> {
     : { date: dateStr, day_part: part.value }
   try {
     await api.createAppointment(selectedService.value.id, target, note.value)
-    if (!slotTime.value) {
-      notify('预约成功：具体时间由店主安排，可能需要等待')
-    } else {
-      notify('预约提交成功，等待店家确认')
+    success.value = {
+      name: selectedService.value.name,
+      date: day.value[dayIdx.value].label,
+      time: slotTime.value || (part.value === 'AM' ? '上午' : '下午'),
+      fuzzy: !slotTime.value,
     }
-    router.push('/me/appointments')
+    try {
+      const s = await api.publicSettings()
+      shop.value = {
+        address: s.shop_address ?? '',
+        phone: s.shop_phone ?? '',
+        latitude: s.shop_latitude ?? '',
+        longitude: s.shop_longitude ?? '',
+      }
+    } catch {
+      /* 门店信息拿不到不影响成功页 */
+    }
+    window.scrollTo({ top: 0 })
   } catch (e) {
     const err = e as { code?: string; message: string }
     if (err.code === 'APT_SLOT_FULL' || err.code === 'APT_HALFDAY_FULL') {
@@ -103,7 +119,25 @@ async function submit(): Promise<void> {
 
 <template>
   <div class="page booking">
-    <h1>预约</h1>
+    <!-- 预约成功页（§19：服务/日期/时间 + 门店信息卡，地址导航电话拨号） -->
+    <section v-if="success" class="done">
+      <div class="done-icon">✅</div>
+      <h1>预约成功</h1>
+      <div class="done-card">
+        <div class="done-row"><span>服务项目</span><b>{{ success.name }}</b></div>
+        <div class="done-row"><span>日期</span><b>{{ success.date }}</b></div>
+        <div class="done-row"><span>时间</span><b>{{ success.time }}<template v-if="success.fuzzy">（具体时间由店主安排）</template></b></div>
+      </div>
+      <p class="done-tip">到店后向商家出示「我的 → 核销码 / 预约单码」即可</p>
+      <ShopCard v-bind="shop" />
+      <div class="done-btns">
+        <RouterLink to="/me/appointments" class="primary">查看我的预约</RouterLink>
+        <RouterLink to="/" class="ghost">返回首页</RouterLink>
+      </div>
+    </section>
+
+    <template v-else>
+      <h1>预约</h1>
 
     <section class="block">
       <h2>1 · 选择服务</h2>
@@ -173,6 +207,7 @@ async function submit(): Promise<void> {
       {{ part ? `提交预约：${submitLabel}` : '请先选择上午 / 下午' }}
     </button>
     <p class="fuzzy-hint">只选上午/下午提交 = 模糊预约，具体时间由店主安排，可能需要等待。</p>
+    </template>
   </div>
 </template>
 
@@ -180,29 +215,41 @@ async function submit(): Promise<void> {
 .booking { padding: 20px 16px; }
 h1 { font-size: 20px; }
 .block { margin: 18px 0; }
-.block h2 { font-size: 14px; color: #666; margin: 10px 0; }
+.block h2 { font-size: 14px; color: var(--muted-foreground); margin: 10px 0; }
 .svc-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.svc { border: 1px solid #eee; background: #fff; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.svc.picked { border-color: #c85f5f; background: #fdf3f3; }
-.svc-meta { color: #c85f5f; font-size: 13px; }
+.svc { border: 1px solid var(--border); background: var(--card); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.svc.picked { border-color: var(--primary); background: var(--primary-muted); }
+.svc-meta { color: var(--primary); font-size: 13px; }
 .day-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-.day { flex: 0 0 auto; border: 1px solid #eee; background: #fff; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
-.day.picked { border-color: #c85f5f; background: #fdf3f3; color: #c85f5f; }
+.day { flex: 0 0 auto; border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.day.picked { border-color: var(--primary); background: var(--primary-muted); color: var(--primary); }
 .part-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.part { border: 1px solid #eee; background: #fff; border-radius: 12px; padding: 16px 0; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.part { border: 1px solid var(--border); background: var(--card); border-radius: 12px; padding: 16px 0; display: flex; flex-direction: column; gap: 4px; align-items: center; }
 .part b { font-size: 17px; }
-.part.picked { border-color: #c85f5f; background: #fdf3f3; color: #c85f5f; }
-.part-meta { color: #999; font-size: 12px; }
-.part.picked .part-meta { color: #c85f5f; }
+.part.picked { border-color: var(--primary); background: var(--primary-muted); color: var(--primary); }
+.part-meta { color: var(--muted-foreground); font-size: 12px; }
+.part.picked .part-meta { color: var(--primary); }
 .slot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.slot { border: 1px solid #eee; background: #fff; border-radius: 8px; padding: 10px 0; display: flex; flex-direction: column; align-items: center; }
-.slot small { color: #c85f5f; font-size: 11px; }
+.slot { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 10px 0; display: flex; flex-direction: column; align-items: center; }
+.slot small { color: var(--primary); font-size: 11px; }
 .slot.full { opacity: .4; }
-.slot.picked { border-color: #c85f5f; background: #c85f5f; color: #fff; }
-.slot.picked small { color: #fff; }
-.empty { color: #999; font-size: 14px; }
-textarea { width: 100%; border: 1px solid #ddd; border-radius: 8px; padding: 10px; font-size: 14px; box-sizing: border-box; }
-.primary { width: 100%; height: 48px; background: #c85f5f; color: #fff; border: none; border-radius: 12px; font-size: 16px; margin-top: 10px; }
+.slot.picked { border-color: var(--primary); background: var(--primary); color: var(--card); }
+.slot.picked small { color: var(--card); }
+.empty { color: var(--muted-foreground); font-size: 14px; }
+textarea { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 14px; box-sizing: border-box; }
+.primary { width: 100%; min-height: 48px; height: auto; padding: 12px 10px; background: var(--primary); color: var(--card); border: none; border-radius: 12px; font-size: 16px; margin-top: 10px; word-break: break-all; }
 .primary:disabled { opacity: .5; }
-.fuzzy-hint { color: #aaa; font-size: 12px; text-align: center; margin-top: 8px; }
+.fuzzy-hint { color: var(--muted-foreground); font-size: 12px; text-align: center; margin-top: 8px; }
+/* 预约成功页 */
+.done { text-align: center; }
+.done-icon { font-size: 44px; }
+.done h1 { margin: 6px 0 14px; }
+.done-card { background: var(--card); border-radius: 12px; padding: 14px; text-align: left; margin-bottom: 12px; }
+.done-row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.done-row:last-child { border-bottom: 0; }
+.done-row span { color: var(--muted-foreground); }
+.done-tip { color: var(--muted-foreground); font-size: 13px; margin: 0 0 12px; }
+.done-btns { display: flex; gap: 10px; margin-top: 16px; }
+.done-btns .primary { flex: 1; text-align: center; text-decoration: none; line-height: 1.4; margin-top: 0; }
+.done-btns .ghost { flex: 1; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 12px; color: var(--muted-foreground); text-decoration: none; font-size: 15px; }
 </style>

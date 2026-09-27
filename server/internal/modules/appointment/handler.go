@@ -146,15 +146,6 @@ func (p *Provider) handleCustomerGet(w http.ResponseWriter, r *http.Request) {
 
 // --- admin ---
 
-func (p *Provider) handleAdminConfirm(w http.ResponseWriter, r *http.Request) {
-	a, err := p.Confirm(r.Context(), r.PathValue("id"), operatorOf(r))
-	if err != nil {
-		shared.Fail(w, err)
-		return
-	}
-	shared.OK(w, a)
-}
-
 func (p *Provider) handleAdminStart(w http.ResponseWriter, r *http.Request) {
 	a, err := p.Start(r.Context(), r.PathValue("id"), operatorOf(r))
 	if err != nil {
@@ -216,6 +207,15 @@ func (p *Provider) handleAdminList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	shared.PageOK(w, list, total, shared.PageFromRequest(r))
+}
+
+func (p *Provider) handleAdminGet(w http.ResponseWriter, r *http.Request) {
+	d, err := p.Detail(r.Context(), r.PathValue("id"))
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, d)
 }
 
 func (p *Provider) handleAdminToday(w http.ResponseWriter, r *http.Request) {

@@ -91,9 +91,10 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 ## 核心事务（必须单事务完成）
 
 1. 发卡：member_card + card_transaction(ISSUE)
-2. 核销：锁卡 → 校验状态/有效期/卡服务规则/余额 → 扣次 → card_transaction(REDEEM) → redemption → payment(CARD) → appointment=COMPLETED → status log，任一步失败 ROLLBACK
+2. 核销（预约结算）：锁卡 → 校验状态/有效期/卡服务规则/余额 → 扣次 → card_transaction(REDEEM) → redemption(记实际服务+名称快照) → payment(CARD) → appointment=COMPLETED → status log，任一步失败 ROLLBACK。预约须处于 WAITING/IN_SERVICE（COMPLETED 仅撤销后重核销时放行，MarkCompleted 幂等；CANCELLED/NO_SHOW 拒绝走散客）
 3. 撤销：锁卡 → 确认未撤销 → 恢复次数 → card_transaction(REVERSAL) → redemption_reversal → **同一事务将原核销的 payment(CARD) 置 VOIDED（按 idempotency_key 定位，D19）**。payment.status ∈ {VALID, VOIDED}；收款记录只统计 VALID；一个预约最多一笔 VALID payment
 4. 散客核销（V1.x，D19）：锁卡 → 校验状态/有效期/卡规则/余额 → 扣次 → card_transaction(REDEEM) → redemption(appointment NULL) → payment(CARD, 金额=服务默认价) → last_visit，无预约、无 COMPLETED 迁移
+5. 现金/微信结算（V1.x，2026-09-28 §8）：预约处于 WAITING/IN_SERVICE 时，同事务写 payment(CASH/WECHAT/OTHER) 并将预约置 COMPLETED；CANCELLED/NO_SHOW 拒绝（按独立散客处理）
 
 禁止异步事件扣卡。EventBus 仅用于通知/统计/洞察。
 
@@ -117,8 +118,8 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D5 | 并发预约：专用连接 NamedLock('anmo:appointment:calendar') 串行化冲突检查，事务 COMMIT 后才释放（锁必须覆盖提交） |
 | D6 | 跨模块单事务：transaction 模块开事务，显式 Tx 执行器传入 card/appointment 的 api.go；模块内禁止自开嵌套事务（Phase 1 落地 shared.TxRunner） |
 | D7 | 操作日志由 HTTP middleware 写 ops_operation_log；业务模块不 import ops；ops 定时任务单向依赖业务模块 api.go |
-| D8 | 状态迁移一律 `UPDATE ... WHERE status=期望` 校验影响行数；改期限 PENDING_CONFIRM/CONFIRMED、沿用 2 小时限制、同 appointment 改时间、冲突排除自身；NO_SHOW 仅从 CONFIRMED 迁出 |
-| D9 | 仅核销事务与"完成服务"动作触发 COMPLETED；核销要求预约处于 IN_SERVICE（CONFIRMED 不可跳步结算，对抗审查 W8）；现金/微信收款只写 payment，不改预约状态 |
+| D8 | **(2026-09-28 修订)** 状态机收紧为 WAITING→IN_SERVICE→COMPLETED（异常 WAITING→CANCELLED/NO_SHOW），migration 012；创建即 WAITING，无确认环节；状态迁移一律 `UPDATE ... WHERE status=期望` 校验影响行数；改期限 WAITING、沿用 2 小时限制、同 appointment 改时间、冲突排除自身；NO_SHOW 仅从 WAITING 迁出 |
+| D9 | **(2026-09-28 修订)** 仅结算事务与"完成服务"动作触发 COMPLETED；卡核销与现金/微信收款均允许 WAITING/IN_SERVICE 并同事务完成预约（§8 统一结算）；实际服务可≠预约服务（redemption 记实际服务+快照，预约快照不覆盖）；散客核销仅拦当日存在 WAITING/IN_SERVICE 预约的会员（RDM_WALKIN_BLOCKED） |
 | D10 | 续卡 = 同一 member 再发一张新卡（复用 ISSUE 流水）；调整次数 = 现有卡 ADJUSTMENT ±N 流水 |
 | D11 | 卡模板 type 仅 COUNT/ACTIVITY 存枚举，不产生独立逻辑，有效期由 validity_type/valid_from/valid_until 表达 |
 | D12 | 作废卡：仅置 CANCELLED，不改次数、不写次数流水；核销拒绝 CANCELLED |

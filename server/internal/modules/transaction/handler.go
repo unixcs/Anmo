@@ -16,6 +16,7 @@ func operatorOf(r *http.Request) string {
 
 type settleCardReq struct {
 	CardID         string `json:"card_id"`
+	ServiceID      string `json:"service_id"` // 可选：实际服务（≠预约服务，§11）
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
@@ -25,7 +26,7 @@ func (p *Provider) handleSettleCard(w http.ResponseWriter, r *http.Request) {
 		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
 		return
 	}
-	rd, pay, err := p.SettleByCard(r.Context(), r.PathValue("id"), req.CardID, operatorOf(r), req.IdempotencyKey)
+	rd, pay, err := p.SettleByCard(r.Context(), r.PathValue("id"), req.CardID, req.ServiceID, operatorOf(r), req.IdempotencyKey)
 	if err != nil {
 		shared.Fail(w, err)
 		return

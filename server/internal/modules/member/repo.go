@@ -23,6 +23,8 @@ type Member struct {
 	LastVisitAt *time.Time `json:"last_visit_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	// Tags 仅列表/详情展示用（§32 组合搜索的展示面），不落 member 表
+	Tags []string `json:"tags,omitempty"`
 }
 
 type Tag struct {
@@ -108,10 +110,13 @@ func (p *Provider) Get(ctx context.Context, id string) (*Member, error) {
 	return m, nil
 }
 
-// ListParams filters the admin member list.
+// ListParams filters the admin member list (goal §32: keyword + tag + card
+// type combinable).
 type ListParams struct {
-	Keyword string // matches name or phone
-	Page    shared.PageParams
+	Keyword  string // matches name or phone
+	TagID    string // member carries this tag
+	CardType string // member holds a card of this template type (COUNT/ACTIVITY)
+	Page     shared.PageParams
 }
 
 // List returns a page of members.
@@ -122,6 +127,14 @@ func (p *Provider) List(ctx context.Context, q ListParams) ([]*Member, int64, er
 		where += " AND (name LIKE ? OR phone LIKE ?)"
 		like := "%" + kw + "%"
 		args = append(args, like, like)
+	}
+	if q.TagID != "" {
+		where += " AND EXISTS (SELECT 1 FROM member_tag_rel r WHERE r.member_id = member.id AND r.tag_id = ?)"
+		args = append(args, q.TagID)
+	}
+	if q.CardType != "" {
+		where += " AND EXISTS (SELECT 1 FROM member_card mc JOIN card_template ct ON ct.id = mc.card_template_id WHERE mc.member_id = member.id AND ct.type = ?)"
+		args = append(args, q.CardType)
 	}
 	var total int64
 	if err := p.db.QueryRowContext(ctx,
@@ -144,7 +157,41 @@ func (p *Provider) List(ctx context.Context, q ListParams) ([]*Member, int64, er
 		}
 		out = append(out, m)
 	}
+	if err := p.decorateTags(ctx, out); err != nil {
+		return nil, 0, err
+	}
 	return out, total, nil
+}
+
+// decorateTags fills each member's Tags for list display (one query per page).
+func (p *Provider) decorateTags(ctx context.Context, members []*Member) error {
+	if len(members) == 0 {
+		return nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(members)), ",")
+	args := make([]any, len(members))
+	nameByID := map[string][]string{}
+	for i, m := range members {
+		args[i] = m.ID
+	}
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT r.member_id, t.name FROM member_tag_rel r JOIN member_tag t ON t.id = r.tag_id
+		 WHERE r.member_id IN (`+ph+`) ORDER BY t.name`, args...)
+	if err != nil {
+		return shared.Server("TAG_PAGE", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mid, name string
+		if err := rows.Scan(&mid, &name); err != nil {
+			return shared.Server("TAG_PAGE_SCAN", err)
+		}
+		nameByID[mid] = append(nameByID[mid], name)
+	}
+	for _, m := range members {
+		m.Tags = nameByID[m.ID]
+	}
+	return nil
 }
 
 // UpdateProfile edits editable fields. Empty pointer = leave unchanged.

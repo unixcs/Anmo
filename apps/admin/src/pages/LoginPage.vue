@@ -57,7 +57,7 @@ async function submit() {
   background: linear-gradient(135deg, #1f2d3d 0%, #2f4554 100%);
 }
 .card {
-  width: 360px;
+  width: min(360px, 92vw);
   padding: 8px 12px 4px;
 }
 .h {

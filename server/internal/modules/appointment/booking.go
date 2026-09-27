@@ -238,7 +238,7 @@ func checkClosures(ctx context.Context, tx shared.Tx, w dayWindow, win window) e
 // withSpecific=false counts every active row (half-day pool).
 func activeCount(ctx context.Context, tx shared.Tx, ws, we time.Time, excludeID string, specificOnly bool) (int, error) {
 	q := `SELECT COUNT(*) FROM appointment
-	      WHERE status IN ('PENDING_CONFIRM','CONFIRMED','IN_SERVICE')
+	      WHERE status IN ('WAITING','IN_SERVICE')
 	        AND scheduled_start < ? AND scheduled_end > ?`
 	args := []any{we, ws}
 	if specificOnly {
@@ -462,7 +462,7 @@ func (p *Provider) BookingOptions(ctx context.Context, date string) (*BookingOpt
 	// load active bookings of the day once; compute overlaps in memory.
 	rows, err := p.db.QueryContext(ctx,
 		`SELECT scheduled_start, scheduled_end, slot_type FROM appointment
-		 WHERE status IN ('PENDING_CONFIRM','CONFIRMED','IN_SERVICE')
+		 WHERE status IN ('WAITING','IN_SERVICE')
 		   AND scheduled_start < ? AND scheduled_end > ?`,
 		w.Close, w.Open)
 	if err != nil {

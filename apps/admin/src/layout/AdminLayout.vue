@@ -13,6 +13,7 @@
         <span class="title">{{ title }}</span>
         <span class="spacer" />
         <span v-if="!isMobile" class="user">{{ user?.name }}（{{ roleText }}）</span>
+        <el-button :size="isMobile ? 'default' : 'small'" @click="accountVisible = true">账号设置</el-button>
         <el-button type="primary" :size="isMobile ? 'default' : 'small'" class="scan-btn"
           @click="scanVisible = true">扫码核销</el-button>
         <el-button v-if="!isMobile" link type="danger" @click="logout">退出登录</el-button>
@@ -34,6 +35,7 @@
     </el-drawer>
 
     <ScanRedeemDialog v-model="scanVisible" @settled="() => {}" />
+    <AccountDialog v-model="accountVisible" />
   </el-container>
 </template>
 
@@ -42,6 +44,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getUser, clearSession } from '../platform/auth'
 import ScanRedeemDialog from '../components/ScanRedeemDialog.vue'
+import AccountDialog from '../components/AccountDialog.vue'
 import { useIsMobile } from '../core/useMedia'
 
 const route = useRoute()
@@ -49,6 +52,7 @@ const router = useRouter()
 const user = getUser()
 const isMobile = useIsMobile()
 const scanVisible = ref(false)
+const accountVisible = ref(false)
 const menuOpen = ref(false)
 
 const navItems = [

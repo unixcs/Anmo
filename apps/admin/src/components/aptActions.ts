@@ -2,7 +2,6 @@
 // 改期走独立的 RescheduleDialog（日期/时段控件），由页面级 @reschedule 事件触发。
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  confirmAppointment,
   startAppointment,
   completeAppointment,
   cancelAppointment,
@@ -50,7 +49,6 @@ export function useAptActions(refresh: () => void) {
   }
 
   return {
-    confirmApt: (id: string) => run(() => confirmAppointment(id), '已确认预约'),
     startApt: (id: string) => run(() => startAppointment(id), '已开始服务'),
     completeApt: (id: string) =>
       withConfirm('确认完成该预约？完成后才能收款入账。', () => completeAppointment(id), '已完成'),

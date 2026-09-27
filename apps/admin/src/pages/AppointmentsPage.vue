@@ -4,7 +4,7 @@
       <el-date-picker v-model="date" type="date" value-format="YYYY-MM-DD" placeholder="全部日期"
         style="width: 150px" clearable @change="load" />
       <el-select v-model="status" placeholder="全部状态" clearable style="width: 140px" @change="load">
-        <el-option v-for="(text, key) in APT_STATUS_TEXT" :key="key" :label="text" :value="key" />
+        <el-option v-for="key in APT_FILTER_STATUSES" :key="key" :label="APT_STATUS_TEXT[key]" :value="key" />
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
       <el-button type="warning" plain @click="closureVisible = true">闭店设置</el-button>
@@ -78,7 +78,7 @@ import {
   listMembers,
   type Appointment,
 } from '../core/api/admin'
-import { APT_STATUS_TAG, APT_STATUS_TEXT, fmtTime } from '../core/format'
+import { APT_FILTER_STATUSES, APT_STATUS_TAG, APT_STATUS_TEXT, fmtTime } from '../core/format'
 import { useIsMobile } from '../core/useMedia'
 import AptActionButtons from '../components/AptActionButtons.vue'
 import SettleDialog from '../components/SettleDialog.vue'

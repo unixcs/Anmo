@@ -11,10 +11,10 @@ import (
 	"anmo/server/internal/shared"
 )
 
-// Status values (plan §24) — frozen state machine.
+// Status values — simplified V1.x state machine (user decision 2026-09-28):
+// WAITING → IN_SERVICE → COMPLETED; WAITING → CANCELLED | NO_SHOW.
 const (
-	StatusPendingConfirm = "PENDING_CONFIRM"
-	StatusConfirmed      = "CONFIRMED"
+	StatusWaiting        = "WAITING"
 	StatusInService      = "IN_SERVICE"
 	StatusCompleted      = "COMPLETED"
 	StatusCancelled      = "CANCELLED"
@@ -158,7 +158,7 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID string, req B
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO appointment (id, appointment_no, member_id, scheduled_start, scheduled_end, status, slot_type, customer_note)
 			 VALUES (?,?,?,?,?,?,?,?)`,
-			id, no, memberID, win.Start, win.End, StatusPendingConfirm, win.SlotType, note); err != nil {
+			id, no, memberID, win.Start, win.End, StatusWaiting, win.SlotType, note); err != nil {
 			return shared.Server("APT_INSERT", err)
 		}
 		if _, err := tx.ExecContext(ctx,
@@ -167,7 +167,7 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID string, req B
 			shared.NewID(), id, item.ID, item.Name, item.DurationMin, item.PriceCents); err != nil {
 			return shared.Server("APT_SERVICE_INSERT", err)
 		}
-		if err := statusLog(ctx, tx, id, "", StatusPendingConfirm, "CUSTOMER", memberID, "创建预约"); err != nil {
+		if err := statusLog(ctx, tx, id, "", StatusWaiting, "CUSTOMER", memberID, "创建预约"); err != nil {
 			return err
 		}
 		out, err = scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
@@ -202,8 +202,6 @@ func (p *Provider) acquireCalendar(ctx context.Context) (shared.LockHandle, erro
 func (p *Provider) transition(ctx context.Context, tx shared.Tx, id, from, to, operatorType, operatorID, remark string) (*Appointment, error) {
 	q := `UPDATE appointment SET status = ?`
 	switch to {
-	case StatusConfirmed:
-		q += ", confirmed_at = NOW()"
 	case StatusInService:
 		q += ", started_at = NOW()"
 	case StatusCompleted:
@@ -230,23 +228,12 @@ func (p *Provider) transition(ctx context.Context, tx shared.Tx, id, from, to, o
 	return a, nil
 }
 
-// Confirm approves a pending appointment (owner side).
-func (p *Provider) Confirm(ctx context.Context, id, operatorID string) (*Appointment, error) {
-	var out *Appointment
-	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		var e error
-		out, e = p.transition(ctx, tx, id, StatusPendingConfirm, StatusConfirmed, "ADMIN", operatorID, "确认预约")
-		return e
-	})
-	return out, err
-}
-
 // Start begins service.
 func (p *Provider) Start(ctx context.Context, id, operatorID string) (*Appointment, error) {
 	var out *Appointment
 	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
 		var e error
-		out, e = p.transition(ctx, tx, id, StatusConfirmed, StatusInService, "ADMIN", operatorID, "开始服务")
+		out, e = p.transition(ctx, tx, id, StatusWaiting, StatusInService, "ADMIN", operatorID, "开始服务")
 		return e
 	})
 	return out, err
@@ -288,7 +275,7 @@ func (p *Provider) CancelByCustomer(ctx context.Context, memberID, id string) (*
 		if a.MemberID != memberID {
 			return shared.NewErr("APT_NOT_YOURS", "只能操作自己的预约", 403)
 		}
-		if a.Status != StatusPendingConfirm && a.Status != StatusConfirmed {
+		if a.Status != StatusWaiting {
 			return shared.Conflict("APT_BAD_TRANSITION", "当前状态不可取消")
 		}
 		if a.ScheduledStart.Before(shared.NowShanghai().Add(time.Duration(p.cfg.Business.CancelMinAheadHrs) * time.Hour)) {
@@ -311,7 +298,7 @@ func (p *Provider) CancelByAdmin(ctx context.Context, id, operatorID, reason str
 		if err != nil {
 			return shared.Server("APT_QUERY", err)
 		}
-		if a.Status != StatusPendingConfirm && a.Status != StatusConfirmed {
+		if a.Status != StatusWaiting {
 			return shared.Conflict("APT_BAD_TRANSITION", "当前状态不可取消")
 		}
 		out, err = p.transition(ctx, tx, id, a.Status, StatusCancelled, "ADMIN", operatorID, reason)
@@ -320,12 +307,12 @@ func (p *Provider) CancelByAdmin(ctx context.Context, id, operatorID, reason str
 	return out, err
 }
 
-// NoShow marks a confirmed appointment as no-show (§25: only from CONFIRMED).
+// NoShow marks a waiting appointment as no-show.
 func (p *Provider) NoShow(ctx context.Context, id, operatorID string) (*Appointment, error) {
 	var out *Appointment
 	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
 		var e error
-		out, e = p.transition(ctx, tx, id, StatusConfirmed, StatusNoShow, "ADMIN", operatorID, "爽约")
+		out, e = p.transition(ctx, tx, id, StatusWaiting, StatusNoShow, "ADMIN", operatorID, "爽约")
 		return e
 	})
 	return out, err
@@ -352,7 +339,7 @@ func (p *Provider) Reschedule(ctx context.Context, memberID, id string, req Book
 		if byCustomer && a.MemberID != memberID {
 			return shared.NewErr("APT_NOT_YOURS", "只能操作自己的预约", 403)
 		}
-		if a.Status != StatusPendingConfirm && a.Status != StatusConfirmed {
+		if a.Status != StatusWaiting {
 			return shared.Conflict("APT_BAD_TRANSITION", "当前状态不可改期")
 		}
 		if byCustomer && a.ScheduledStart.Before(shared.NowShanghai().Add(time.Duration(p.cfg.Business.CancelMinAheadHrs)*time.Hour)) {

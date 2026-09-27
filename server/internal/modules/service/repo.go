@@ -173,9 +173,21 @@ func (p *Provider) GetItem(ctx context.Context, id string) (*Item, error) {
 	return it, nil
 }
 
+// MinActiveDuration returns the shortest ACTIVE service duration in minutes
+// (0 when no active service exists) — store-status "can fit one more service"
+// check (goal §17). Read-only, exported for cross-module use.
+func (p *Provider) MinActiveDuration(ctx context.Context) (int, error) {
+	var n int
+	err := p.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MIN(duration_minutes), 0) FROM service WHERE status = 'ACTIVE'`).Scan(&n)
+	if err != nil {
+		return 0, shared.Server("SERVICE_MINDUR", err)
+	}
+	return n, nil
+}
+
 // ListItems returns items; activeOnly=true for the customer H5.
-func (p *Provider) ListItems(ctx context.Context, activeOnly bool) ([]*Item, error) {
-	q := `SELECT ` + itemColumns + ` FROM service`
+func (p *Provider) ListItems(ctx context.Context, activeOnly bool) ([]*Item, error) {	q := `SELECT ` + itemColumns + ` FROM service`
 	if activeOnly {
 		q += ` WHERE status = 'ACTIVE'`
 	}

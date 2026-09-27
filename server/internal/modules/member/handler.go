@@ -25,8 +25,10 @@ func (p *Provider) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 func (p *Provider) handleList(w http.ResponseWriter, r *http.Request) {
 	out, total, err := p.List(r.Context(), ListParams{
-		Keyword: r.URL.Query().Get("keyword"),
-		Page:    shared.PageFromRequest(r),
+		Keyword:  r.URL.Query().Get("keyword"),
+		TagID:    r.URL.Query().Get("tag_id"),
+		CardType: r.URL.Query().Get("card_type"),
+		Page:     shared.PageFromRequest(r),
 	})
 	if err != nil {
 		shared.Fail(w, err)
@@ -102,6 +104,27 @@ func (p *Provider) handleCreateTag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	shared.OK(w, t)
+}
+
+func (p *Provider) handleRenameTag(w http.ResponseWriter, r *http.Request) {
+	var req createTagReq
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	if err := p.RenameTag(r.Context(), r.PathValue("id"), req.Name); err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]bool{"renamed": true})
+}
+
+func (p *Provider) handleDeleteTag(w http.ResponseWriter, r *http.Request) {
+	if err := p.DeleteTag(r.Context(), r.PathValue("id")); err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]bool{"deleted": true})
 }
 
 // --- customer endpoints: identity always comes from the token (§100) ---

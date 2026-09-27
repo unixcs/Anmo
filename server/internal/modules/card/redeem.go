@@ -164,23 +164,76 @@ func (p *Provider) Cancel(ctx context.Context, cardID, operatorID string) error 
 	})
 }
 
-// ListByMember returns a member's cards.
+// cardNamedColumns — card columns plus the live template name (§15).
+const cardNamedColumns = `c.id, c.member_id, c.card_template_id, c.total_count, c.remaining_count,
+	c.valid_from, c.valid_until, c.status, c.issued_at, t.name`
+
+// ListByMember returns a member's cards (with the current template name).
 func (p *Provider) ListByMember(ctx context.Context, memberID string) ([]*MemberCard, error) {
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT `+cardColumns+` FROM member_card WHERE member_id = ? ORDER BY issued_at DESC`, memberID)
+		`SELECT `+cardNamedColumns+` FROM member_card c JOIN card_template t ON t.id = c.card_template_id
+		 WHERE c.member_id = ? ORDER BY c.issued_at DESC`, memberID)
 	if err != nil {
 		return nil, shared.Server("CARD_LIST", err)
 	}
 	defer rows.Close()
 	var out []*MemberCard
 	for rows.Next() {
-		c, err := scanCard(rows)
-		if err != nil {
+		c := &MemberCard{}
+		var vu sql.NullString
+		var issued sql.NullTime
+		if err := rows.Scan(&c.ID, &c.MemberID, &c.TemplateID, &c.TotalCount, &c.RemainingCount,
+			&c.ValidFrom, &vu, &c.Status, &issued, &c.CardName); err != nil {
 			return nil, shared.Server("CARD_SCAN", err)
+		}
+		if vu.Valid {
+			c.ValidUntil = strPtr(vu.String)
+		}
+		if issued.Valid {
+			c.IssuedAt = issued.Time
+		}
+		c.ValidFrom = shortDate(c.ValidFrom)
+		if c.ValidUntil != nil {
+			v := shortDate(*c.ValidUntil)
+			c.ValidUntil = &v
 		}
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// GetOwned returns the card only when it belongs to memberID — the customer
+// card-detail guard (§14). NotFound (not Forbidden) avoids leaking existence.
+func (p *Provider) GetOwned(ctx context.Context, cardID, memberID string) (*MemberCard, error) {
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT `+cardNamedColumns+` FROM member_card c JOIN card_template t ON t.id = c.card_template_id
+		 WHERE c.id = ? AND c.member_id = ?`, cardID, memberID)
+	if err != nil {
+		return nil, shared.Server("CARD_GET", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, shared.NotFound("CARD_NOT_FOUND", "会员卡不存在")
+	}
+	c := &MemberCard{}
+	var vu sql.NullString
+	var issued sql.NullTime
+	if err := rows.Scan(&c.ID, &c.MemberID, &c.TemplateID, &c.TotalCount, &c.RemainingCount,
+		&c.ValidFrom, &vu, &c.Status, &issued, &c.CardName); err != nil {
+		return nil, shared.Server("CARD_SCAN", err)
+	}
+	if vu.Valid {
+		c.ValidUntil = strPtr(vu.String)
+	}
+	if issued.Valid {
+		c.IssuedAt = issued.Time
+	}
+	c.ValidFrom = shortDate(c.ValidFrom)
+	if c.ValidUntil != nil {
+		v := shortDate(*c.ValidUntil)
+		c.ValidUntil = &v
+	}
+	return c, nil
 }
 
 // UsableCards returns the member's cards that can redeem the given service
@@ -188,7 +241,7 @@ func (p *Provider) ListByMember(ctx context.Context, memberID string) ([]*Member
 func (p *Provider) UsableCards(ctx context.Context, memberID, serviceID string) ([]*MemberCard, error) {
 	today := shared.NowShanghai().Format("2006-01-02")
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT `+cardColumns+` FROM member_card c
+		`SELECT `+cardNamedColumns+` FROM member_card c JOIN card_template t ON t.id = c.card_template_id
 		 WHERE c.member_id = ? AND c.status = 'ACTIVE' AND c.remaining_count > 0
 		   AND (c.valid_until IS NULL OR c.valid_until >= ?)
 		   AND EXISTS (SELECT 1 FROM card_service_rule r
@@ -200,19 +253,33 @@ func (p *Provider) UsableCards(ctx context.Context, memberID, serviceID string) 
 	defer rows.Close()
 	var out []*MemberCard
 	for rows.Next() {
-		c, err := scanCard(rows)
-		if err != nil {
+		c := &MemberCard{}
+		var vu sql.NullString
+		var issued sql.NullTime
+		if err := rows.Scan(&c.ID, &c.MemberID, &c.TemplateID, &c.TotalCount, &c.RemainingCount,
+			&c.ValidFrom, &vu, &c.Status, &issued, &c.CardName); err != nil {
 			return nil, shared.Server("CARD_SCAN", err)
+		}
+		if vu.Valid {
+			c.ValidUntil = strPtr(vu.String)
+		}
+		if issued.Valid {
+			c.IssuedAt = issued.Time
+		}
+		c.ValidFrom = shortDate(c.ValidFrom)
+		if c.ValidUntil != nil {
+			v := shortDate(*c.ValidUntil)
+			c.ValidUntil = &v
 		}
 		out = append(out, c)
 	}
 	return out, nil
 }
 
-// Transactions returns a card's balance history.
+// Transactions returns a card's balance history (admin + customer §14).
 func (p *Provider) Transactions(ctx context.Context, cardID string) ([]*CardTransaction, error) {
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT id, member_card_id, type, quantity, before_count, after_count, reference_type, remark, created_at
+		`SELECT id, member_card_id, card_name, type, quantity, before_count, after_count, reference_type, remark, created_at
 		 FROM card_transaction WHERE member_card_id = ? ORDER BY created_at`, cardID)
 	if err != nil {
 		return nil, shared.Server("CARD_TXN_LIST", err)
@@ -221,7 +288,7 @@ func (p *Provider) Transactions(ctx context.Context, cardID string) ([]*CardTran
 	var out []*CardTransaction
 	for rows.Next() {
 		t := &CardTransaction{}
-		if err := rows.Scan(&t.ID, &t.CardID, &t.Type, &t.Quantity, &t.Before, &t.After,
+		if err := rows.Scan(&t.ID, &t.CardID, &t.CardName, &t.Type, &t.Quantity, &t.Before, &t.After,
 			&t.RefType, &t.Remark, &t.CreatedAt); err != nil {
 			return nil, shared.Server("CARD_TXN_SCAN", err)
 		}

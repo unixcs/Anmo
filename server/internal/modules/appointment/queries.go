@@ -25,6 +25,50 @@ func (p *Provider) Get(ctx context.Context, id string) (*Appointment, error) {
 	return a, nil
 }
 
+// Detail returns one appointment with its service snapshot — admin single
+// fetch, used by the scan-settlement flow to resolve ANMO-APT codes.
+func (p *Provider) Detail(ctx context.Context, id string) (*AppointmentDetail, error) {
+	a, err := p.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	d := &AppointmentDetail{Appointment: *a}
+	svcs, err := p.ServicesOf(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(svcs) > 0 {
+		d.Service = svcs[0]
+	}
+	return d, nil
+}
+
+// ServingNow returns the currently IN_SERVICE appointment reduced to what the
+// store-status computation needs (started_at + snapshot duration). Found=false
+// when nobody is being served (goal §17: state is computed, never stored).
+type ServingSlot struct {
+	Found           bool
+	StartedAt       time.Time
+	DurationMinutes int
+}
+
+func (p *Provider) ServingNow(ctx context.Context) (*ServingSlot, error) {
+	var started sql.NullTime
+	var dur int
+	err := p.db.QueryRowContext(ctx,
+		`SELECT a.started_at, COALESCE(s.duration_minutes_snapshot, 60)
+		 FROM appointment a LEFT JOIN appointment_service s ON s.appointment_id = a.id
+		 WHERE a.status = ? ORDER BY a.started_at DESC LIMIT 1`, StatusInService).
+		Scan(&started, &dur)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &ServingSlot{Found: false}, nil
+	}
+	if err != nil {
+		return nil, shared.Server("APT_SERVING", err)
+	}
+	return &ServingSlot{Found: true, StartedAt: started.Time, DurationMinutes: dur}, nil
+}
+
 // GetTx is the tx-joining read for settlement flows.
 func (p *Provider) GetTx(ctx context.Context, tx shared.Tx, id string) (*Appointment, error) {
 	a, err := scanAppointment(tx.QueryRowContext(ctx,
@@ -48,10 +92,10 @@ func (p *Provider) MarkCompleted(ctx context.Context, tx shared.Tx, id, operator
 	if a.Status == StatusCompleted {
 		return nil
 	}
-	// W8 (对抗审查): frozen state machine has no CONFIRMED→COMPLETED —
-	// settle requires the service to have actually started.
-	if a.Status != StatusInService {
-		return shared.Conflict("APT_BAD_TRANSITION", "预约需处于服务中才能结算")
+	// V1.x (2026-09-28 用户决策): WAITING/IN_SERVICE 结算后均置 COMPLETED；
+	// CANCELLED/NO_SHOW 不经此函数（走独立散客结算）。
+	if a.Status != StatusWaiting && a.Status != StatusInService {
+		return shared.Conflict("APT_BAD_TRANSITION", "预约当前状态不可结算完成")
 	}
 	_, err = tx.ExecContext(ctx,
 		`UPDATE appointment SET status = ?, completed_at = NOW() WHERE id = ? AND status = ?`,
@@ -160,8 +204,7 @@ func (p *Provider) ListAdmin(ctx context.Context, status, date string, page shar
 type TodaySummary struct {
 	Date           string `json:"date"`
 	Total          int64  `json:"total"`
-	PendingConfirm int64  `json:"pending_confirm"`
-	Confirmed      int64  `json:"confirmed"`
+	Waiting        int64  `json:"waiting"`
 	InService      int64  `json:"in_service"`
 	Completed      int64  `json:"completed"`
 	Cancelled      int64  `json:"cancelled"`
@@ -240,10 +283,8 @@ func (p *Provider) Today(ctx context.Context, date string) (*TodaySummary, []*Ap
 		list = append(list, a)
 		summary.Total++
 		switch a.Status {
-		case StatusPendingConfirm:
-			summary.PendingConfirm++
-		case StatusConfirmed:
-			summary.Confirmed++
+		case StatusWaiting:
+			summary.Waiting++
 		case StatusInService:
 			summary.InService++
 		case StatusCompleted:

@@ -16,4 +16,5 @@ func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	admin.HandleFunc("GET /admin/cards/{id}/transactions", p.handleTransactions)
 
 	api.HandleFunc("GET /api/me/cards", p.handleMyCards)
+	api.HandleFunc("GET /api/me/cards/{id}/transactions", p.handleMyCardTransactions)
 }

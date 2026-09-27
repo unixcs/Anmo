@@ -125,7 +125,6 @@ func TestGUARD_H1_AdminRouteMatrixAndAnonymous(t *testing.T) {
 	adminEndpoints := []struct{ method, path string }{
 		{"GET", "/admin/appointments"},
 		{"GET", "/admin/today"},
-		{"PUT", "/admin/appointments/" + f.aptB + "/confirm"},
 		{"PUT", "/admin/appointments/" + f.aptB + "/start"},
 		{"PUT", "/admin/appointments/" + f.aptB + "/complete"},
 		{"PUT", "/admin/appointments/" + f.aptB + "/cancel"},
@@ -325,7 +324,7 @@ func TestGUARD_H3_CrossCustomerIsolation(t *testing.T) {
 		t.Fatalf("B 自己读预约失败: %d %v", status, out)
 	}
 	bApt := out["data"].(map[string]any)["appointment"].(map[string]any)
-	if got := str(bApt, "status"); got != "PENDING_CONFIRM" {
+	if got := str(bApt, "status"); got != "WAITING" {
 		t.Errorf("B 的预约状态被改动: %s", got)
 	}
 	if got := str(bApt, "scheduled_start"); got == slotAt(t, 2, 15, 0)+":00" {
@@ -372,7 +371,6 @@ func TestREVEAL_H4_ConcurrentCashPayments(t *testing.T) {
 			"service_id": f.svcID, "start_time": slotAt(t, 4+round/4, 10+(round%4)*2, 0),
 		})
 		aptID := str(booked["data"].(map[string]any), "id")
-		f.admin.ok("PUT", "/admin/appointments/"+aptID+"/confirm", nil)
 		f.admin.ok("PUT", "/admin/appointments/"+aptID+"/start", nil)
 
 		start := make(chan struct{})
@@ -415,7 +413,6 @@ func TestREVEAL_H5_ReplayFirstKeyAfterReverse(t *testing.T) {
 		"service_id": f.svcID, "start_time": slotAt(t, 2, 11, 0),
 	})
 	aptID := str(booked["data"].(map[string]any), "id")
-	f.admin.ok("PUT", "/admin/appointments/"+aptID+"/confirm", nil)
 	f.admin.ok("PUT", "/admin/appointments/"+aptID+"/start", nil)
 
 	rd1 := f.admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
@@ -468,7 +465,6 @@ func TestREVEAL_H6_CrossMemberCardRedeem(t *testing.T) {
 		"service_id": f.svcID, "start_time": slotAt(t, 2, 12, 0),
 	})
 	aptID := str(booked["data"].(map[string]any), "id")
-	f.admin.ok("PUT", "/admin/appointments/"+aptID+"/confirm", nil)
 	f.admin.ok("PUT", "/admin/appointments/"+aptID+"/start", nil)
 
 	// FIXED（W3）：跨会员核销必须 403

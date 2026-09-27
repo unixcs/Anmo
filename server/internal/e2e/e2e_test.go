@@ -165,8 +165,12 @@ func TestFullLoop(t *testing.T) {
 		"service_id": svcID, "start_time": slot, "note": "有力度的",
 	})
 	aptID := str(booked["data"].(map[string]any), "id")
-	if str(booked["data"].(map[string]any), "status") != "PENDING_CONFIRM" {
+	if str(booked["data"].(map[string]any), "status") != "WAITING" {
 		t.Fatalf("created status = %v", booked["data"].(map[string]any)["status"])
+	}
+	// 2026-09-28 状态机收紧：确认环节已删除（§5），/confirm 端点不复存在
+	if status, _ := admin.do("PUT", "/admin/appointments/"+aptID+"/confirm", nil); status != 404 {
+		t.Fatalf("legacy confirm endpoint status = %d, want 404", status)
 	}
 
 	// 冲突：另一顾客抢同时段 → 409（§28）
@@ -185,8 +189,7 @@ func TestFullLoop(t *testing.T) {
 		t.Fatalf("customer on admin route = %d, want 403", status)
 	}
 
-	// ---- 老板：确认 → 开始（§120）----
-	admin.ok("PUT", "/admin/appointments/"+aptID+"/confirm", nil)
+	// ---- 老板：开始服务（创建即 WAITING，无确认环节 §6/§7）----
 	admin.ok("PUT", "/admin/appointments/"+aptID+"/start", nil)
 
 	// ---- 取消后时段释放（Case 9, 独立预约）----
@@ -194,20 +197,13 @@ func TestFullLoop(t *testing.T) {
 		"service_id": svcID, "start_time": slotAt(t, 3, 10, 0),
 	})
 	a1 := str(c1["data"].(map[string]any), "id")
-	admin.ok("PUT", "/admin/appointments/"+a1+"/confirm", nil)
 	admin.ok("PUT", "/admin/appointments/"+a1+"/cancel", map[string]string{"reason": "改时间"})
 	// 释放后另一顾客可约同一时段
 	cust2.ok("POST", "/api/appointments", map[string]any{
 		"service_id": svcID, "start_time": slotAt(t, 3, 10, 0),
 	})
 
-	// ---- 完成 + 核销（§120/§53）----
-	admin.ok("PUT", "/admin/appointments/"+aptID+"/complete", nil)
-	// §99 Case 10：已完成不能重复完成 → 409
-	if status, _ := admin.do("PUT", "/admin/appointments/"+aptID+"/complete", nil); status != 409 {
-		t.Fatalf("re-complete status = %d, want 409", status)
-	}
-
+	// ---- 核销（§120/§53；结算即完成，§8）----
 	redeem := admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
 		"card_id": cardID, "idempotency_key": "e2e-redeem-1",
 	})
@@ -218,6 +214,11 @@ func TestFullLoop(t *testing.T) {
 	pay := redeem["data"].(map[string]any)["payment"].(map[string]any)
 	if str(pay, "method") != "CARD" || str(pay, "status") != "VALID" || num(pay, "amount") != 12800 {
 		t.Fatalf("payment = %v", pay)
+	}
+
+	// 已完成预约不能再次完成 → 409（§99 Case 10；结算已自动完成）
+	if status, _ := admin.do("PUT", "/admin/appointments/"+aptID+"/complete", nil); status != 409 {
+		t.Fatalf("re-complete status = %d, want 409", status)
 	}
 
 	// 重复核销（同 key 重放）不重复扣（Case 6）
@@ -258,8 +259,7 @@ func TestFullLoop(t *testing.T) {
 		"service_id": svcID, "start_time": slotAt(t, 4, 10, 0),
 	})
 	cashID := str(cashApt["data"].(map[string]any), "id")
-	admin.ok("PUT", "/admin/appointments/"+cashID+"/confirm", nil)
-	admin.ok("PUT", "/admin/appointments/"+cashID+"/start", nil)
+	// 现金结算：WAITING 直接收款即完成（§8 事务一致）
 	admin.ok("POST", "/admin/appointments/"+cashID+"/payments", map[string]any{
 		"method": "CASH", "amount": 12800, "idempotency_key": "e2e-cash-1",
 	})

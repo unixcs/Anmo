@@ -10,7 +10,23 @@
           </el-radio-group>
           <span class="hint">最近 200 条</span>
         </div>
-        <el-table :data="payments" size="default" v-loading="loading">
+        <template v-if="isMobile">
+          <el-empty v-if="payments.length === 0" description="暂无收款记录" :image-size="70" />
+          <div v-for="row in payments" :key="row.id" class="r-card">
+            <div class="r-top">
+              <b>{{ memberName(row.member_id) }}</b>
+              <el-tag size="small" :type="row.status === 'VALID' ? 'success' : 'danger'">
+                {{ row.status === 'VALID' ? '有效' : '已作废' }}
+              </el-tag>
+            </div>
+            <div class="r-line">
+              <span>{{ PAY_METHOD_TEXT[row.method] ?? row.method }} · <b class="r-amount">{{ yuan(row.amount) }}</b></span>
+              <span class="r-sub">{{ row.appointment_id ?? '散客' }}</span>
+            </div>
+            <div v-if="row.remark || row.reference_no" class="r-sub">备注：{{ row.remark || row.reference_no }}</div>
+          </div>
+        </template>
+        <el-table v-else :data="payments" size="default" v-loading="loading">
           <el-table-column label="会员" min-width="130">
             <template #default="{ row }">{{ memberName(row.member_id) }}</template>
           </el-table-column>
@@ -44,7 +60,24 @@
           </el-radio-group>
           <span class="hint">最近 200 条</span>
         </div>
-        <el-table :data="redemptions" size="default" v-loading="loading">
+        <template v-if="isMobile">
+          <el-empty v-if="redemptions.length === 0" description="暂无核销记录" :image-size="70" />
+          <div v-for="row in redemptions" :key="row.id" class="r-card">
+            <div class="r-top">
+              <b>{{ memberName(row.member_id) }}</b>
+              <el-tag size="small" :type="row.status === 'SUCCESS' ? 'success' : 'info'">
+                {{ row.status === 'SUCCESS' ? '成功' : '已撤销' }}
+              </el-tag>
+            </div>
+            <div class="r-line">
+              <span>扣 {{ row.quantity }} 次 · {{ row.before_count }} → {{ row.after_count }}</span>
+              <el-button v-if="row.status === 'SUCCESS'" size="small" type="danger"
+                @click="doReverse(row)">撤销</el-button>
+            </div>
+            <div class="r-sub">{{ row.appointment_id ?? '散客核销' }}</div>
+          </div>
+        </template>
+        <el-table v-else :data="redemptions" size="default" v-loading="loading">
           <el-table-column label="会员" min-width="130">
             <template #default="{ row }">{{ memberName(row.member_id) }}</template>
           </el-table-column>
@@ -88,7 +121,9 @@ import {
   type Redemption,
 } from '../core/api/admin'
 import { PAY_METHOD_TEXT, yuan } from '../core/format'
+import { useIsMobile } from '../core/useMedia'
 
+const isMobile = useIsMobile()
 const tab = ref('payments')
 const payStatus = ref('')
 const rdmStatus = ref('')
@@ -151,5 +186,34 @@ onMounted(load)
 .hint {
   color: #909399;
   font-size: 12px;
+}
+/* 手机卡片流（§25：操作按钮进入可视区，无横向滚动） */
+.r-card {
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.r-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.r-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #606266;
+}
+.r-amount {
+  color: #67c23a;
+}
+.r-sub {
+  color: #b0b3b8;
+  font-size: 12px;
+  margin-top: 4px;
 }
 </style>

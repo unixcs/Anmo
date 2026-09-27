@@ -3,6 +3,7 @@ package identity
 import (
 	"net/http"
 
+	"anmo/server/internal/middleware"
 	"anmo/server/internal/shared"
 )
 
@@ -32,6 +33,29 @@ func (p *Provider) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 
 type smsReq struct {
 	Phone string `json:"phone"`
+}
+
+// handleUpdateCredentials — 商家后台自助改登录手机号/密码（需管理员 JWT）。
+func (p *Provider) handleUpdateCredentials(w http.ResponseWriter, r *http.Request) {
+	pr, ok := middleware.PrincipalFrom(r.Context())
+	if !ok || pr.ActorType != "ADMIN" {
+		shared.Unauthorized("请先登录商家后台").Write(w)
+		return
+	}
+	var req struct {
+		CurrentPassword string `json:"current_password"`
+		NewPhone        string `json:"new_phone"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	if err := p.UpdateCredentials(r.Context(), pr.ActorID, req.CurrentPassword, req.NewPhone, req.NewPassword); err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]bool{"updated": true})
 }
 
 func (p *Provider) handleSMSSend(w http.ResponseWriter, r *http.Request) {

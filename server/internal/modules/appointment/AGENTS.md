@@ -7,7 +7,7 @@ appointment / appointment_service / appointment_status_log：创建预约（冲�
 appointment（member_id NOT NULL，D3）, appointment_service（snapshot：名称/时长/价格 §23）, appointment_status_log。
 
 ## 状态机（§24-25，D8 条件 UPDATE 守卫）
-PENDING_CONFIRM→CONFIRMED→IN_SERVICE→COMPLETED；PENDING_CONFIRM|CONFIRMED→CANCELLED；CONFIRMED→NO_SHOW。改期仅 PENDING_CONFIRM/CONFIRMED，改时间不改单号，冲突检查排除自身。
+WAITING→IN_SERVICE→COMPLETED；WAITING→CANCELLED|NO_SHOW（2026-09-28 migration 012 收紧：创建即 WAITING，无确认环节，历史 PENDING_CONFIRM/CONFIRMED 已数据迁移）。改期仅 WAITING，改时间不改单号，冲突检查排除自身。
 
 ## 公开 API（api.go）
 - 顾客：`Create(ctx, memberID, serviceID, start, note)`、`CancelByCustomer(ctx, memberID, id)`、`Reschedule(ctx, memberID, id, newStart)`、`ListMine(ctx, memberID, filter, page)`、`GetMine(ctx, memberID, id)`

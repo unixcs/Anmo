@@ -163,6 +163,9 @@ type MemberCard struct {
 	ValidUntil     *string   `json:"valid_until"`
 	Status         string    `json:"status"`
 	IssuedAt       time.Time `json:"issued_at"`
+
+	// CardName 来自 card_template.name（动态，不落 member_card 表，§15）。
+	CardName string `json:"card_name"`
 }
 
 const cardColumns = `id, member_id, card_template_id, total_count, remaining_count, valid_from, valid_until, status, issued_at`
@@ -182,7 +185,21 @@ func scanCard(row interface{ Scan(...any) error }) (*MemberCard, error) {
 	if issued.Valid {
 		c.IssuedAt = issued.Time
 	}
+	c.ValidFrom = shortDate(c.ValidFrom)
+	if c.ValidUntil != nil {
+		v := shortDate(*c.ValidUntil)
+		c.ValidUntil = &v
+	}
 	return c, nil
+}
+
+// shortDate 把驱动扫成 time.Time 的 DATE 值（convertAssign 产出 RFC3339）
+// 归一为 YYYY-MM-DD，杜绝 "T00:00:00+08:00" 泄漏到前端（§16）。
+func shortDate(s string) string {
+	if len(s) >= 10 && s[4] == '-' && s[7] == '-' {
+		return s[:10]
+	}
+	return s
 }
 
 // IssueCard creates a member_card plus its ISSUE transaction in ONE database
@@ -236,11 +253,16 @@ func (p *Provider) IssueCardTx(ctx context.Context, tx shared.Tx, memberID, temp
 }
 
 // writeCardTx appends a card_transaction row (the balance history, §125).
+// card_name snapshot comes from the template at write time (§15: 改模板名不改历史).
 func (p *Provider) writeCardTx(ctx context.Context, tx shared.Tx, cardID, memberID, typ string, quantity, before, after int, refType, operatorID, remark string) error {
+	var cardName string
+	_ = tx.QueryRowContext(ctx,
+		`SELECT t.name FROM member_card c JOIN card_template t ON t.id = c.card_template_id WHERE c.id = ?`,
+		cardID).Scan(&cardName)
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO card_transaction (id, member_card_id, member_id, type, quantity, before_count, after_count, reference_type, remark, operator_id)
-		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		shared.NewID(), cardID, memberID, typ, quantity, before, after, refType, remark, operatorID); err != nil {
+		`INSERT INTO card_transaction (id, member_card_id, member_id, type, quantity, before_count, after_count, reference_type, remark, operator_id, card_name)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		shared.NewID(), cardID, memberID, typ, quantity, before, after, refType, remark, operatorID, cardName); err != nil {
 		return shared.Server("CARD_TXN_WRITE", err)
 	}
 	return nil
@@ -250,6 +272,7 @@ func (p *Provider) writeCardTx(ctx context.Context, tx shared.Tx, cardID, member
 type CardTransaction struct {
 	ID        string    `json:"id"`
 	CardID    string    `json:"member_card_id"`
+	CardName  string    `json:"card_name"`
 	Type      string    `json:"type"`
 	Quantity  int       `json:"quantity"`
 	Before    int       `json:"before_count"`

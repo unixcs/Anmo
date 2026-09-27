@@ -72,6 +72,37 @@
 
       <!-- 系统设置 -->
       <el-tab-pane label="系统设置" name="settings">
+        <!-- 首页文案（goal §31）：标题/正文，顾客端首页动态渲染 -->
+        <el-card shadow="never" style="margin-bottom: 14px">
+          <template #header><b>首页文案</b><span class="hint" style="margin-left: 10px">顾客端首页顶部展示，留空则用默认文案</span></template>
+          <el-form label-width="80px">
+            <el-form-item label="首页标题"><el-input v-model="home.title" maxlength="60"
+              placeholder="如：按摩到店，专业颈肩背放松" /></el-form-item>
+            <el-form-item label="首页正文"><el-input v-model="home.body" type="textarea" :rows="3" maxlength="500"
+              placeholder="一段介绍，例如服务特色、地址指引、营业时间等" /></el-form-item>
+            <el-form-item><el-button type="primary" :loading="homeSaving" @click="saveHome">保存文案</el-button></el-form-item>
+          </el-form>
+        </el-card>
+
+        <!-- 门店信息（goal §18-§22）：地址/经纬度/电话，顾客端三处卡片展示 -->
+        <el-card shadow="never" style="margin-bottom: 14px">
+          <template #header><b>门店信息</b><span class="hint" style="margin-left: 10px">顾客端点击地址唤起地图导航、点击电话直接拨号</span></template>
+          <el-form label-width="80px">
+            <el-form-item label="门店电话"><el-input v-model="shop.phone" maxlength="32"
+              placeholder="如 13800000000（可填座机区号）" style="max-width: 320px" /></el-form-item>
+            <el-form-item label="门店地址"><el-input v-model="shop.address" maxlength="200"
+              placeholder="省市区+街道门牌，如：XX市XX区XX路12号3楼" /></el-form-item>
+            <el-form-item label="经纬度">
+              <el-input v-model="shop.longitude" placeholder="经度 lng，如 120.153576" style="width: 220px" />
+              <el-input v-model="shop.latitude" placeholder="纬度 lat，如 30.287459" style="width: 220px; margin-left: 8px" />
+            </el-form-item>
+            <el-form-item>
+              <span class="hint">经纬度获取：在高德地图网页版定位到门店，网址栏或分享链接里 lng= 与 lat= 后的数字。填好后顾客点地址即可导航；不填则地址不可点击。</span>
+            </el-form-item>
+            <el-form-item><el-button type="primary" :loading="shopSaving" @click="saveShop">保存门店信息</el-button></el-form-item>
+          </el-form>
+        </el-card>
+
         <!-- 营业配置（D20）：预约窗口/时段间隔/每时段人数/上下午分界 -->
         <el-card shadow="never" style="margin-bottom: 14px">
           <template #header><b>营业与预约配置</b><span class="hint" style="margin-left: 10px">改后只影响新预约，不影响已约好的</span></template>
@@ -85,7 +116,7 @@
                 <el-radio-button :value="120">2小时</el-radio-button>
               </el-radio-group>
             </el-form-item>
-            <el-form-item label="每时段可约人数"><el-input-number v-model="biz.capacity" :min="1" :max="20" /></el-form-item>
+            <el-form-item label="每时段可约人数"><el-input-number v-model="biz.capacity" :min="1" :max="999" /></el-form-item>
             <el-form-item label="上下午分界"><el-time-select v-model="biz.noon" start="10:00" end="16:00" step="00:30" style="width: 110px" /></el-form-item>
             <el-form-item><el-button type="primary" :loading="bizSaving" @click="saveBiz">保存营业配置</el-button></el-form-item>
           </el-form>
@@ -206,6 +237,16 @@ async function load() {
   }
 }
 
+// 营业配置表单始终随页面挂载回填（修复：刷新后停留在其他 tab 时
+// capacity/时间显示硬编码默认值，误以为保存未生效）
+async function loadBiz(): Promise<void> {
+  try {
+    fillBiz((await getSettings()) ?? {})
+  } catch {
+    /* 静默：settings tab 内会重试 */
+  }
+}
+
 // ---------- banners ----------
 function openBanner(row: Banner | null) {
   bannerForm.value = row
@@ -317,12 +358,61 @@ async function saveBlocks() {
 const biz = ref({ open: '09:00', close: '20:00', slotMinutes: 30, capacity: 1, noon: '12:00' })
 const bizSaving = ref(false)
 
+// ---------- 首页文案（§31） ----------
+const home = ref({ title: '', body: '' })
+const homeSaving = ref(false)
+
+// ---------- 门店信息（§18-§22） ----------
+const shop = ref({ phone: '', address: '', latitude: '', longitude: '' })
+const shopSaving = ref(false)
+
 function fillBiz(map: Record<string, string>): void {
   if (map['business_open_time']) biz.value.open = map['business_open_time']
   if (map['business_close_time']) biz.value.close = map['business_close_time']
   if (map['business_slot_minutes']) biz.value.slotMinutes = Number(map['business_slot_minutes'])
   if (map['business_slot_capacity']) biz.value.capacity = Number(map['business_slot_capacity'])
   if (map['business_noon_split']) biz.value.noon = map['business_noon_split']
+  home.value.title = map['home_title'] ?? ''
+  home.value.body = map['home_body'] ?? ''
+  shop.value.phone = map['shop_phone'] ?? ''
+  shop.value.address = map['shop_address'] ?? ''
+  shop.value.latitude = map['shop_latitude'] ?? ''
+  shop.value.longitude = map['shop_longitude'] ?? ''
+}
+
+async function saveKeys(pairs: [string, string][]): Promise<void> {
+  for (const [k, v] of pairs) {
+    await saveSetting(k, v)
+  }
+}
+
+async function saveHome(): Promise<void> {
+  homeSaving.value = true
+  try {
+    await saveKeys([['home_title', home.value.title.trim()], ['home_body', home.value.body.trim()]])
+    ElMessage.success('首页文案已保存')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    homeSaving.value = false
+  }
+}
+
+async function saveShop(): Promise<void> {
+  shopSaving.value = true
+  try {
+    await saveKeys([
+      ['shop_phone', shop.value.phone.trim()],
+      ['shop_address', shop.value.address.trim()],
+      ['shop_latitude', shop.value.latitude.trim()],
+      ['shop_longitude', shop.value.longitude.trim()],
+    ])
+    ElMessage.success('门店信息已保存')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    shopSaving.value = false
+  }
 }
 
 async function saveBiz(): Promise<void> {
@@ -362,7 +452,10 @@ async function doSaveSetting() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadBiz()
+})
 </script>
 
 <style scoped>

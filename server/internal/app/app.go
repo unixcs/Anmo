@@ -42,6 +42,8 @@ func Build(db shared.DB, cfg *config.Config, log *slog.Logger) http.Handler {
 		}, nil
 	})
 	appointmentMod := appointment.New(db, cfg, serviceMod, bookingRules)
+	// §17 门店状态：content 动态计算（依赖 appointment/service 只读查询）
+	contentMod.Wire(appointmentMod, serviceMod)
 	transactionMod := transaction.New(db, cfg, cardMod, appointmentMod, memberMod, serviceMod)
 	opsMod := ops.New(db, cfg, cardMod, appointmentMod, memberMod)
 

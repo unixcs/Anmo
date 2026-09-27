@@ -32,6 +32,7 @@ type Redemption struct {
 	MemberID      string `json:"member_id"`
 	MemberCardID  string `json:"member_card_id"`
 	ServiceID     string `json:"service_id"`
+	ServiceName   string `json:"service_name"` // 快照：实际服务名（§15）
 	Quantity      int    `json:"quantity"`
 	BeforeCount   int    `json:"before_count"`
 	AfterCount    int    `json:"after_count"`
@@ -40,14 +41,14 @@ type Redemption struct {
 }
 
 const (
-	redemptionColumns = `id, appointment_id, member_id, member_card_id, service_id, quantity, before_count, after_count, status, idempotency_key`
+	redemptionColumns = `id, appointment_id, member_id, member_card_id, service_id, service_name, quantity, before_count, after_count, status, idempotency_key`
 	paymentColumns    = `id, appointment_id, member_id, amount, method, status, reference_no, remark, idempotency_key, recorded_at`
 )
 
 func scanRedemption(row interface{ Scan(...any) error }) (*Redemption, error) {
 	rd := &Redemption{}
 	var aptID sql.NullString
-	err := row.Scan(&rd.ID, &aptID, &rd.MemberID, &rd.MemberCardID, &rd.ServiceID,
+	err := row.Scan(&rd.ID, &aptID, &rd.MemberID, &rd.MemberCardID, &rd.ServiceID, &rd.ServiceName,
 		&rd.Quantity, &rd.BeforeCount, &rd.AfterCount, &rd.Status, &rd.IdemKey)
 	if aptID.Valid {
 		v := aptID.String
@@ -107,9 +108,12 @@ func (p *Provider) findRedemptionByIdem(ctx context.Context, tx shared.Tx, key s
 // SettleByCard runs the core redemption transaction (§53):
 // lock card → validate → deduct → REDEEM txn → redemption → payment(CARD)
 // → appointment COMPLETED → status log. Any failure rolls everything back.
+// serviceIDOpt 可指定实际服务（≠预约服务，§11）：金额取该服务当前售价；
+// 为空时取预约快照第一项。WAITING/IN_SERVICE 均可结算并置 COMPLETED
+// （V1.x 免确认，用户决策 2026-09-28）。
 // Idempotent on idemKey (replay returns the original result; replaying a key
 // whose redemption was reversed surfaces 409 instead of stale data — W1).
-func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, idemKey string) (*Redemption, *Payment, error) {
+func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, serviceIDOpt, operatorID, idemKey string) (*Redemption, *Payment, error) {
 	if idemKey == "" {
 		return nil, nil, shared.BadRequest("IDEM_KEY_REQUIRED", "缺少幂等键")
 	}
@@ -136,9 +140,29 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, 
 		if err != nil {
 			return err
 		}
+		// WAITING/IN_SERVICE 正常结算；COMPLETED 仅在撤销后重新核销时出现
+		// (D18/W-E: active_lock 释放)，MarkCompleted 对其幂等 no-op；
+		// CANCELLED/NO_SHOW 拒绝（§12 独立散客结算）。
+		if apt.Status != appointment.StatusWaiting && apt.Status != appointment.StatusInService &&
+			apt.Status != appointment.StatusCompleted {
+			return shared.Conflict("APT_BAD_TRANSITION", "预约已取消或未到，请走散客结算")
+		}
 		svc, err := p.primaryService(ctx, tx, aptID)
 		if err != nil {
 			return err
+		}
+		amount := svc.PriceSnapshot * int64(svc.Quantity)
+		// 实际服务可≠预约服务（§11）：redemption 记实际服务，appointment 快照不覆盖
+		if serviceIDOpt != "" && serviceIDOpt != svc.ServiceID {
+			item, gerr := p.services.GetItem(ctx, serviceIDOpt)
+			if gerr != nil {
+				return gerr
+			}
+			if item.Status != "ACTIVE" {
+				return shared.Conflict("SERVICE_INACTIVE", "服务项目已停用")
+			}
+			svc = &appointment.AppointmentService{ServiceID: item.ID, NameSnapshot: item.Name, DurationSnapshot: item.DurationMin, PriceSnapshot: item.PriceCents, Quantity: 1}
+			amount = item.PriceCents
 		}
 
 		// lock + validate + deduct (card module, tx-joining)
@@ -162,16 +186,16 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, 
 		aptIDRef := aptID
 		redemption = &Redemption{
 			ID: shared.NewID(), AppointmentID: &aptIDRef, MemberID: apt.MemberID,
-			MemberCardID: cardID, ServiceID: svc.ServiceID,
+			MemberCardID: cardID, ServiceID: svc.ServiceID, ServiceName: svc.NameSnapshot,
 			Quantity: 1, BeforeCount: before, AfterCount: after,
 			Status: "SUCCESS", IdemKey: idemKey,
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO redemption (id, appointment_id, member_id, member_card_id, service_id, quantity, before_count, after_count, status, idempotency_key)
-			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			`INSERT INTO redemption (id, appointment_id, member_id, member_card_id, service_id, service_name, quantity, before_count, after_count, status, idempotency_key)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			redemption.ID, redemption.AppointmentID, redemption.MemberID, redemption.MemberCardID,
-			redemption.ServiceID, redemption.Quantity, redemption.BeforeCount, redemption.AfterCount,
-			redemption.Status, redemption.IdemKey); err != nil {
+			redemption.ServiceID, redemption.ServiceName, redemption.Quantity, redemption.BeforeCount,
+			redemption.AfterCount, redemption.Status, redemption.IdemKey); err != nil {
 			if isDupKey(err) {
 				// lost a race: same key → replay the winner; another valid
 				// redemption exists (active_lock) → business conflict (W7)
@@ -191,7 +215,7 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, operatorID, 
 		// payment CARD (D1)
 		payment = &Payment{
 			ID: shared.NewID(), AppointmentID: &aptIDRef, MemberID: apt.MemberID,
-			AmountCents: svc.PriceSnapshot * int64(svc.Quantity), Method: "CARD",
+			AmountCents: amount, Method: "CARD",
 			Status: "VALID", Remark: "会员卡核销", IdemKey: idemKey,
 		}
 		if err := insertPayment(ctx, tx, payment, operatorID); err != nil {
@@ -255,7 +279,7 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 		var nApt int
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM appointment WHERE member_id = ?
-			   AND status IN ('PENDING_CONFIRM','CONFIRMED','IN_SERVICE')
+			   AND status IN ('WAITING','IN_SERVICE')
 			   AND scheduled_start >= ? AND scheduled_start < ? + INTERVAL 1 DAY`,
 			c.MemberID, day, day).Scan(&nApt); err != nil {
 			return shared.Server("RDM_WALKIN_APT_QUERY", err)
@@ -270,15 +294,15 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 
 		redemption = &Redemption{
 			ID: shared.NewID(), AppointmentID: nil, MemberID: c.MemberID,
-			MemberCardID: cardID, ServiceID: serviceID,
+			MemberCardID: cardID, ServiceID: serviceID, ServiceName: item.Name,
 			Quantity: 1, BeforeCount: before, AfterCount: after,
 			Status: "SUCCESS", IdemKey: idemKey,
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO redemption (id, appointment_id, member_id, member_card_id, service_id, quantity, before_count, after_count, status, idempotency_key)
-			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			`INSERT INTO redemption (id, appointment_id, member_id, member_card_id, service_id, service_name, quantity, before_count, after_count, status, idempotency_key)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			redemption.ID, redemption.AppointmentID, redemption.MemberID, redemption.MemberCardID,
-			redemption.ServiceID, redemption.Quantity, redemption.BeforeCount, redemption.AfterCount,
+			redemption.ServiceID, redemption.ServiceName, redemption.Quantity, redemption.BeforeCount, redemption.AfterCount,
 			redemption.Status, redemption.IdemKey); err != nil {
 			if isDupKey(err) {
 				if winner, qerr := p.findRedemptionByIdem(ctx, tx, idemKey); qerr == nil && winner != nil {
@@ -315,7 +339,8 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 }
 
 // SettleByPay records a non-card payment (cash / wechat transfer / other).
-// It writes ONLY the payment row — the appointment status is untouched (D9).
+// V1.x (2026-09-28 用户决策 §8): WAITING/IN_SERVICE 收款后同事务置 COMPLETED，
+// 保证 Settlement+Payment+Appointment 一致；CANCELLED/NO_SHOW 拒绝（走散客结算）。
 // B1: the appointment row is locked BEFORE the VALID-count check, and the
 // uk_payment_valid_lock unique index backstops concurrent inserters.
 func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amountCents int64, refNo, remark, operatorID, idemKey string) (*Payment, error) {
@@ -357,15 +382,19 @@ func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amount
 		if n > 0 {
 			return shared.Conflict("PAY_EXISTS", "该预约已有一笔有效收款")
 		}
-		if apt.Status != appointment.StatusInService && apt.Status != appointment.StatusCompleted {
-			return shared.Conflict("APT_BAD_TRANSITION", "预约需处于服务中或已完成才能收款")
+		if apt.Status != appointment.StatusWaiting && apt.Status != appointment.StatusInService {
+			return shared.Conflict("APT_BAD_TRANSITION", "预约已取消或未到，请走散客结算")
 		}
 		payment = &Payment{
 			ID: shared.NewID(), AppointmentID: &aptID, MemberID: apt.MemberID,
 			AmountCents: amountCents, Method: method, Status: "VALID",
 			ReferenceNo: refNo, Remark: remark, IdemKey: idemKey,
 		}
-		return insertPayment(ctx, tx, payment, operatorID)
+		if err := insertPayment(ctx, tx, payment, operatorID); err != nil {
+			return err
+		}
+		// §8 事务一致：非卡结算同样完成预约
+		return p.appointments.MarkCompleted(ctx, tx, aptID, operatorID)
 	})
 	if err != nil {
 		return nil, err

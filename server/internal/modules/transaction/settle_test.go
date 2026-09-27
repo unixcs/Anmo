@@ -19,8 +19,11 @@ type txnEnv struct {
 	p     *Provider
 	cards *card.Provider
 	apt   *appointment.Provider
+	svc   *svcmodule.Provider
 	mbrID string
+	catID string
 	svcID string
+	tplID string
 	card  string
 	apt1  string // confirmed appointment in service
 }
@@ -33,7 +36,7 @@ func newTxnEnv(t *testing.T) *txnEnv {
 	svc := svcmodule.New(db, cfg)
 	cards := card.New(db, cfg)
 	apt := appointment.New(db, cfg, svc, nil)
-	e := &txnEnv{p: New(db, cfg, cards, apt, mem, svc), cards: cards, apt: apt}
+	e := &txnEnv{p: New(db, cfg, cards, apt, mem, svc), cards: cards, apt: apt, svc: svc}
 
 	ctx := context.Background()
 	err := shared.RunInTx(ctx, e.p.db, func(tx shared.Tx) error {
@@ -66,11 +69,13 @@ func newTxnEnv(t *testing.T) *txnEnv {
 		t.Fatalf("issue: %v", err)
 	}
 	e.card = c.ID
+	e.tplID = tpl.ID
+	e.catID = cat.ID
 	return e
 }
 
-// bookInService creates + confirms + starts an appointment (ready to settle).
-func (e *txnEnv) bookInService(t *testing.T, day int, hh, mm int) string {
+// bookWaiting creates an appointment left in WAITING (创建即待到店).
+func (e *txnEnv) bookWaiting(t *testing.T, day int, hh, mm int) string {
 	t.Helper()
 	ctx := context.Background()
 	d := shared.NowShanghai().AddDate(0, 0, day)
@@ -79,8 +84,18 @@ func (e *txnEnv) bookInService(t *testing.T, day int, hh, mm int) string {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := e.apt.Confirm(ctx, a.ID, "op-1"); err != nil {
-		t.Fatalf("confirm: %v", err)
+	return a.ID
+}
+
+// bookInService creates + starts an appointment (ready to settle, V1.x 免确认).
+func (e *txnEnv) bookInService(t *testing.T, day int, hh, mm int) string {
+	t.Helper()
+	ctx := context.Background()
+	d := shared.NowShanghai().AddDate(0, 0, day)
+	slot := fmt.Sprintf("%04d-%02d-%02d %02d:%02d", d.Year(), d.Month(), d.Day(), hh, mm)
+	a, err := e.apt.Create(ctx, e.mbrID, e.svcID, appointment.BookingReq{StartTime: slot}, "")
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
 	if _, err := e.apt.Start(ctx, a.ID, "op-1"); err != nil {
 		t.Fatalf("start: %v", err)
@@ -93,7 +108,7 @@ func TestFullRedeemFlow(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 10, 0)
 
-	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "idem-1")
+	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-1")
 	if err != nil {
 		t.Fatalf("settle by card: %v", err)
 	}
@@ -129,12 +144,12 @@ func TestIdempotentReplay(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 11, 0)
 
-	rd1, _, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "idem-replay")
+	rd1, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-replay")
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	// same idem key → same redemption, no double deduction
-	rd2, _, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "idem-replay")
+	rd2, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-replay")
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -152,11 +167,11 @@ func TestDifferentKeyOnSameAppointmentBlocked(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 12, 0)
 
-	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "key-a"); err != nil {
+	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "key-a"); err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	// second redeem with different key → active_lock unique blocks
-	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "key-b"); err == nil {
+	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "key-b"); err == nil {
 		t.Fatal("second redemption allowed on same appointment")
 	}
 	cards, _ := e.cards.ListByMember(ctx, e.mbrID)
@@ -170,7 +185,7 @@ func TestReverseRestoresAndSecondReverseFails(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 14, 0)
 
-	rd, _, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "idem-rev")
+	rd, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-rev")
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -198,17 +213,18 @@ func TestReverseRestoresAndSecondReverseFails(t *testing.T) {
 	if err := e.p.ReverseRedemption(ctx, rd.ID, "again", "op-1"); !shared.Is(err, "RDM_ALREADY_REVERSED") {
 		t.Fatalf("want RDM_ALREADY_REVERSED, got %v", err)
 	}
-	// can redeem again after reversal (re-settle)
-	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "op-1", "idem-rev2"); err != nil {
+	// can redeem again after reversal (re-settle; appointment stays COMPLETED, D18)
+	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-rev2"); err != nil {
 		t.Fatalf("re-settle after reversal: %v", err)
 	}
 }
 
-func TestSettleByPayNoStatusChangeAndSingleValid(t *testing.T) {
+func TestSettleByPayCompletesAndSingleValid(t *testing.T) {
 	e := newTxnEnv(t)
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 16, 0)
 
+	// V1.x (2026-09-28 §8): 现金/微信结算与完成预约同事务
 	pay, err := e.p.SettleByPay(ctx, aptID, "CASH", 12800, "ref-1", "现金", "op-1", "idem-p1")
 	if err != nil {
 		t.Fatalf("pay: %v", err)
@@ -217,12 +233,33 @@ func TestSettleByPayNoStatusChangeAndSingleValid(t *testing.T) {
 		t.Fatalf("payment = %+v", pay)
 	}
 	a, _ := e.apt.Get(ctx, aptID)
-	if a.Status != appointment.StatusInService {
-		t.Fatalf("cash payment changed status to %s (D9)", a.Status)
+	if a.Status != appointment.StatusCompleted {
+		t.Fatalf("cash payment should complete appointment, got %s", a.Status)
 	}
 	// second VALID payment blocked (D1)
 	if _, err := e.p.SettleByPay(ctx, aptID, "WECHAT_TRANSFER", 12800, "", "", "op-1", "idem-p2"); !shared.Is(err, "PAY_EXISTS") {
 		t.Fatalf("want PAY_EXISTS, got %v", err)
+	}
+}
+
+func TestSettleByPayFromWaitingAndCancelledRejected(t *testing.T) {
+	e := newTxnEnv(t)
+	ctx := context.Background()
+	// WAITING 直接收款即完成（§8：完成服务 → 统一结算）
+	waiting := e.bookWaiting(t, 2, 10, 0)
+	if _, err := e.p.SettleByPay(ctx, waiting, "WECHAT_TRANSFER", 12800, "", "", "op-1", "idem-w1"); err != nil {
+		t.Fatalf("settle from WAITING: %v", err)
+	}
+	if a, _ := e.apt.Get(ctx, waiting); a.Status != appointment.StatusCompleted {
+		t.Fatalf("WAITING settle status = %s", a.Status)
+	}
+	// CANCELLED 预约拒绝预约级收款（§12：走散客）
+	cancelled := e.bookWaiting(t, 2, 14, 0)
+	if _, err := e.apt.CancelByCustomer(ctx, e.mbrID, cancelled); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if _, err := e.p.SettleByPay(ctx, cancelled, "CASH", 12800, "", "", "op-1", "idem-c1"); !shared.Is(err, "APT_BAD_TRANSITION") {
+		t.Fatalf("want APT_BAD_TRANSITION, got %v", err)
 	}
 }
 
@@ -232,7 +269,7 @@ func TestConcurrentRedeemOneBalance(t *testing.T) {
 	// drain 9 of 10 via sequential settles (day2 4 slots, day3 4 slots, day4 1 slot)
 	for i := 0; i < 9; i++ {
 		other := e.bookInService(t, 2+i/4, 13+(i%4), 0)
-		if _, _, err := e.p.SettleByCard(ctx, other, e.card, "op-1", fmt.Sprintf("drain-%d", i)); err != nil {
+		if _, _, err := e.p.SettleByCard(ctx, other, e.card, "", "op-1", fmt.Sprintf("drain-%d", i)); err != nil {
 			t.Fatalf("drain %d: %v", i, err)
 		}
 	}
@@ -245,7 +282,7 @@ func TestConcurrentRedeemOneBalance(t *testing.T) {
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
-			_, _, err := e.p.SettleByCard(ctx, id, e.card, "op-1", fmt.Sprintf("race-%d", i))
+			_, _, err := e.p.SettleByCard(ctx, id, e.card, "", "op-1", fmt.Sprintf("race-%d", i))
 			results[i] = err
 		}(i, id)
 	}
@@ -269,7 +306,7 @@ func TestWorkbenchSummaryAndCards(t *testing.T) {
 	ctx := context.Background()
 	a1 := e.bookInService(t, 9, 10, 0)
 	e.bookInService(t, 9, 11, 0)
-	if _, _, err := e.p.SettleByCard(ctx, a1, e.card, "op-1", "wb-1"); err != nil {
+	if _, _, err := e.p.SettleByCard(ctx, a1, e.card, "", "op-1", "wb-1"); err != nil {
 		t.Fatalf("settle: %v", err)
 	}
 
@@ -300,5 +337,39 @@ func TestWorkbenchSummaryAndCards(t *testing.T) {
 	}
 	if paid != 1 {
 		t.Fatalf("paid cards = %d, want 1", paid)
+	}
+}
+
+func TestSettleByCardWithActualServiceOverride(t *testing.T) {
+	e := newTxnEnv(t)
+	ctx := context.Background()
+
+	// 实际服务：全身按摩 90min ¥168，加入卡规则
+	it2, err := e.svc.CreateItem(ctx, svcmodule.NewItem{CategoryID: e.catID, Name: "全身按摩", DurationMin: 90, PriceCents: 16800})
+	if err != nil {
+		t.Fatalf("create item2: %v", err)
+	}
+	if err := e.cards.SetServiceRules(ctx, e.tplID, []string{e.svcID, it2.ID}); err != nil {
+		t.Fatalf("rules: %v", err)
+	}
+	aptID := e.bookInService(t, 1, 9, 0)
+
+	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, it2.ID, "op-1", "idem-svc2")
+	if err != nil {
+		t.Fatalf("settle with actual service: %v", err)
+	}
+	if rd.ServiceID != it2.ID || rd.ServiceName != "全身按摩" {
+		t.Fatalf("redemption service = %s/%s, want 全身按摩", rd.ServiceID, rd.ServiceName)
+	}
+	if pay.AmountCents != 16800 {
+		t.Fatalf("payment amount = %d, want 16800 (实际服务计价 §11)", pay.AmountCents)
+	}
+	// 预约快照不得被覆盖（§11）
+	svcs, err := e.apt.ServicesOf(ctx, aptID)
+	if err != nil {
+		t.Fatalf("services: %v", err)
+	}
+	if svcs[0].ServiceID != e.svcID || svcs[0].NameSnapshot != "肩颈按摩" {
+		t.Fatalf("appointment snapshot overwritten: %+v", svcs[0])
 	}
 }
