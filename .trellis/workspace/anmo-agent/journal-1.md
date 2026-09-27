@@ -532,3 +532,12 @@ Phase 11 E2E
 - 修正（第一性：桌面日常入口不能断，手机摄像头必须 TLS）：vite 按 --mode 拆分——默认 HTTP :5174（电脑/内置浏览器），dev:https HTTPS :5175（手机扫码专用）；gen-dev-cert.sh 不变；start-anmo.sh 启动并巡检两个实例；扫码弹窗错误提示、TUTORIAL.md 端口表/手机节/报错表同步更新。
 - 验证：5174 HTTP 200、5175 HTTPS 200，两端口登录+today 接口经代理均通；vue-tsc 过。手机扫码路径 = https://<电脑IP>:5175（首访信任证书→允许摄像头）。
 - commit: 3578afe
+
+## 2026-09-27 POST-V1 FIX: 扫码核销不可用 → 新增「拍照识别」路径（HTTP 全场景可用）
+- 用户反馈：Windows 电脑与安卓手机均以 HTTP 打开商家端，点"扫码核销"仍提示摄像头不可用。
+- 根因（第一性）：getUserMedia 仅安全上下文（HTTPS/localhost）可用，是浏览器硬策略而非配置问题——手机走局域网 HTTP 永远调不了摄像头；原设计把"实时扫码"当唯一扫码路径，等于把核心操作绑死在 HTTPS 上。
+- 修复：ScanRedeemDialog 新增「📷 拍照识别二维码」——`<input type=file accept=image/* capture=environment>`（HTTP 页面也能调起手机原生相机/电脑选图）→ createImageBitmap → canvas 缩放(≤1600px) → jsQR(attemptBoth) 解码，与摄像头路径共用 handleCode；摄像头按钮仅在 `navigator.mediaDevices.getUserMedia` 存在（安全上下文）时出现，提示文案改为人话（HTTP 直接教用户点拍照按钮）。顾客核销码生成参数不变（ANMO-MEMBER:<ulid>）。
+- 验证：① node 侧 jsQR 解码真实生成的核销码 PNG，内容/前缀/ID 全对；② 弹窗 resolveMember 同款四接口序列（getMember/listMemberCards/listCardTemplates/admin today）对真实会员实测——会员命中、ACTIVE 卡 10/10、今日 CONFIRMED 预约 APT202609270005 自动定位；③ vue-tsc + vite build 过。核销动作链路由既有 14 步 E2E 覆盖，后端零改动。测试数据保留：会员 13690503034（10 次卡 + 今日 20:30 CONFIRMED 预约），留给用户 UI 实测"拍照识别→开始服务→核销"。
+- 测试踩坑备忘：顾客预约受 config.business 约束（提前 2h、30 分钟槽对齐、close 21:00 读 config.yaml 而非设置表；设置表 close_time 仅顾客端展示用）；SMS 验证码一次性 + 60s/手机号限流。
+- 文档：TUTORIAL.md 扫码相关三处改写（拍照识别为主路径、修 5174/5175 端口笔误、报错表更新）。
+- 备注：内置浏览器后端仍不可用（__no_browser_backend__），拍照解码链路以 node jsQR + API 序列验证代替浏览器实机验收。

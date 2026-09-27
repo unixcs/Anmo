@@ -7,11 +7,24 @@
         <video v-show="camReady" ref="videoEl" class="cam" muted playsinline />
         <canvas ref="canvasEl" class="snap" />
         <div v-if="!camReady" class="cam-hint">
+          <p class="cam-icon">📷</p>
           <p v-if="camError">{{ camError }}</p>
-          <p v-else>正在打开摄像头…</p>
+          <p v-else-if="canUseCamera">正在打开摄像头…</p>
+          <p v-else>
+            当前页面无法直接调用摄像头（浏览器仅允许 HTTPS 或 localhost 使用）。<br />
+            点击下方「拍照识别二维码」即可：手机会调起相机拍照，电脑会打开图片选择。
+          </p>
         </div>
       </div>
-      <p class="hint">对准顾客"我的核销码"二维码即可自动识别；摄像头不可用时可用下方手动输入。</p>
+      <input ref="fileEl" type="file" accept="image/*" capture="environment" class="qr-file" @change="onPickImage" />
+      <div class="scan-actions">
+        <el-button v-if="canUseCamera" :type="camReady ? 'default' : 'primary'"
+          @click="camReady ? stopCamera() : startCamera()">
+          {{ camReady ? '停止摄像头' : '打开摄像头' }}
+        </el-button>
+        <el-button type="success" :loading="qrDecoding" @click="fileEl?.click()">📷 拍照识别二维码</el-button>
+      </div>
+      <p class="hint">现场扫码：打开摄像头对准顾客"我的核销码"；HTTP 页面请用「拍照识别二维码」（对顾客手机上的核销码拍照）。也可在下方手动输入手机号。</p>
 
       <div class="manual">
         <el-input v-model="manual" placeholder="手动输入：手机号（11位）" clearable
@@ -115,10 +128,15 @@ const emit = defineEmits<{
 const step = ref<'scan' | 'resolved' | 'result'>('scan')
 const videoEl = ref<HTMLVideoElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
+const fileEl = ref<HTMLInputElement | null>(null)
 const camReady = ref(false)
 const camError = ref('')
 const manual = ref('')
 const resolving = ref(false)
+const qrDecoding = ref(false)
+
+// getUserMedia 只在安全上下文（HTTPS / localhost）存在；HTTP 页面走「拍照识别」路径
+const canUseCamera = !!navigator.mediaDevices?.getUserMedia
 
 const member = ref<Member | null>(null)
 const activeCards = ref<MemberCard[]>([])
@@ -161,7 +179,7 @@ async function startCamera() {
     }, 60)
   } catch {
     camError.value =
-      '摄像头不可用：请在手机上用 https://<电脑IP>:5175 打开商家端（首次需信任自签名证书）并允许摄像头。也可用下方手动输入手机号。'
+      '摄像头打开失败（可能未授权或被占用）。可用「拍照识别二维码」或下方手动输入手机号。'
   }
 }
 
@@ -194,12 +212,50 @@ function tick() {
   raf = requestAnimationFrame(tick)
 }
 
+// ---------- 拍照识别（HTTP 页面也可用：调起手机原生相机 / 电脑选图） ----------
+async function onPickImage(e: Event): Promise<void> {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  stopCamera()
+  qrDecoding.value = true
+  try {
+    const code = await decodeImageFile(file)
+    if (!code?.data) {
+      ElMessage.warning('未能从这张照片识别出二维码，请正对核销码、避免反光后重拍')
+      return
+    }
+    await handleCode(code.data)
+  } catch {
+    ElMessage.error('图片读取失败，请重试')
+  } finally {
+    qrDecoding.value = false
+  }
+}
+
+async function decodeImageFile(file: File): Promise<{ data: string } | null> {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  // 过大的照片等比缩到 1600px 内，兼顾识别率与解码耗时
+  const maxDim = 1600
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('canvas 不可用')
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  bitmap.close()
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  return jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })
+}
+
 // ---------- 识别与解析 ----------
 async function handleCode(raw: string): Promise<void> {
   const content = raw.trim()
   if (!content.startsWith(QR_PREFIX)) {
     ElMessage.warning('不是本店核销码（应为 ANMO-MEMBER 开头）')
-    await startCamera()
+    if (canUseCamera) await startCamera()
     return
   }
   await resolveMember(content.slice(QR_PREFIX.length))
@@ -249,7 +305,7 @@ async function resolveMember(memberId: string): Promise<void> {
     }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '识别失败')
-    if (stream === null) await startCamera()
+    if (canUseCamera) await startCamera()
   } finally {
     resolving.value = false
   }
@@ -297,12 +353,12 @@ function resetToScan(): void {
   activeCards.value = []
   selectedAptId.value = ''
   phoneMatches.value = []
-  void startCamera()
+  if (canUseCamera) void startCamera()
 }
 
 function onOpen(): void {
   step.value = 'scan'
-  void startCamera()
+  if (canUseCamera) void startCamera()
 }
 
 function onClose(): void {
@@ -341,6 +397,21 @@ watch(
   font-size: 13px;
   text-align: center;
   padding: 0 20px;
+}
+.cam-icon {
+  font-size: 30px;
+  margin-bottom: 6px;
+}
+.qr-file {
+  display: none;
+}
+.scan-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.scan-actions .el-button {
+  flex: 1;
 }
 .hint {
   color: #909399;
