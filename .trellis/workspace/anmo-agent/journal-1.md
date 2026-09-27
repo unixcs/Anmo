@@ -541,3 +541,16 @@ Phase 11 E2E
 - 测试踩坑备忘：顾客预约受 config.business 约束（提前 2h、30 分钟槽对齐、close 21:00 读 config.yaml 而非设置表；设置表 close_time 仅顾客端展示用）；SMS 验证码一次性 + 60s/手机号限流。
 - 文档：TUTORIAL.md 扫码相关三处改写（拍照识别为主路径、修 5174/5175 端口笔误、报错表更新）。
 - 备注：内置浏览器后端仍不可用（__no_browser_backend__），拍照解码链路以 node jsQR + API 序列验证代替浏览器实机验收。
+
+## 2026-09-27 POST-V1: 部署 yun1（公网）+ 迁移 Tencent 开发环境 + GitHub 单一事实源
+- 用户新指令：① 修复扫码核销（已完成，见上条）② 部署 yun1 外网可访问 ③ 项目迁至 Tencent /mnt/Projects/Anmo 作为第二开发入口（Codex/OpenCode + Trellis 接力），GitHub unixcs/Anmo 作为中枢。
+- **GitHub**：仓库初始化收口（根 .gitignore、master→main），推送 unixcs/Anmo@main（公开仓）。352 文件含 .trellis 全量（journal/spec/task 随仓走，天然跨机交接，无需额外快照）。
+- **yun1 部署**（2C/1.6G，红线：禁本机 build、禁 Node）：
+  - 架构：anmo-mysql(8.4, buffer pool 64M/perf-schema off/mem_limit 480m) + anmo-server(GOOS=linux CGO=0 12M 二进制，alpine+tzdata 镜像 20M，WSL build→save|gzip|scp|load) + anmo-nginx（静态 + /api /admin 反代；商家 SPA 挂 /admin-ui/，顾客端挂 /）。
+  - 入口：http://121.41.206.32:18090 / https://…:18091（自签证书 SAN=公网 IP——信任一次后手机可全程摄像头实时扫码）；后端 ANMO_* 环境变量注入（JWT/管理员密码随机化，凭据在 /opt/anmo/credentials.txt 600）。
+  - 验收：外网 healthz/两端页面/登录/全业务闭环（发卡5次→预约→确认→开始→核销5→4→撤销回5）全过；ops/health-yun.sh yun1 ALL GREEN（AI-chat 未受影响）；Anmo 栈实占 ~299MB，宿主可用 705MB。踩坑：alpine 缺 tzdata → 镜像补装。
+  - 运维文档：yun1:/opt/anmo/README.md（更新五步流程）。
+- **Tencent 迁移**：clone 到 /mnt/Projects/Anmo（GitHub SSH key 复用现网 unixcs key）；Go 1.27.1 独立装 /usr/local/go1.27（系统 1.23 不动）+ /etc/profile.d/dev-tools.sh（PATH+GOPROXY=goproxy.cn）；MySQL 8.4 经 daocloud 镜像 pull 后 compose up；npm 走 npmmirror；trellis 0.6.17 全局安装（服务器上已有 codex/pi）。验收：go build/vet 过、13 测试包全绿、两端 vue-tsc+build 过、后端 healthz+admin 登录通。
+- **HANDOFF.md**：新增仓库根交接文档（机器拓扑/多端工作流约定/各机环境备忘/必读顺序/已知约束），任何 Agent（Codex/OpenCode/ZCode）接手从它开始。
+- 工作流约定：pull --rebase 起手 → 小步提交 push → .trellis journal 即交接日志；两机严禁未推送并行改同一区域。
+- commit: a34e3c2(扫码拍照识别) / 41782fb(.gitignore) / d2ca257(router BASE_URL) / 本次(部署+迁移+HANDOFF)
