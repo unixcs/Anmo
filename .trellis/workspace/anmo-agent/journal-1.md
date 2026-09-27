@@ -518,3 +518,11 @@ Phase 11 E2E
 - 已知约束：浏览器 getUserMedia 需 localhost/HTTPS，局域网 http 访问时用手动输入兜底（TUTORIAL.md 已注明）。
 - 文档：新增 TUTORIAL.md（系统组成/开店准备/完整业务流七步/每日巡检/报错人话对照表/上线须知/收银台速查页）。
 - commit: 9945b36
+
+## 2026-09-27 POST-V1 FIX: 商家端手机适配 + HTTPS（扫码摄像头）
+- 用户反馈：手机 http://IP:5174 打开商家端 ① UI 未适配 ② 摄像头被禁。
+- 根因（第一性）：扫码核销的核心设备就是店员的手机，而浏览器 getUserMedia 仅在安全上下文（HTTPS/localhost）开放——手机经局域网 http 访问必然被禁；UI 则按桌面假设布局。
+- 手机适配：≤768px 断点（useMedia）。布局侧边栏→抽屉+汉堡，头部紧凑化（隐藏用户名、保留醒目"扫码核销"）；今日工作台/预约管理/会员管理手机端改卡片流（不横滑，操作按钮直出），桌面保持表格；两处预约操作按钮抽成 AptActionButtons 复用；全部弹窗 width=min(Xpx,94vw)；全局手机 CSS（表格紧凑、message-box 92vw、分页换行）。会员详情抽屉手机端全屏。
+- HTTPS：scripts/gen-dev-cert.sh 生成自签证书（SAN 含本机全部网卡 IP，10 年期，30 天内过期自动重签）；vite.config 检测 scripts/certs 存在即以 https 启动；start-anmo.sh 集成；私钥不入库（certs/.gitignore）。
+- 验证：vue-tsc（修掉 1 处未用导入）+ vite build 过；https://localhost:5174 200，经 https 代理登录/接口正常，证书 SAN 覆盖全部 IP；桌面布局不变。手机端首访需点一次"继续前往"信任证书。
+- commit: 3526ad7
