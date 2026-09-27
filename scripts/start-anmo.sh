@@ -38,31 +38,42 @@ fi
 
 # 4) H5 dev server（已监听则跳过）
 if ! curl -sf -o /dev/null http://127.0.0.1:5173/; then
-  echo "[4/5] 启动 H5 :5173 ..."
+  echo "[4/6] 启动 H5 :5173 ..."
   nohup npm --prefix "$ROOT/apps/customer" run dev \
     >> /tmp/anmo-h5.log 2>&1 &
   sleep 3
 else
-  echo "[4/5] H5 已在运行"
+  echo "[4/6] H5 已在运行"
 fi
 
-# 5) 商家端 dev server（HTTPS，手机摄像头扫码需要；已监听则跳过）
+# 5) 商家端 dev server 双实例：
+#    5174 HTTP  —— 电脑/内置浏览器日常使用
+#    5175 HTTPS —— 手机扫码核销专用（摄像头要求安全上下文，自签证书首次需信任）
 bash "$ROOT/scripts/gen-dev-cert.sh"
-if ! curl -skf -o /dev/null https://127.0.0.1:5174/; then
-  echo "[5/5] 启动商家端 :5174 (HTTPS) ..."
+if ! curl -sf -o /dev/null http://127.0.0.1:5174/; then
+  echo "[5/6] 启动商家端 :5174 (HTTP) ..."
   nohup npm --prefix "$ROOT/apps/admin" run dev \
     >> /tmp/anmo-admin.log 2>&1 &
   sleep 3
 else
-  echo "[5/5] 商家端已在运行"
+  echo "[5/6] 商家端(HTTP)已在运行"
+fi
+if ! curl -skf -o /dev/null https://127.0.0.1:5175/; then
+  echo "[6/6] 启动商家端 :5175 (HTTPS，手机扫码) ..."
+  nohup npm --prefix "$ROOT/apps/admin" run dev:https \
+    >> /tmp/anmo-admin-https.log 2>&1 &
+  sleep 3
+else
+  echo "[6/6] 商家端(HTTPS)已在运行"
 fi
 
 LAN_IP=$(hostname -I | awk '{print $1}')
 echo
 echo "✅ 全部就绪"
 echo "   手机/局域网访问 H5:  http://${LAN_IP}:5173"
-echo "   商家端管理界面:      https://${LAN_IP}:5174 （手机首次打开请信任证书）"
+echo "   商家端管理界面(电脑): http://${LAN_IP}:5174"
+echo "   商家端(手机扫码):     https://${LAN_IP}:5175 （手机首次打开请信任证书，用于扫码核销）"
 echo "   API:                 http://${LAN_IP}:8080"
 echo "   后台账号: 13800000000 / anmo-admin-2026"
 echo "   顾客短信验证码(dev): 123456"
-echo "   日志: /tmp/anmo-server.log  /tmp/anmo-h5.log  /tmp/anmo-admin.log"
+echo "   日志: /tmp/anmo-server.log  /tmp/anmo-h5.log  /tmp/anmo-admin.log  /tmp/anmo-admin-https.log"
