@@ -526,3 +526,9 @@ Phase 11 E2E
 - HTTPS：scripts/gen-dev-cert.sh 生成自签证书（SAN 含本机全部网卡 IP，10 年期，30 天内过期自动重签）；vite.config 检测 scripts/certs 存在即以 https 启动；start-anmo.sh 集成；私钥不入库（certs/.gitignore）。
 - 验证：vue-tsc（修掉 1 处未用导入）+ vite build 过；https://localhost:5174 200，经 https 代理登录/接口正常，证书 SAN 覆盖全部 IP；桌面布局不变。手机端首访需点一次"继续前往"信任证书。
 - commit: 3526ad7
+
+## 2026-09-27 POST-V1 FIX: 商家端双端口（HTTP + HTTPS 并存）
+- 用户反馈：http://localhost:5174 打不开（ZCode 内置 Electron 浏览器报 ERR_EMPTY_RESPONSE）。根因：上一轮把 5174 整体切到 HTTPS，HTTP 请求打到 TLS 端口被断开；且内置浏览器无法点过自签证书告警。
+- 修正（第一性：桌面日常入口不能断，手机摄像头必须 TLS）：vite 按 --mode 拆分——默认 HTTP :5174（电脑/内置浏览器），dev:https HTTPS :5175（手机扫码专用）；gen-dev-cert.sh 不变；start-anmo.sh 启动并巡检两个实例；扫码弹窗错误提示、TUTORIAL.md 端口表/手机节/报错表同步更新。
+- 验证：5174 HTTP 200、5175 HTTPS 200，两端口登录+today 接口经代理均通；vue-tsc 过。手机扫码路径 = https://<电脑IP>:5175（首访信任证书→允许摄像头）。
+- commit: 3578afe
