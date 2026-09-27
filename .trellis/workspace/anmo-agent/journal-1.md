@@ -564,3 +564,11 @@ Phase 11 E2E
 - 商家端：RescheduleDialog（日历控件+上下午+时间槽，替换手输）；AdjustCountDialog（±步进器+快捷 chips，替换手输正负数）；ClosureDialog（闭店设置/恢复营业）；ScanRedeemDialog 散客模式（无预约自动开启，选卡→选服务→核销）；Appointments/Dashboard 模糊徽标"上午到店/下午到店"；ContentPage 营业与预约配置卡片；RecordsPage 散客标记。
 - 验证：go build/vet + 全部测试包 -count=1 全绿（新增 TestHalfDayWindowAndPool/TestSpecificCoexistsWithFuzzy/TestFuzzyToSpecificReschedule/TestClosureBlocksAndReportsConflicts/TestBookingOptionsShape/TestWalkInRedeemAndReverse/TestWalkInRuleEnforcement；对抗包边界用例重校准至 20:00 打烊）；两端 vue-tsc + vite build 过；联调 E2E（/tmp/v1x-e2e.sh）8 步全过（booking-options 形状/模糊预约/确认+模糊改具体/闭店拒约/散客核销 5→4+收款 12800/撤销回 5+收款作废/记录 appointment null）。
 - 修的坑：BookingOptions SUM(NULL) 扫描失败 → COALESCE；alpine 时区/老 E2E 的 APPOINTMENT_CONFLICT → APT_SLOT_FULL 语义升级（容量模型）。
+
+# PHASE RESULT — V1.x 部署同步 + 验收闭环
+- 验收审查（子代理）：VERDICT REVISE（无 P0，1×P1 + 4×P2）→ 全部修复：HistoryPage 同源解包 bug（P1）、RedeemWalkIn 后端拒绝今日有预约会员（D19 后端加固）、BookingRules 半天长度整除守卫、AdjustCountDialog 手输输入框、PRD 补记闭店知情口径。
+- 修复后回归：go test（transaction/appointment/adversarial）-count=1 全绿、两端 vue-tsc 过、/tmp/v1x-e2e.sh 8 步全过。
+- 提交链：2290918（V1.x 功能）→ e170bc4（验收修复），已推 GitHub main。
+- yun1 同步：WSL 构建（admin --base=/admin-ui/、customer、linux/amd64 二进制）→ docker save|scp|load → force-recreate server；migration 011 自动应用（count=1）；公网 https://121.41.206.32:18091 实测 booking-options/closures 新端点正常；ops/health-yun.sh yun1 ALL GREEN。
+- Tencent 同步：git pull --rebase 至 e170bc4，开发环境与 WSL/GitHub 三方一致。
+- 用户实测入口：顾客端（5173/18090）注册→预约（上下午模糊）→我的核销码（无卡不出码）；商家端（5174/18091）扫码→散客核销、改期控件、闭店设置、营业配置。
