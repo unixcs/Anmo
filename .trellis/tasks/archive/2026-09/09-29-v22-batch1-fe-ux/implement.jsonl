@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端层入口：Pre-Development Checklist 与各层规范索引"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "weapp 原生组件陷阱（input 需显式高度等）与 H5 组件惯例；新增 booking 半屏/固定条与 AmapPicker 需遵循"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量门槛（build/type-check）"}
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层入口：settings KV 改动需遵循模块规范"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Customer-Visible Merchant Config Pattern 四步链（validateSetting→sanitizer→客户端兜底）本任务 Step 1 直接套用"}
+{"file": "docs/2026929plan.md", "reason": "源计划 §三/§七/§八/§九 原始需求与验收口径"}

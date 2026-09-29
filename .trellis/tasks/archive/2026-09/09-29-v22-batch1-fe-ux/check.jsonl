@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "全量检查门槛：build/type-check/一致性"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "检查 weapp/H5 组件改动是否符合既有惯例与已知陷阱"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查 settings 三键是否按配置模式四步链实现且有测试"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性：server 下行键 ↔ 两端消费、profileProgress 双端镜像"}
+{"file": "docs/2026929plan.md", "reason": "对照源计划验收标准核查遗漏"}
