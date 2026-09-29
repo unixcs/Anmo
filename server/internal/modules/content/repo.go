@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"anmo/server/internal/shared"
@@ -358,8 +359,20 @@ func (p *Provider) PublicSettings(ctx context.Context) (map[string]string, error
 		// ids 原样下发（解析失败客户端回落全量）
 		"home_service_limit": homeLimitDownlink(stored["home_service_limit"]),
 		"home_service_ids":   stored["home_service_ids"],
+		// 资料首登提醒开关（V2.2）：仅 "1"（开）透出，其余一律空串（= 关）
+		"profile_first_login_prompt": profilePromptDownlink(stored["profile_first_login_prompt"]),
 	}
 	return out, nil
+}
+
+// profilePromptDownlink sanitizes the stored profile_first_login_prompt for
+// public downlink: only "1" (on) passes through; "" / "0" / garbage all become
+// "" so clients treat the prompt as off (缺省=关，脏数据安全).
+func profilePromptDownlink(v string) string {
+	if v == "1" {
+		return "1"
+	}
+	return ""
 }
 
 // homeLimitDownlink sanitizes the stored home_service_limit for public
@@ -381,6 +394,10 @@ func (p *Provider) SaveSetting(ctx context.Context, key, value, operatorID strin
 	}
 	if err := validateSetting(key, value); err != nil {
 		return err
+	}
+	// amap 两键落库前 trim：直连 API 写入带空白会让 JS API URL 静默失效
+	if key == "amap_js_key" || key == "amap_js_code" {
+		value = strings.TrimSpace(value)
 	}
 	_, err := p.db.ExecContext(ctx,
 		`INSERT INTO content_system_setting (id, setting_key, setting_value, updated_by)
@@ -445,6 +462,17 @@ func validateSetting(key, value string) error {
 			if id == "" {
 				return bad("推荐服务 ID 不能为空")
 			}
+		}
+	case "amap_js_key", "amap_js_code":
+		// 高德 JS API 配置（V2.2）：空 = 未配置；trim 后 ≤64 字符。
+		// 仅 admin 全量读取（GET /admin/settings），永不下行 PublicSettings。
+		if len(strings.TrimSpace(value)) > 64 {
+			return bad("Key 长度不能超过 64 字符")
+		}
+	case "profile_first_login_prompt":
+		// 首登资料完善提醒开关（V2.2）：仅 ""/"0"/"1"，其他一律拒绝
+		if value != "" && value != "0" && value != "1" {
+			return bad("开关取值仅支持 0 / 1")
 		}
 	}
 	return nil
