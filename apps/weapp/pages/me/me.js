@@ -14,6 +14,9 @@ Page({
     editing: false,
     name: '',
     gender: '',
+    phoneInput: '', // 仅当 member.phone 为空时显示（微信会员一次性补手机号）
+    claim: { show: false, phone: '', password: '', busy: false }, // 撞号认领弹层（V2.2 R4）
+    pwd: { show: false, password: '', busy: false }, // 「设置 H5 密码」弹层（V2.2 R5）
   },
 
   onShow() {
@@ -106,6 +109,7 @@ Page({
       editing: true,
       name: this.data.member ? this.data.member.name : '',
       gender: this.data.member ? this.data.member.gender : '',
+      phoneInput: '',
     })
   },
 
@@ -117,21 +121,125 @@ Page({
     this.setData({ name: e.detail.value })
   },
 
+  onPhoneInput(e) {
+    this.setData({ phoneInput: e.detail.value })
+  },
+
   pickGender(e) {
     this.setData({ gender: e.currentTarget.dataset.g })
   },
 
   saveProfile() {
-    const { name, gender } = this.data
+    const { name, gender, phoneInput, member } = this.data
+    const patch = { name, gender }
+    // 手机号一次性设置（V2.2 R4）：仅当前为空时可填；撞号 → 弹认领弹层
+    if (member && !member.phone && phoneInput) patch.phone = phoneInput.trim()
     api
-      .updateProfile({ name, gender })
+      .updateProfile(patch)
       .then(() => {
         wx.showToast({ title: '已保存' })
-        this.setData({ editing: false })
+        this.setData({ editing: false, phoneInput: '' })
         this.refresh()
       })
-      .catch((e) => wx.showToast({ title: e.message, icon: 'none' }))
+      .catch((e) => {
+        if (e.code === 'MEMBER_PHONE_TAKEN') {
+          // 该手机号已有 H5 账号：弹 claim 密码弹层，凭 H5 密码转绑老账号
+          this.setData({
+            editing: false,
+            claim: { show: true, phone: patch.phone || '', password: '', busy: false },
+          })
+          return
+        }
+        wx.showToast({ title: e.message, icon: 'none' })
+      })
   },
+
+  // ---- 撞号认领弹层（POST /api/auth/wx/claim，V2.2 R4）----
+  closeClaim() {
+    this.setData({ claim: { show: false, phone: '', password: '', busy: false } })
+  },
+
+  onClaimPhone(e) {
+    this.setData({ 'claim.phone': e.detail.value })
+  },
+
+  onClaimPassword(e) {
+    this.setData({ 'claim.password': e.detail.value })
+  },
+
+  confirmClaim() {
+    const { phone, password, busy } = this.data.claim
+    if (busy) return
+    if (!/^1\d{10}$/.test(phone)) {
+      wx.showToast({ title: '请填写正确的手机号', icon: 'none' })
+      return
+    }
+    if (!password || password.length < 6) {
+      wx.showToast({ title: '请填写该账号的 H5 密码（6 位以上）', icon: 'none' })
+      return
+    }
+    this.setData({ 'claim.busy': true })
+    api
+      .wxClaim(phone, password)
+      .then((d) => {
+        // 成功：以返回 token 重置本地登录态（登录态切换到老账号），空壳已由后端删除
+        return auth
+          .adoptToken(d.token)
+          .then(() => {
+            getApp().markAuth(true)
+            wx.showToast({ title: '已关联老账号', icon: 'none' })
+            this.setData({ claim: { show: false, phone: '', password: '', busy: false } })
+            this.refresh()
+            this.loadStats()
+          })
+      })
+      .catch((e) => {
+        this.setData({ 'claim.busy': false })
+        wx.showToast({ title: e.message, icon: 'none' })
+      })
+  },
+
+  // ---- 设置 H5 密码弹层（PUT /api/me/h5-password，V2.2 R5）----
+  goH5Password() {
+    const m = this.data.member
+    if (!m || !m.phone) {
+      // 无手机号时引导完善（后端也要求 phone 非空）
+      wx.showToast({ title: '请先完善手机号', icon: 'none' })
+      this.startEdit()
+      return
+    }
+    this.setData({ pwd: { show: true, password: '', busy: false } })
+  },
+
+  closePwd() {
+    this.setData({ pwd: { show: false, password: '', busy: false } })
+  },
+
+  onPwdInput(e) {
+    this.setData({ 'pwd.password': e.detail.value })
+  },
+
+  confirmPwd() {
+    const { password, busy } = this.data.pwd
+    if (busy) return
+    if (!password || password.length < 6) {
+      wx.showToast({ title: '密码需 6~64 位', icon: 'none' })
+      return
+    }
+    this.setData({ 'pwd.busy': true })
+    api
+      .setH5Password(password)
+      .then(() => {
+        wx.showToast({ title: '已设置，可用于 H5 登录', icon: 'none' })
+        this.setData({ pwd: { show: false, password: '', busy: false } })
+      })
+      .catch((e) => {
+        this.setData({ 'pwd.busy': false })
+        wx.showToast({ title: e.message, icon: 'none' })
+      })
+  },
+
+  noop() {},
 
   logout() {
     wx.showModal({

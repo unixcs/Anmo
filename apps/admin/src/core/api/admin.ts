@@ -20,6 +20,8 @@ export interface Member {
   status: string
   remark: string
   last_visit_at: string | null
+  has_password: boolean // V2.2：已设置 H5 密码（password_hash 非空，hash 本身永不返回）
+  wx_bound: boolean // V2.2：已绑定微信（纯微信会员 phone 可空）
   created_at: string
   updated_at: string
   tags?: string[] // 列表装饰字段（§32）
@@ -260,6 +262,13 @@ export function updateMember(
 
 export function setMemberTags(id: string, tagIds: string[]) {
   return http.put<Tag[]>(`/admin/members/${id}/tags`, { tag_ids: tagIds })
+}
+
+/** 重置顾客 H5 密码（V2.2 D27："忘记密码联系商家"闭环的最后一段）。 */
+export function resetMemberPassword(id: string, newPassword: string) {
+  return http.put<{ updated: boolean }>(`/admin/members/${id}/password`, {
+    new_password: newPassword,
+  })
 }
 
 export function listTags() {

@@ -38,8 +38,10 @@ type Auth struct {
 	AdminPasswordSeed  string `yaml:"admin_password_seed"`
 }
 
+// SMS — 短信验证码登录配置（V2.2 起 H5 改手机号+密码，短信仅剩过渡期 dev）。
+// mode 合法值：dev（本地开发，固定码 123456）| off（短信登录已下线，生产必设）。
 type SMS struct {
-	Mode    string `yaml:"mode"` // dev: fixed code 123456
+	Mode    string `yaml:"mode"` // dev | off（off 时端点返回 410 SMS_DISABLED）
 	CodeTTL int    `yaml:"code_ttl_seconds"`
 }
 
@@ -190,6 +192,11 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret is required")
+	}
+	// sms.mode 合法值（V2.2 R6）：dev | off。生产必须显式 off——runbook 记录；
+	// 未设置时 setDefaults 兜底 dev（本地开发形态），部署时务必覆盖。
+	if cfg.SMS.Mode != "dev" && cfg.SMS.Mode != "off" {
+		return fmt.Errorf("sms.mode must be dev or off, got %q", cfg.SMS.Mode)
 	}
 	return nil
 }

@@ -4,7 +4,7 @@
     <view class="empty-icon"><app-icon name="user" size="80" /></view>
     <view class="empty-main">你好，欢迎来安摩</view>
     <view class="empty-sub">登录后可预约、查卡、出示核销码</view>
-    <button class="btn primary sm" bindtap="go" data-url="/pages/login/login">微信 / 手机号登录</button>
+    <button class="btn primary sm" bindtap="go" data-url="/pages/login/login">微信一键登录</button>
   </view>
 
   <!-- 已登录 -->
@@ -38,6 +38,11 @@
         <text class="field-label">昵称</text>
         <input class="input" value="{{name}}" bindinput="onName" maxlength="20" placeholder="怎么称呼你" />
       </view>
+      <view wx:if="{{member && !member.phone}}" class="field">
+        <text class="field-label">手机号</text>
+        <input class="input num" type="number" maxlength="11" value="{{phoneInput}}" bindinput="onPhoneInput"
+               placeholder="11 位手机号（设置后不可修改）" />
+      </view>
       <view class="field">
         <text class="field-label">性别</text>
         <view class="seg">
@@ -69,6 +74,11 @@
         <view class="cell-body"><text class="cell-title">我的会员卡</text><text class="cell-desc">余额与使用明细</text></view>
         <view class="chevron"><app-icon name="chevron-right" size="32" /></view>
       </view>
+      <view class="cell pressable" bindtap="goH5Password">
+        <view class="cell-icon"><app-icon name="lock" size="40" /></view>
+        <view class="cell-body"><text class="cell-title">设置 H5 密码</text><text class="cell-desc">用于 H5 手机号密码登录</text></view>
+        <view class="chevron"><app-icon name="chevron-right" size="32" /></view>
+      </view>
       <view class="cell pressable" bindtap="go" data-url="/pages/about/about">
         <view class="cell-icon"><app-icon name="info" size="40" /></view>
         <view class="cell-body"><text class="cell-title">关于我们</text><text class="cell-desc">门店信息与联系方式</text></view>
@@ -77,5 +87,47 @@
     </view>
 
     <button class="btn outline block lg logout" bindtap="logout">退出登录</button>
+
+    <!-- 撞号认领弹层（V2.2 R4）：补手机号撞号后凭 H5 密码转绑老账号 -->
+    <view wx:if="{{claim.show}}" class="mask" bindtap="closeClaim">
+      <view class="sheet" catchtap="noop">
+        <view class="sheet-grab"></view>
+        <view class="sheet-title">关联已有账号</view>
+        <view class="sheet-sub">该手机号已注册过 H5 账号，输入它的 H5 密码即可关联到老账号（当前空壳账号将被删除）。</view>
+        <view class="field">
+          <text class="field-label">手机号</text>
+          <input class="input num" type="number" maxlength="11" value="{{claim.phone}}" bindinput="onClaimPhone"
+                 placeholder="11 位手机号" />
+        </view>
+        <view class="field">
+          <text class="field-label">H5 密码</text>
+          <input class="input" password value="{{claim.password}}" bindinput="onClaimPassword"
+                 placeholder="该手机号在 H5 登录用的密码" />
+        </view>
+        <view class="edit-ops">
+          <button class="btn primary sm" loading="{{claim.busy}}" disabled="{{claim.busy}}" bindtap="confirmClaim">确认关联</button>
+          <button class="btn ghost sm" bindtap="closeClaim">暂不</button>
+        </view>
+        <view class="sheet-note">不记得密码？请联系商家后台重置。</view>
+      </view>
+    </view>
+
+    <!-- 设置 H5 密码弹层（V2.2 R5）：微信身份即凭证，设置后可在 H5 用手机号密码登录 -->
+    <view wx:if="{{pwd.show}}" class="mask" bindtap="closePwd">
+      <view class="sheet" catchtap="noop">
+        <view class="sheet-grab"></view>
+        <view class="sheet-title">设置 H5 密码</view>
+        <view class="sheet-sub">为手机号 {{member.phone}} 设置 H5 登录密码，设置后可在 H5 直接登录。</view>
+        <view class="field">
+          <text class="field-label">密码（6~64 位）</text>
+          <input class="input" password value="{{pwd.password}}" bindinput="onPwdInput"
+                 placeholder="6~64 位密码" />
+        </view>
+        <view class="edit-ops">
+          <button class="btn primary sm" loading="{{pwd.busy}}" disabled="{{pwd.busy}}" bindtap="confirmPwd">保存</button>
+          <button class="btn ghost sm" bindtap="closePwd">取消</button>
+        </view>
+      </view>
+    </view>
   </block>
 </view>

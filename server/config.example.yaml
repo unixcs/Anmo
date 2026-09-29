@@ -14,7 +14,11 @@ auth:
   admin_password_seed: "anmo-admin-2026"   # 首次启动时种子 OWNER 账号的初始密码
 
 sms:
-  mode: "dev"          # dev: 固定验证码 123456，写入日志
+  # V2.2 起 H5 为手机号+密码登录，短信验证码登录已下线（R6）。
+  #   dev: 本地开发过渡用，固定验证码 123456 并写入日志
+  #   off: 一律拒绝（410 SMS_DISABLED）——生产必须设为 off
+  # 部署 runbook：生产 config.yaml 必须显式 sms.mode: "off"。
+  mode: "dev"
   code_ttl_seconds: 300
 
 log:

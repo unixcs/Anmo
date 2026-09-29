@@ -5,8 +5,8 @@ import { http } from './http'
 import type { Appointment, Member, MemberCard, ServiceCategory, ServiceItem } from '../models/models'
 
 export const endpoints = {
-  sendSms: '/api/auth/sms/send',
-  verifySms: '/api/auth/sms/verify',
+  register: '/api/auth/register',
+  login: '/api/auth/login',
   home: '/api/home',
   publicSettings: '/api/settings',
   catalog: '/api/services',
@@ -70,9 +70,11 @@ export interface StoreStatus {
 }
 
 export const api = {
-  sendSms: (phone: string) => http.post<{ sent: boolean }>(endpoints.sendSms, { phone }),
-  verifySms: (phone: string, code: string) =>
-    http.post<{ token: string; member_id: string }>(endpoints.verifySms, { phone, code }),
+  // V2.2: 手机号+密码注册/登录（短信验证码登录已下线）
+  register: (phone: string, password: string) =>
+    http.post<{ token: string; member_id: string }>(endpoints.register, { phone, password }),
+  login: (phone: string, password: string) =>
+    http.post<{ token: string; member_id: string }>(endpoints.login, { phone, password }),
   home: () => http.get<HomeContent>(endpoints.home),
   publicSettings: () => http.get<Record<string, string>>(endpoints.publicSettings),
   storeStatus: () => http.get<StoreStatus>('/api/store/status'),

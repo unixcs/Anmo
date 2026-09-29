@@ -74,8 +74,7 @@ func newFixture(t *testing.T) *fixture {
 
 	mkCust := func(phone string) (*client, string) {
 		c := &client{t: t, base: admin.base}
-		c.ok("POST", "/api/auth/sms/send", map[string]string{"phone": phone})
-		r := c.ok("POST", "/api/auth/sms/verify", map[string]string{"phone": phone, "code": "123456"})
+		r := c.ok("POST", "/api/auth/register", map[string]string{"phone": phone, "password": "adv-pass66"})
 		tok := str(r["data"].(map[string]any), "token")
 		c.token = tok
 		p := c.ok("GET", "/api/me/profile", nil)
@@ -149,6 +148,7 @@ func TestGUARD_H1_AdminRouteMatrixAndAnonymous(t *testing.T) {
 		{"POST", "/admin/members"},
 		{"GET", "/admin/members/" + f.memberB},
 		{"PUT", "/admin/members/" + f.memberB},
+		{"PUT", "/admin/members/" + f.memberB + "/password"},
 		{"PUT", "/admin/members/" + f.memberB + "/tags"},
 		{"GET", "/admin/tags"},
 		{"POST", "/admin/tags"},
@@ -187,6 +187,7 @@ func TestGUARD_H1_AdminRouteMatrixAndAnonymous(t *testing.T) {
 		"PUT /admin/content/pages":                          map[string]any{"page": "home", "blocks": []any{}},
 		"PUT /admin/settings":                               map[string]any{"key": "x", "value": "y"},
 		"PUT /admin/members/" + f.memberB + "/tags":         map[string]any{"tag_ids": []string{}},
+		"PUT /admin/members/" + f.memberB + "/password":     map[string]any{"new_password": "adv-reset-1"},
 		"PUT /admin/appointments/" + f.aptB + "/reschedule": map[string]string{"start_time": slotAt(t, 2, 14, 0)},
 		"PUT /admin/appointments/" + f.aptB + "/cancel":     map[string]string{"reason": "x"},
 	}
@@ -214,6 +215,8 @@ func TestGUARD_H1_AdminRouteMatrixAndAnonymous(t *testing.T) {
 	apiEndpoints := []struct{ method, path string }{
 		{"GET", "/api/me/profile"},
 		{"PUT", "/api/me/profile"},
+		{"PUT", "/api/me/h5-password"},
+		{"POST", "/api/auth/wx/claim"},
 		{"GET", "/api/me/cards"},
 		{"GET", "/api/appointments"},
 		{"POST", "/api/appointments"},

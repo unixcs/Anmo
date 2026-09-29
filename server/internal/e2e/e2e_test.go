@@ -88,6 +88,7 @@ func newServer(t *testing.T) *client {
 	cfg.Auth.JWTSecret = "e2e-secret"
 	cfg.Auth.AdminPhone = "13800000000"
 	cfg.Auth.AdminPasswordSeed = "e2e-admin-pass"
+	cfg.SMS.Mode = "off" // V2.2 生产口径：短信登录下线（旧端点 410 SMS_DISABLED）
 
 	log := shared.NewNopLogger()
 	if err := app.SeedIdentity(db, cfg, log); err != nil {
@@ -97,6 +98,16 @@ func newServer(t *testing.T) *client {
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	return &client{t: t, base: ts.URL}
+}
+
+// registerCust — V2.2 顾客建号：H5 手机号+密码注册（成功即登录）。
+func registerCust(t *testing.T, c *client, phone, password string) {
+	t.Helper()
+	res := c.ok("POST", "/api/auth/register", map[string]string{"phone": phone, "password": password})
+	c.token = str(res["data"].(map[string]any), "token")
+	if c.token == "" {
+		t.Fatal("no customer token after register")
+	}
 }
 
 func TestFullLoop(t *testing.T) {
@@ -111,14 +122,21 @@ func TestFullLoop(t *testing.T) {
 		t.Fatal("no admin token")
 	}
 
-	// ---- 顾客登录（H5 短信码 dev=123456, §111）----
+	// ---- 顾客注册登录（V2.2: H5 手机号+密码，§111）----
 	cust := &client{t: t, base: admin.base}
-	cust.ok("POST", "/api/auth/sms/send", map[string]string{"phone": "13911112222"})
-	res = cust.ok("POST", "/api/auth/sms/verify", map[string]string{"phone": "13911112222", "code": "123456"})
-	d := res["data"].(map[string]any)
-	cust.token = str(d, "token")
-	if cust.token == "" {
-		t.Fatal("no customer token")
+	registerCust(t, cust, "13911112222", "cust-pass66")
+
+	// 短信端点已下线（R6）：off 模式两端点 410 SMS_DISABLED
+	if status, out := cust.do("POST", "/api/auth/sms/send", map[string]string{"phone": "13911112222"}); status != 410 || str(out, "code") != "SMS_DISABLED" {
+		t.Fatalf("legacy sms send = %d %v, want 410 SMS_DISABLED", status, out)
+	}
+	if status, out := cust.do("POST", "/api/auth/sms/verify", map[string]string{"phone": "13911112222", "code": "123456"}); status != 410 || str(out, "code") != "SMS_DISABLED" {
+		t.Fatalf("legacy sms verify = %d %v, want 410 SMS_DISABLED", status, out)
+	}
+	// H5 密码登录可重入
+	res = cust.ok("POST", "/api/auth/login", map[string]string{"phone": "13911112222", "password": "cust-pass66"})
+	if str(res["data"].(map[string]any), "token") == "" {
+		t.Fatal("h5 login no token")
 	}
 
 	// ---- 后台建服务（肩颈按摩 60min 12800, §113/§114）----
@@ -175,9 +193,7 @@ func TestFullLoop(t *testing.T) {
 
 	// 冲突：另一顾客抢同时段 → 409（§28）
 	cust2 := &client{t: t, base: admin.base}
-	cust2.ok("POST", "/api/auth/sms/send", map[string]string{"phone": "13911113333"})
-	res2 := cust2.ok("POST", "/api/auth/sms/verify", map[string]string{"phone": "13911113333", "code": "123456"})
-	cust2.token = str(res2["data"].(map[string]any), "token")
+	registerCust(t, cust2, "13911113333", "cust2-pass6")
 	if status, _ := cust2.do("POST", "/api/appointments", map[string]any{
 		"service_id": svcID, "start_time": slot,
 	}); status != 409 {
@@ -337,10 +353,8 @@ func TestConcurrentBookingAPI(t *testing.T) {
 	tokens := make([]string, n)
 	for i := 0; i < n; i++ {
 		c := &client{t: t, base: admin.base}
-		phone := fmt.Sprintf("1392222%04d", i)
-		c.ok("POST", "/api/auth/sms/send", map[string]string{"phone": phone})
-		r := c.ok("POST", "/api/auth/sms/verify", map[string]string{"phone": phone, "code": "123456"})
-		tokens[i] = str(r["data"].(map[string]any), "token")
+		registerCust(t, c, fmt.Sprintf("1392222%04d", i), "conc-pass66")
+		tokens[i] = c.token
 	}
 
 	slot := slotAt(t, 7, 15, 0)
@@ -368,37 +382,65 @@ func TestConcurrentBookingAPI(t *testing.T) {
 	}
 }
 
-// TestWxLoginFlow — V2 小程序登录全链路（HTTP 层，plan §11）：wx login →
-// needs_bind → 短信登录 → bind → 二次 login 直发 token，同一 member。
+// TestWxLoginFlow — V2.2 小程序登录全链路（HTTP 层，D25 修订）：wx 首登直建号
+// 直发 token → 补手机号撞号（MEMBER_PHONE_TAKEN）→ claim 凭 H5 密码转绑老账号
+// 并删空壳 → 二次 login 落在老账号，登录态完成切换。
 func TestWxLoginFlow(t *testing.T) {
 	c := newServer(t)
 
+	// 1. wx 首登：直建号直发 Token（无 needs_bind/bind_ticket）
 	res := c.ok("POST", "/api/auth/wx/login", map[string]string{"code": "wx-code-1"})
 	d := res["data"].(map[string]any)
-	if d["needs_bind"] != true || str(d, "bind_ticket") == "" {
+	if d["needs_bind"] != nil || str(d, "bind_ticket") != "" || str(d, "token") == "" {
 		t.Fatalf("first wx login = %v", d)
 	}
-	ticket := str(d, "bind_ticket")
+	shell := &client{t: t, base: c.base, token: str(d, "token")}
 
-	// bind 需要顾客 Token（D25：凭 ticket 不能直接落库）
-	if status, _ := c.do("POST", "/api/auth/wx/bind", map[string]string{"bind_ticket": ticket}); status != 401 {
-		t.Fatalf("bind without token = %d, want 401", status)
+	// bind_ticket 链路已废除：端点 404
+	if status, _ := shell.do("POST", "/api/auth/wx/bind", map[string]string{"bind_ticket": "x"}); status != 404 {
+		t.Fatalf("legacy wx/bind status = %d, want 404", status)
 	}
 
-	c.ok("POST", "/api/auth/sms/send", map[string]string{"phone": "13911114444"})
-	res = c.ok("POST", "/api/auth/sms/verify", map[string]string{"phone": "13911114444", "code": "123456"})
-	c.token = str(res["data"].(map[string]any), "token")
-	c.ok("POST", "/api/auth/wx/bind", map[string]string{"bind_ticket": ticket})
+	// 2. 老顾客已有 H5 账号（手机号+密码）
+	h5 := &client{t: t, base: c.base}
+	registerCust(t, h5, "13911114444", "h5-pass666")
+	prof := h5.ok("GET", "/api/me/profile", nil)
+	h5ID := str(prof["data"].(map[string]any)["member"].(map[string]any), "id")
 
-	// 二次 login：直发 token，落到同一 member
+	// 3. 微信空壳在「我的」补手机号 → 撞号 409 MEMBER_PHONE_TAKEN（弹认领框的触发点）
+	status, out := shell.do("PUT", "/api/me/profile", map[string]string{"phone": "13911114444"})
+	if status != 409 || str(out, "code") != "MEMBER_PHONE_TAKEN" {
+		t.Fatalf("shell set phone = %d %v, want 409 MEMBER_PHONE_TAKEN", status, out)
+	}
+
+	// 4. claim：凭 H5 密码转绑 → 返回老账号新 Token（登录态切换）
+	res = shell.ok("POST", "/api/auth/wx/claim", map[string]string{"phone": "13911114444", "password": "h5-pass666"})
+	d = res["data"].(map[string]any)
+	claimed := &client{t: t, base: c.base, token: str(d, "token")}
+	if got := str(d, "member_id"); got != h5ID {
+		t.Fatalf("claim member_id = %s, want h5 %s", got, h5ID)
+	}
+	// 老账号身份完整：phone 保留
+	prof = claimed.ok("GET", "/api/me/profile", nil)
+	if got := str(prof["data"].(map[string]any)["member"].(map[string]any), "phone"); got != "13911114444" {
+		t.Fatalf("claimed member phone = %s", got)
+	}
+	// 空壳已被删除：旧 token 不再可用
+	if status, _ := shell.do("GET", "/api/me/profile", nil); status == 200 {
+		t.Fatal("deleted shell token still resolves profile")
+	}
+
+	// 5. 二次 wx login：直接落在老账号
 	res = c.ok("POST", "/api/auth/wx/login", map[string]string{"code": "wx-code-1"})
 	d = res["data"].(map[string]any)
-	if d["needs_bind"] == true || str(d, "token") == "" {
-		t.Fatalf("second wx login = %v", d)
+	if str(d, "token") == "" || str(d, "member_id") != h5ID {
+		t.Fatalf("second wx login = %v, want member_id %s", d, h5ID)
 	}
-	c.token = str(d, "token")
-	prof := c.ok("GET", "/api/me/profile", nil)
-	if got := str(prof["data"].(map[string]any)["member"].(map[string]any), "phone"); got != "13911114444" {
-		t.Fatalf("bound member phone = %s", got)
+
+	// 6. 小程序设置 H5 密码（微信身份即凭证，R5）：设完 H5 可直接登录
+	claimed.ok("PUT", "/api/me/h5-password", map[string]string{"new_password": "h5-new777"})
+	res = c.ok("POST", "/api/auth/login", map[string]string{"phone": "13911114444", "password": "h5-new777"})
+	if str(res["data"].(map[string]any), "token") == "" {
+		t.Fatal("h5 login with wechat-set password failed")
 	}
 }

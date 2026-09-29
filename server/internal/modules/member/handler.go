@@ -61,6 +61,22 @@ func (p *Provider) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	shared.OK(w, m)
 }
 
+// handleAdminSetPassword — 商家后台重置会员 H5 密码（V2.2 R5：忘记密码闭环）。
+func (p *Provider) handleAdminSetPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		NewPassword string `json:"new_password"`
+	}
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	if err := p.AdminSetPassword(r.Context(), r.PathValue("id"), req.NewPassword); err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]bool{"updated": true})
+}
+
 type setTagsReq struct {
 	TagIDs []string `json:"tag_ids"`
 }

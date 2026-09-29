@@ -31,35 +31,6 @@ func (s *tokenService) signCustomer(memberID string, ttl time.Duration) (string,
 	return s.sign("CUSTOMER", memberID, "", ttl)
 }
 
-// actWxBind marks a bind-ticket token: it carries an openid, not an actor id.
-const actWxBind = "WXBIND"
-
-// signBindTicket issues the short-lived ticket returned by /api/auth/wx/login
-// for unbound openids (D25). Redeemed by POST /api/auth/wx/bind with a
-// customer token.
-func (s *tokenService) signBindTicket(openid string) (string, error) {
-	now := time.Now()
-	c := claims{
-		ActorType: actWxBind,
-		ActorID:   openid,
-		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(wxBindTTL)),
-			Issuer:    "anmo",
-		},
-	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, c).SignedString(s.secret)
-}
-
-// parseBindTicket validates a bind ticket and returns its openid.
-func (s *tokenService) parseBindTicket(token string) (string, error) {
-	c, err := s.parse(token)
-	if err != nil || c.ActorType != actWxBind || c.ActorID == "" {
-		return "", errors.New("invalid bind ticket")
-	}
-	return c.ActorID, nil
-}
-
 func (s *tokenService) sign(actorType, actorID, role string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	c := claims{

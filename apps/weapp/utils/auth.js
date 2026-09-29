@@ -1,55 +1,48 @@
-// auth.js — 登录态：微信静默登录优先，短信兜底；两个前端共用同一个 member。
-// 链路（plan §11 + D24/D25）：
+// auth.js — 登录态：微信登录一步到位（V2.2，D25 修订）。
+// 链路（plan §11 + §二）：
 //   wx.login(code) → POST /api/auth/wx/login
-//     ├─ 已绑定 openid → 直接发顾客 Token
-//     └─ 未绑定 → { needs_bind, bind_ticket } → 短信登录拿到 Token
-//        → POST /api/auth/wx/bind { bind_ticket } 绑定（10 分钟内有效）
+//     ├─ openid 已绑定 → 直接发顾客 Token
+//     └─ 未绑定 → 同事务直建号（空壳）→ 直接发顾客 Token
+//   手机号撞号时在「我的」补手机号 → 409 MEMBER_PHONE_TAKEN → claim 弹层
+//   → POST /api/auth/wx/claim 凭 H5 密码转绑老账号（空壳删除、登录态切换）。
 const { api } = require('./api')
 const request = require('./request')
 
 const PROFILE_KEY = 'anmo_member_profile'
 
-// 微信静默登录（尽量无感）。成功返回 { token }，未绑定/未配置返回 { needSms, bindTicket }。
+// 微信登录（尽量无感）。成功返回 { token }；失败（无微信环境/网络/后端错）
+// 返回 { ok: false }，由页面引导重试。
 function wxSilentLogin() {
   return new Promise((resolve) => {
     wx.login({
       success(res) {
         if (!res.code) {
-          resolve({ needSms: true })
+          resolve({ ok: false })
           return
         }
         api
           .wxLogin(res.code)
           .then((d) => {
-            if (d && d.needs_bind) {
-              resolve({ needSms: true, bindTicket: d.bind_ticket })
-              return
-            }
             if (d && d.token) {
               request.setToken(d.token)
               resolve({ token: d.token })
               return
             }
-            resolve({ needSms: true })
+            resolve({ ok: false })
           })
-          .catch(() => resolve({ needSms: true }))
+          .catch(() => resolve({ ok: false }))
       },
       fail() {
-        resolve({ needSms: true }) // 无微信环境（如 devtools 未登录）→ 短信兜底
+        resolve({ ok: false }) // 无微信环境（如 devtools 未登录）
       },
     })
   })
 }
 
-// 短信登录（与 H5 完全同一端点）；带 bindTicket 时登录成功后立即绑定微信。
-function smsLogin(phone, code, bindTicket) {
-  return api.verifySms(phone, code).then((d) => {
-    request.setToken(d.token)
-    const bind = bindTicket
-      ? api.wxBind(bindTicket).catch(() => {}) // 绑定失败不阻断登录
-      : Promise.resolve()
-    return bind.then(() => d)
-  })
+// claim 转绑成功后切换登录态到老账号：换 Token 并立刻验活拉新 profile。
+function adoptToken(token) {
+  request.setToken(token)
+  return ensureSession()
 }
 
 function cachedProfile() {
@@ -83,19 +76,19 @@ function ensureSession() {
     })
 }
 
-// 启动引导：有 Token 直接验活；无 Token 试一次微信静默登录——已绑定会员重开小程序
-// 应当无感回到登录态；未绑定则把 bind_ticket 交给页面（短信登录后自动绑定）。
+// 启动引导：有 Token 直接验活；无 Token 试一次微信登录——首登直建号，
+// 重开小程序应当无感回到登录态。
 function bootstrap() {
-  if (request.getToken()) return ensureSession().then((ok) => ({ loggedIn: ok, bindTicket: '' }))
+  if (request.getToken()) return ensureSession().then((ok) => ({ loggedIn: ok }))
   return wxSilentLogin().then((r) => {
-    if (!r.token) return { loggedIn: false, bindTicket: r.bindTicket || '' }
-    return ensureSession().then((ok) => ({ loggedIn: ok, bindTicket: '' }))
+    if (!r.token) return { loggedIn: false }
+    return ensureSession().then((ok) => ({ loggedIn: ok }))
   })
 }
 
 module.exports = {
   wxSilentLogin,
-  smsLogin,
+  adoptToken,
   ensureSession,
   bootstrap,
   cachedProfile,

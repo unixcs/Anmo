@@ -40,6 +40,31 @@ func (p *Provider) EnsureByPhone(ctx context.Context, tx shared.Tx, phone, name 
 	return id, true, nil
 }
 
+// CreateByOpenID — 微信首登直建号（V2.2：bind_ticket 流程废除，D25 修订）：
+// 纯微信会员（phone NULL、name ''），openid 由 uk_member_wx_openid 兜底唯一。
+// 运行在调用方事务内（D6）。同 openid 并发首登时 BEGIN IMMEDIATE 串行化，
+// 后到者必然先看到先到者的行。
+func (p *Provider) CreateByOpenID(ctx context.Context, tx shared.Tx, openid string) (string, error) {
+	openid = strings.TrimSpace(openid)
+	if openid == "" {
+		return "", shared.BadRequest("MEMBER_BAD_OPENID", "openid 为空")
+	}
+	no, err := p.nextMemberNo(ctx, tx)
+	if err != nil {
+		return "", err
+	}
+	id := shared.NewID()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO member (id, member_no, name, wx_openid) VALUES (?,?,?,?)`,
+		id, no, "", openid); err != nil {
+		if shared.IsDupKey(err) {
+			return "", shared.Conflict("WX_OPENID_BOUND", "该微信已绑定其他会员")
+		}
+		return "", shared.Server("MEMBER_INSERT", err)
+	}
+	return id, nil
+}
+
 // nextMemberNo generates M+yyyymmdd+seq via the atomic counter table.
 func (p *Provider) nextMemberNo(ctx context.Context, tx shared.Tx) (string, error) {
 	day := shared.NowShanghai().Format("20060102")

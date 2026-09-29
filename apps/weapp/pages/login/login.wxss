@@ -1,5 +1,5 @@
-/* login — 品牌印章 + 短信表单，与 H5 LoginPage 同构 */
-.brand { text-align: center; padding: 28px 0 26px; }
+/* login — 品牌印章 + 微信一键登录（V2.2：无表单） */
+.brand { text-align: center; padding: 96px 0 40px; }
 
 .seal {
   display: inline-flex;
@@ -26,6 +26,8 @@
   max-width: 280px;
 }
 
+.state { display: flex; flex-direction: column; }
+
 .wx-note {
   display: flex;
   align-items: center;
@@ -33,27 +35,19 @@
   gap: 6px;
   font-size: 12px;
   color: var(--warning);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
-.form { display: flex; flex-direction: column; }
+.state-note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 12px;
+}
 
-.code-row { display: flex; gap: 10px; align-items: center; }
-.code-input { flex: 1; }
-.send { flex-shrink: 0; white-space: nowrap; }
-.send.off { opacity: 0.55; }
-
-.submit { margin-top: 24px; }
 .agree {
   text-align: center;
   font-size: 12px;
   color: var(--muted-foreground);
-  margin-top: 14px;
-}
-.re-try {
-  text-align: center;
-  font-size: 13px;
-  color: var(--muted-foreground);
-  margin-top: 10px;
-  text-decoration: underline;
+  margin-top: 28px;
 }

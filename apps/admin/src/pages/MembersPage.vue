@@ -20,7 +20,12 @@
     <template v-if="isMobile">
       <el-empty v-if="rows.length === 0" description="暂无会员" :image-size="70" />
       <div v-for="row in rows" :key="row.id" class="m-card" @click="openDetail(row)">
-        <div class="m-top"><b>{{ row.name }}</b><span class="m-gender">{{ row.gender }}</span></div>
+        <div class="m-top"><b>{{ row.name }}</b>
+          <span>
+            <el-tag v-if="row.wx_bound" size="small" type="success" class="tag-chip">微信</el-tag>
+            <el-tag v-if="row.has_password" size="small" class="tag-chip">H5密码</el-tag>
+          </span>
+          <span class="m-gender">{{ row.gender }}</span></div>
         <div class="m-line"><span>{{ row.phone }}</span><span class="m-no">{{ row.member_no }}</span></div>
         <div class="m-line"><span class="m-visit">最近到店 {{ fmtTime(row.last_visit_at) }}</span>
           <el-button size="small" @click.stop="openDetail(row)">详情</el-button></div>
@@ -33,6 +38,13 @@
       <el-table-column prop="member_no" label="会员号" width="160" />
       <el-table-column prop="name" label="姓名" width="120" />
       <el-table-column prop="phone" label="手机号" width="130" />
+      <el-table-column label="登录方式" width="150">
+        <template #default="{ row }">
+          <el-tag v-if="row.wx_bound" size="small" type="success" class="tag-chip">微信</el-tag>
+          <el-tag v-if="row.has_password" size="small" class="tag-chip">H5密码</el-tag>
+          <span v-if="!row.wx_bound && !row.has_password" class="acct-none">未设置</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="gender" label="性别" width="70" />
       <el-table-column label="最近到店" width="150">
         <template #default="{ row }">{{ fmtTime(row.last_visit_at) }}</template>
@@ -81,6 +93,12 @@
       <h4 class="sec">基本资料</h4>
       <el-form label-width="80px" size="small">
         <el-form-item label="手机号"><el-input v-model="detail.member.phone" disabled /></el-form-item>
+        <el-form-item label="登录方式">
+          <el-tag v-if="detail.member.wx_bound" size="small" type="success" class="tag-chip">微信已绑定</el-tag>
+          <el-tag v-if="detail.member.has_password" size="small" class="tag-chip">已设 H5 密码</el-tag>
+          <span v-if="!detail.member.wx_bound && !detail.member.has_password" class="acct-none">未设置</span>
+          <el-button size="small" link type="primary" @click="openResetPassword">重置 H5 密码</el-button>
+        </el-form-item>
         <el-form-item label="姓名"><el-input v-model="edit.name" /></el-form-item>
         <el-form-item label="性别">
           <el-select v-model="edit.gender" style="width: 120px">
@@ -178,6 +196,26 @@
     </el-table>
   </el-dialog>
   <AdjustCountDialog v-model="adjustVisible" :card="adjustCardRow" :on-done="refreshCards" />
+
+  <!-- 重置 H5 密码（V2.2 D27："忘记密码联系商家"闭环最后一段） -->
+  <el-dialog v-model="resetPwdVisible" title="重置 H5 密码" width="min(440px, 94vw)">
+    <el-form label-width="90px">
+      <el-form-item label="会员">
+        <span v-if="resetTarget">{{ resetTarget.name }}（{{ resetTarget.phone || '未绑定手机号' }}）</span>
+      </el-form-item>
+      <el-form-item label="新密码" required>
+        <el-input v-model="resetPwd" type="password" maxlength="64" show-password placeholder="6~64 位"
+          @keyup.enter="doResetPassword" />
+      </el-form-item>
+      <el-form-item v-if="resetTarget && !resetTarget.phone">
+        <span class="acct-none">该会员尚未绑定手机号，重置密码后仍无法在 H5 登录（需先在小程序完善手机号）</span>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="resetPwdVisible = false">取消</el-button>
+      <el-button type="primary" :loading="saving" @click="doResetPassword">确认重置</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -197,6 +235,7 @@ import {
   listMembers,
   listTags,
   renameTag,
+  resetMemberPassword,
   setMemberTags,
   updateMember,
   type Member,
@@ -453,6 +492,41 @@ async function showTx(card: MemberCard) {
   }
 }
 
+// ---------- 重置 H5 密码（V2.2 D27） ----------
+const resetPwdVisible = ref(false)
+const resetTarget = ref<Member | null>(null)
+const resetPwd = ref('')
+
+function openResetPassword() {
+  if (!detail.value) return
+  resetTarget.value = detail.value.member
+  resetPwd.value = ''
+  resetPwdVisible.value = true
+}
+
+async function doResetPassword() {
+  if (!resetTarget.value) return
+  const pwd = resetPwd.value
+  if (pwd.length < 6 || pwd.length > 64) {
+    ElMessage.warning('密码需 6~64 位')
+    return
+  }
+  saving.value = true
+  try {
+    await resetMemberPassword(resetTarget.value.id, pwd)
+    ElMessage.success('密码已重置')
+    resetPwdVisible.value = false
+    if (detail.value && detail.value.member.id === resetTarget.value.id) {
+      detail.value.member.has_password = true
+    }
+    await load()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '重置失败')
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(() => {
   void load()
   void ensureTags()
@@ -518,6 +592,10 @@ onMounted(() => {
 }
 .tag-chip {
   margin-right: 4px;
+}
+.acct-none {
+  color: #b0b3b8;
+  font-size: 12px;
 }
 .tag-new {
   display: flex;

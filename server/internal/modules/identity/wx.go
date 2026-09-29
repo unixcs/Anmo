@@ -12,12 +12,11 @@ import (
 	"anmo/server/internal/shared"
 )
 
-// wx.go — WeChat mini-program login (V2, plan §11). code2session exchanges a
-// wx.login code for the openid; a bound openid signs a customer token directly
-// (same member as H5), an unbound one returns a short-lived bind ticket that
-// the customer redeems after SMS login (D24/D25).
-
-const wxBindTTL = 10 * time.Minute
+// wx.go — WeChat mini-program login (V2, plan §11; V2.2 修订 D25)。code2session
+// 交换 openid：已绑定直发顾客 Token；未绑定在同一 immediate 事务内直接建号
+// （纯微信会员：phone NULL、name ''）并签发 Token——bind_ticket 流程废除。
+// 同一 openid 再次登录返回同一会员；并发首登由 BEGIN IMMEDIATE 串行化 +
+// uk_member_wx_openid 兜底（R3）。
 
 type wxSession struct {
 	OpenID  string `json:"openid"`
@@ -29,8 +28,8 @@ type wxSession struct {
 // stub the endpoint with an httptest server.
 func (p *Provider) code2session(ctx context.Context, code string) (string, error) {
 	if p.cfg.Wx.AppID == "" {
-		// D24: dev fallback mirrors SMS.Mode=dev (fixed code 123456) — the
-		// code IS the openid. Never publish a mini-program against this.
+		// D24: dev fallback mirrors the retired SMS dev code — the code IS the
+		// openid. Never publish a mini-program against this.
 		return "dev:" + code, nil
 	}
 	q := url.Values{}
@@ -61,42 +60,35 @@ func (p *Provider) code2session(ctx context.Context, code string) (string, error
 	return s.OpenID, nil
 }
 
-// WxLogin exchanges a wx.login code for either a customer token (openid
-// already bound) or a bind ticket the client stores until binding completes.
-func (p *Provider) WxLogin(ctx context.Context, code string) (token, memberID, bindTicket string, needsBind bool, err error) {
+// WxLogin exchanges a wx.login code for a customer token. First sight of an
+// openid creates the member inside the login transaction (D25 修订：直建号).
+func (p *Provider) WxLogin(ctx context.Context, code string) (token, memberID string, err error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
-		return "", "", "", false, shared.BadRequest("WX_BAD_CODE", "缺少 wx.login code")
+		return "", "", shared.BadRequest("WX_BAD_CODE", "缺少 wx.login code")
 	}
 	openid, err := p.code2session(ctx, code)
 	if err != nil {
-		return "", "", "", false, err
+		return "", "", err
 	}
-	id, ok, err := p.members.FindByOpenID(ctx, openid)
-	if err != nil {
-		return "", "", "", false, err
-	}
-	if ok {
-		token, err := p.tokens.signCustomer(id, time.Duration(p.cfg.Auth.CustomerTokenHours)*time.Hour)
-		if err != nil {
-			return "", "", "", false, shared.Server("IDENTITY_TOKEN", err)
+	err = shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
+		id, ok, e := p.members.FindByOpenID(ctx, tx, openid)
+		if e != nil {
+			return e
 		}
-		return token, id, "", false, nil
-	}
-	ticket, err := p.tokens.signBindTicket(openid)
-	if err != nil {
-		return "", "", "", false, shared.Server("IDENTITY_TOKEN", err)
-	}
-	return "", "", ticket, true, nil
-}
-
-// WxBind binds the ticket's openid to the authenticated customer's member.
-func (p *Provider) WxBind(ctx context.Context, memberID, bindTicket string) error {
-	openid, err := p.tokens.parseBindTicket(bindTicket)
-	if err != nil {
-		return shared.Unauthorized("绑定凭证无效或已过期，请重新进入小程序")
-	}
-	return shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		return p.members.BindOpenID(ctx, tx, memberID, openid)
+		if ok {
+			memberID = id
+			return nil
+		}
+		memberID, e = p.members.CreateByOpenID(ctx, tx, openid)
+		return e
 	})
+	if err != nil {
+		return "", "", err
+	}
+	token, err = p.tokens.signCustomer(memberID, time.Duration(p.cfg.Auth.CustomerTokenHours)*time.Hour)
+	if err != nil {
+		return "", "", shared.Server("IDENTITY_TOKEN", err)
+	}
+	return token, memberID, nil
 }

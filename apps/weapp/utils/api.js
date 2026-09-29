@@ -2,10 +2,9 @@
 const http = require('./request')
 
 const endpoints = {
-  sendSms: '/api/auth/sms/send',
-  verifySms: '/api/auth/sms/verify',
   wxLogin: '/api/auth/wx/login',
-  wxBind: '/api/auth/wx/bind',
+  wxClaim: '/api/auth/wx/claim',
+  h5Password: '/api/me/h5-password',
   home: '/api/home',
   publicSettings: '/api/settings',
   storeStatus: '/api/store/status',
@@ -21,11 +20,10 @@ const endpoints = {
 }
 
 const api = {
-  // ---- 登录（V2 §11：微信登录→绑定手机号→同一个 member_id）----
+  // ---- 登录（V2.2：微信首登直建号直发 Token；撞号认领/设 H5 密码见 plan §二）----
   wxLogin: (code) => http.post(endpoints.wxLogin, { code }),
-  wxBind: (bindTicket) => http.post(endpoints.wxBind, { bind_ticket: bindTicket }),
-  sendSms: (phone) => http.post(endpoints.sendSms, { phone }),
-  verifySms: (phone, code) => http.post(endpoints.verifySms, { phone, code }),
+  wxClaim: (phone, password) => http.post(endpoints.wxClaim, { phone, password }),
+  setH5Password: (newPassword) => http.put(endpoints.h5Password, { new_password: newPassword }),
 
   // ---- 内容 ----
   home: () => http.get(endpoints.home),

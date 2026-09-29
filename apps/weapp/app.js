@@ -8,7 +8,6 @@ App({
     loggedIn: false,
     pendingServiceId: '', // 首页→预约页的预选服务（tab 页不能带参跳转）
     pendingProfileEdit: '', // 预约页/首登提醒→我的页：自动展开资料编辑（V2.2 R4）
-    bindTicket: '', // 静默登录拿到的未绑定票据，短信登录后自动绑定（D25）
     session: null, // 启动登录态 Promise
     sessionSettled: false,
     manualAuth: false, // 用户手动登录/退出过：静默登录结果不再覆盖登录态
@@ -22,13 +21,12 @@ App({
     this.startSession()
   },
 
-  // 静默登录：已绑定会员直接续期 Token；未绑定不强制打断，页面按需引导。
+  // 静默登录：微信登录一步到位（V2.2 D25 修订），已绑会员与首登都直接续期/新建。
   startSession() {
     const g = this.globalData
     const p = auth.bootstrap().then((r) => {
       // 静默登录出结果前用户可能已经手动登录/退出，那种情况下以手动结果为准
       if (!g.manualAuth) g.loggedIn = r.loggedIn
-      if (r.bindTicket && !g.bindTicket) g.bindTicket = r.bindTicket
       return r
     })
     p.then(() => {
@@ -39,7 +37,6 @@ App({
   },
 
   // 登录成功 / 退出登录时调用：立即刷新登录态，后续 ready() 走同步分支。
-  // bindTicket 不清：退出后重新登录时仍要靠它把微信 openid 绑回去（10 分钟窗口）。
   markAuth(loggedIn) {
     const g = this.globalData
     g.loggedIn = loggedIn

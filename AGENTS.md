@@ -43,7 +43,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 
 | 角色 | 端 | 说明 |
 |------|----|----|
-| Customer | H5（Vue3） | 手机号+短信验证码登录，预约、查卡、查历史 |
+| Customer | H5（Vue3） | 手机号+密码注册/登录（V2.2，短信已下线），预约、查卡、查历史 |
 | OWNER（Admin） | 后台 | 全部权限 |
 | OPERATOR | 后台 | 预留，RBAC 支持 |
 
@@ -138,8 +138,9 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D22 | 闭店日历（V1.x）：appointment_closure 按 (date, AM\|PM) 粒度，全天=两行；创建闭店在 calendar 锁内统计 conflict_count 返回给商家知情；不自动取消/改约；改营业配置不追溯已建预约 |
 | D23 | 微信身份（V2）：member.wx_openid VARCHAR(64) NULL + UNIQUE（NULL 可重复）；一个 openid 只绑一个 member，一 member 只一个 openid；不建独立绑定表 |
 | D24 | code2session 凭据 `wx.app_id`/`wx.secret`（env `ANMO_WX_APPID`/`ANMO_WX_SECRET`）；缺省时 dev 兜底 `openid = "dev:"+code`（启动日志警示），正式发布前必须配真实凭据 |
-| D25 | 未绑定 openid 时发 bind_ticket（JWT `act=WXBIND`，10 分钟），不直接落库；绑定 `POST /api/auth/wx/bind` 必须持顾客 Token（防 openid 探测换 member） |
+| D25 | **(2026-09-29 修订，V2.2 第二批)** bind_ticket 流程废除：微信首登 openid 未绑定时同事务直建号直发 Token（uk_member_wx_openid 唯一兜底）；手机号撞号走 `POST /api/auth/wx/claim`（顾客 Token + 该手机号的 H5 密码）转绑老账号并同事务删除无业务数据的空壳（HasBusinessData=false 才可删）；`/api/auth/wx/bind` 端点不复存在 |
 | D26 | 微信官方"服务卡片"能力（类目/资质/后台配置）不做；分享闭环 = 每页 onShareAppMessage + 首页/关于 onShareTimeline + showShareMenu |
+| D27 | **(2026-09-29 新增，V2.2 第二批)** 顾客密码体系：bcrypt（DefaultCost，6~64 位）；H5 `POST /api/auth/register`/`login`（手机号+密码）；小程序「我的」设/重置 H5 密码 `PUT /api/me/h5-password`（微信身份即凭证，需已绑手机号 MEMBER_PHONE_REQUIRED）+ 手机号一次性设置（MEMBER_PHONE_SET，撞号 MEMBER_PHONE_TAKEN 触发 claim）；admin `PUT /admin/members/{id}/password` 重置；member.phone 可空（仅纯微信会员）；SMS 端点仅 sms.mode=dev 可用（过渡期），生产必须 off（off 时 410 SMS_DISABLED） |
 
 参考报告：`.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md`、`.../09-27-phase0-review/REVIEW.md`
 
