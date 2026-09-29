@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
+- **Total Sessions**: 3
 - **Last Active**: 2026-09-29
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~737 | Active |
+| `journal-1.md` | ~759 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-09-29 | V2.2 第一批：预约页固定提交条/地图选点/H5地址兜底/资料完善 | `6b10091` | `main` |
 | 2 | 2026-09-29 | V2.1 首页可配置化与小程序体验修复 | `fd296f8` | `main` |
 | 1 | 2026-09-27 | Phase 0: Plan Review PASS | `fd51383` | `master` |
 <!-- @@@/auto:session-history -->

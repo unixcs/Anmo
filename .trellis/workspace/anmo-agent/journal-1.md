@@ -735,3 +735,25 @@ Phase 11 E2E
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: V2.2 第一批：预约页固定提交条/地图选点/H5地址兜底/资料完善
+<!-- trellis-session: v=2 fp=f822468ce1c88a02 -->
+
+**Date**: 2026-09-29
+**Task**: V2.2 第一批：预约页固定提交条/地图选点/H5地址兜底/资料完善
+**Branch**: `main`
+
+### Summary
+
+审查 docs/2026929plan.md 并与用户确认三批范围（技师账号不做、H5切密码、散客快速结算）；第一批经 trellis-implement/check 落地：weapp+H5 预约页底部固定提交条（safe-area、三态置灰、摘要行）、admin 高德地图选点+经纬度校验、H5 地址标准 URI+兜底条、资料完善三件套；Murphy live-server 矩阵 12/12，修复服务端 amap 键 trim 落库缺口；spec 增补落库归一化与 pagehide 约定
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6b10091` | docs: V2.2 计划文档收编 + CHANGELOG 未发布段（第一批） |
+
+### Status
+
+[OK] **Completed**
