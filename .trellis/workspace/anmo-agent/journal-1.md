@@ -819,3 +819,33 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 7: V2.2 第四批：H5 预约弹层翻转 + 资料保存返回 + 小程序联调修复
+<!-- trellis-session: v=2 fp=1de57cf6876a36e9 -->
+
+**Date**: 2026-09-30
+**Task**: V2.2 第四批：H5 预约弹层翻转 + 资料保存返回 + 小程序联调修复
+**Branch**: `main`
+
+### Summary
+
+用户三问实为开发者工具旧包：tabBar 服务 tab 齐全/登录页已纯微信(D27)/占位符已修——重导入 apps/weapp+清缓存即愈，README 联调章节固化。真修复：①BookingPage 资料弹层翻转（立即预约 primary 在上=提交+置静默标记 bookNow；去完善资料 ghost 在下=存草稿跳资料页）②ProfilePage 保存后检测 sessionStorage anmo.booking.draft 自动返回 /booking，草稿由 takeDraft 恢复（B3 弃单误伤窗口评估为可接受不修）③weapp config.js storage 键 anmo.base_url 覆盖 BASE_URL（合法 http(s) 锚定校验，check 阶段补 \\+\\$ 锚定+用例）④README 联调章节+清缓存指引+D24 dev 登录原理；start-anmo.sh 提示行改密码登录口径（删过时短信 123456 提示）。check 链路审查 7/7 过+自修复 2 处（README 引用不存在的 tools/unit.js 重写为 tests/config.test.js；覆盖值正则未锚尾）。GUI E2E 环境注记：dev 库播种 2 分类 3 服务；上午半日池被多轮测试订满属 D20 容量逻辑正确工作
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b6c5f89` | fix(apps): V2.2 第四批——H5 预约弹层翻转（立即预约凸显在上）+ 资料保存自动返回预约页 + 小程序 BASE_URL 覆盖与联调文档 + config 单测 |
+
+### Testing
+
+- [OK] weapp config.test.js 6/6；go build/vet/test 全绿零跳过；H5 vue-tsc+vite build 零错；GUI E2E 17/17 PASS + console 0 error（playwright-core+系统 Chrome 黑盒，证据 /tmp/anmo-b4-gui）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 小程序真机 checklist 由用户按新 README 联调章节自测；正式发布前配真实 ANMO_WX_APPID/ANMO_WX_SECRET；生产店名电话等由商家在 admin 维护
