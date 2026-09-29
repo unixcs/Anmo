@@ -71,3 +71,15 @@ causes the placeholder/text to be vertically clipped (top half visible, bottom h
 **Rule**: give global `.input` an explicit `height` (currently `height: 48px; padding: 0 14px;`
 in `apps/weapp/app.wxss`) and put vertical padding on `.textarea` only. When touching input
 styles, verify login (phone/code) and me (nickname) pages — they share the global class.
+
+### H5 `pagehide` fires on `window`, not `document` (2026-09-29)
+
+Navigation-away detection (`ShopCard` map-jump fallback) registers `pagehide` to cancel a
+pending-jump timer. `pagehide` is dispatched on the global object (`window`); a listener on
+`document` silently never fires in some engines, so the fallback UI would show even on
+successful navigation. `visibilitychange` IS dispatched on `document` (and bubbles to
+`window`), so listening for both events on `window` is the reliable pairing.
+
+**Rule**: when watching for page-unload signals, attach `pagehide` to `window`;
+`visibilitychange` may be attached to either, but keep both listeners on the same target and
+remove them together.

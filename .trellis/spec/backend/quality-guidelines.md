@@ -68,3 +68,8 @@ Merchant-editable, customer-readable configuration (e.g. `shop_phone`, `home_tit
    values by falling back to a documented default (see `pickHomeServices` in H5
    `apps/customer/src/core/utils/home-services.ts` and its line-mirrored weapp twin in
    `apps/weapp/utils/format.js` — keep the two implementations byte-for-byte equivalent).
+5. **Normalize at rest, not only at the client**: if a value is only trimmed/normalized by the
+   admin UI before `PUT`, a direct API write can persist padded garbage that silently breaks
+   consumers (e.g. `amap_js_key` with spaces corrupts the JS API URL). When the stored value
+   feeds a URL or protocol, also normalize server-side in `SaveSetting` before the upsert
+   (see the `amap_js_key`/`amap_js_code` trim) and assert the stored form in tests.
