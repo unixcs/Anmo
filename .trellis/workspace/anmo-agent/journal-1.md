@@ -799,3 +799,23 @@ migration 015（service_tag/service_record 建表 + payment 重建 member_id→N
 ### Status
 
 [OK] **Completed**
+
+
+## Session 6: V2.2.0 版本收口与 yun1 生产部署
+<!-- trellis-session: v=2 fp=1f1d0dbd733c9d51 -->
+
+**Date**: 2026-09-30
+**Task**: V2.2.0 版本收口与 yun1 生产部署
+**Branch**: `main`
+
+### Summary
+
+CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署：docker build anmo-server:v2（镜像内 CGO=0 自编译）→ save|scp|load；admin --base=/admin-ui/ + customer dist staging 原子换装；部署前 backup-sqlite.sh 快照（anmo-20260930-004615.db）；docker-compose ANMO_SMS_MODE dev→off（关闭 P4 遗留的 dev 任意手机号+123456 登录洞，SMS 端点实测 410 SMS_DISABLED）；migration 014+015 自动应用（count=2，生产库原在 013——member 重建 phone 可空+password_hash、payment 重建 member_id NULL）。踩坑新增：server 容器 force-recreate 后容器 IP 变化，nginx 缓存旧上游 IP → 502，docker restart anmo-nginx 恢复（已写入 yun1 README 更新流程第 5 步）。冒烟全绿：healthz 200、admin 登录、/admin/service-tags 200（空表符合预期，商家自建标签）、/admin/walkin/settle 无 token 401（路由活）、H5 18090 200、admin-ui 18091 200 + 新 chunk 加载、外网可达、docker logs 0 error、-backup 快照（含 integrity_check）通过。生产写入类新功能（标签/记录/散客结算）未在产线造数——以临时库 44/44 矩阵为准。Tencent 机下次使用前 git pull --rebase 即可
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**
