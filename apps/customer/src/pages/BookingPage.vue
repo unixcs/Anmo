@@ -164,7 +164,7 @@ function pickPart(p: 'AM' | 'PM'): void {
 }
 
 // ---- 资料完善半屏提示（V2.2 R4）----
-// 去完善：已选存 sessionStorage，返回后恢复；不置跳过标记，完善前再次提交仍会提醒
+// 去完善资料：已选存 sessionStorage，返回后恢复；不置跳过标记，完善前再次提交仍会提醒
 function goProfileSheet(): void {
   profileSheet.value = false
   try {
@@ -184,8 +184,8 @@ function goProfileSheet(): void {
   router.push('/me/profile')
 }
 
-// 先跳过：置本地标记永久静默，继续原提交流程
-function skipProfileSheet(): void {
+// 立即预约：置静默标记继续原流程，下次不再提醒
+function bookNow(): void {
   localStorage.setItem('anmo.profile.bookingSkipped', '1')
   profileSheet.value = false
   void submit()
@@ -381,10 +381,10 @@ async function submit(): Promise<void> {
       </div>
       <!-- 资料完善半屏提示（V2.2 R4）：资料不全时首次点提交弹出，轻量不打断 -->
       <AppSheet :open="profileSheet" title="完善一下资料" @close="profileSheet = false">
-        <p class="sheet-body">填写手机号，方便技师联系您确认预约。</p>
+        <p class="sheet-body">先完善资料，店主更好安排；不填也可直接预约。</p>
         <div class="sheet-ops">
-          <AppButton variant="primary" block @click="goProfileSheet">去完善</AppButton>
-          <AppButton variant="ghost" block @click="skipProfileSheet">先跳过，继续预约</AppButton>
+          <AppButton variant="primary" block @click="bookNow">立即预约</AppButton>
+          <AppButton variant="ghost" block @click="goProfileSheet">去完善资料</AppButton>
         </div>
       </AppSheet>
     </template>

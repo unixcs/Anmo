@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../core/api/endpoints'
 import type { Member } from '../core/models/models'
 import { notify } from '../platform/notify/toast'
 import AppButton from '../components/ui/AppButton.vue'
+
+const router = useRouter()
 
 const member = ref<Member | null>(null)
 const name = ref('')
@@ -33,6 +36,10 @@ async function save(): Promise<void> {
     const res = await api.updateProfile(patch)
     member.value = res.member
     notify('已保存')
+    // 从预约弹层「去完善资料」进来时：保存后直接回预约页，草稿由 BookingPage onMounted takeDraft 恢复
+    if (sessionStorage.getItem('anmo.booking.draft')) {
+      router.push('/booking')
+    }
   } catch (e) {
     notify((e as Error).message)
   } finally {

@@ -11,7 +11,7 @@
 | pages/appointments | 我的预约 + 取消 + 改期抽屉 | `/api/appointments*` |
 | pages/cards | 会员卡 + 使用明细展开 | `/api/me/cards` `/api/me/cards/{id}/transactions` |
 | pages/qrcode | 会员码 `ANMO-MEMBER:<ulid>`（D21 门槛）+ 今日预约单码 `ANMO-APT:<ulid>` | `/api/me/*` `/api/appointments*` |
-| pages/login | 微信静默登录→短信绑定（plan §11） | `/api/auth/wx/login` `/api/auth/sms/*` `/api/auth/wx/bind` |
+| pages/login | 微信一键登录（openid 未绑定直建号发 Token，手机号撞号走 claim，D25/D27） | `/api/auth/wx/login` `/api/auth/wx/claim` |
 | pages/me / pages/about | 个人中心 / 门店信息（导航+拨号） | `/api/me/profile` `/api/settings` |
 
 分享闭环：所有业务页 `onShareAppMessage`；home/about 另有 `onShareTimeline`；`app.js onLaunch` 开启 `showShareMenu`。
@@ -26,29 +26,36 @@
    - 自测不要用 Windows 本机去连自己的 LAN IP（mirrored 下会 hairpin 超时，属假阴性）；用另一个 netns 验证：`docker exec anmo-mysql curl -s -o /dev/null -w '%{http_code}\n' http://<PC_IP>:8080/healthz` → 200 才算通。
    - 真机优先用「真机调试」；「预览」在部分版本会强制 request 合法域名校验。
 
+## 开发者工具联调
+
+面向店主/开发者自己的联调步骤。先说常见「旧包」三症状：**tabBar 少「服务」、登录页还是手机号+验证码、手机号占位符只显示一半** —— 三者同源，都是开发者工具里跑的旧版代码：当前代码登录页已是纯微信一键登录（无手机号/验证码表单），tabBar 四项齐全（首页/服务/预约/我的）。**重新导入 + 清缓存即消失**，不需要改任何代码。
+
+1. **重新导入项目**：项目目录 `/mnt/Projects/Anmo/apps/weapp`（Windows 侧开发者工具填 `\\wsl.localhost\<发行版>\mnt\Projects\Anmo\apps\weapp`）。AppID 选「测试号」即可跑通全流程。
+2. **先清缓存**：工具栏 → 清缓存 → 全部清除。这是修复旧包三症状的唯一操作。
+3. **放行请求域名**：详情 → 本地设置 → 勾选「不校验合法域名」。devtools 里 config.js 默认打 `http://127.0.0.1:8080`。
+4. **起后端**：WSL 里执行 `bash scripts/start-anmo.sh`，一条命令拉起后端 :8080 + 顾客 H5 :5173 + 商家端 :5174/5175。
+5. **登录为什么直接就成功（D24 dev 兜底）**：后端未配置 `wx.app_id` 时，登录走 dev 兜底，`openid = "dev:" + code`，首次登录同事务直建会员号并直发 Token（后端启动日志有警示）。**正式发布前必须在生产配置 `ANMO_WX_APPID` / `ANMO_WX_SECRET`**，dev 兜底禁止用于发布。
+6. **真机预览/真机调试**：走 `LAN_URL`（`config.js` 常量，需与电脑当前局域网 IP 一致，DHCP 变了要同步改），且 Windows 侧需放行 LAN→WSL 入站：`scripts/allow-wsl-lan.ps1`（管理员执行，`-Remove` 撤销）。
+7. **可选：不改代码覆盖后端地址**（含指向生产/其他机器）：开发者工具 Console 执行后重启小程序：
+
+   ```js
+   wx.setStorageSync('anmo.base_url', 'http://192.168.x.x:8080')
+   ```
+
+   storage 覆盖优先级最高（值非法自动忽略回落默认）；恢复默认用 `wx.removeStorageSync('anmo.base_url')`。注意：指向生产库的验收测试会写入**真实数据**，慎用。
+
 ## 验证
 
-零构建意味着没有 `tsc`/打包器兜底，所以改动后跑两层：
+零构建意味着没有 `tsc`/打包器兜底，改动后跑单测（无依赖，秒级，任何机器可跑）：
 
-1. **纯逻辑单测**（无依赖，秒级，任何机器可跑）：
-   ```bash
-   node apps/weapp/tools/unit.js
-   ```
-   覆盖 display 口径（`format.statusText/yuan/aptTime`）、流水符号方向（`REDEEM` 扣次显示 `-N`）、`trimPastSlots` 过期槽裁剪，以及 `slot-picker` 门槛（闭店/时段已过/余量为 0 不可选）——后者通过 `global.Component` 桩直接驱动组件逻辑。
-2. **IDE 端到端实测**（真机运行时，需微信开发者工具在 Windows 侧）：
-   ```bash
-   # 1) 后端在跑（:8080）+ MySQL 起来；2) 同步到 Windows 本地盘（IDE 不认 \\wsl.localhost 路径）
-   rsync -a --exclude node_modules apps/weapp/ /mnt/d/anmo-weapp-build/
-   # 3) 开自动化桥（先 quit 再起，否则端口不刷新）
-   cmd.exe /c "D:\\Program\\soft\\wechattools\\cli.bat quit"
-   cmd.exe /c "D:\\Program\\soft\\wechattools\\cli.bat auto --project D:\\anmo-weapp-build --auto-port 9420"
-   # 4) 11 个 stage：登录→首页→模糊预约→我的预约→取消→具体槽→今日单→核销码→卡→我的→关于
-   cd apps/weapp/tools && npm i --registry https://registry.npmmirror.com && node devtools-verify.js
-   ```
-   可用环境变量：`ANMO_MP_WS` / `ANMO_TEST_PHONE` / `ANMO_TEST_CODE`（dev 固定验证码）/ `ANMO_API_BASE`（默认 `http://127.0.0.1:8080`，用于"页面值=接口值"对账）/ `ANMO_SHOT_DIR`（截图落地，默认仓库 `.dev/shots/`）/ `ANMO_ATTEMPTS`（每 stage 重连次数）。失败返回非 0。
-   - **该 devtools 版本（2.02.2608070）自动化桥有会话衰变**（每连约 2-3 个命令后必断），所以脚本按 stage 逐个重连；若报 `page is not on top of page stack` 属桥问题，不是应用 bug。
-   - **自定义组件内部节点够不到**（`page.$('slot-picker')` 返回 null），因此对 `slot-picker` 的交互走受控回调 `page.callMethod('onPick', {detail})`，组件自身行为由 `unit.js` 覆盖。
-   - 原生弹窗用 `mp.mockWxMethod('showModal', {confirm:true})`，用完 `restoreWxMethod`。
+```bash
+node --test "apps/weapp/tests/*.test.js"
+```
+
+覆盖 `config.js` 的 BASE_URL 解析：storage 覆盖（`anmo.base_url`）优先、非法值（非 http(s)、含空白）忽略、devtools→LOOPBACK / 真机→LAN / 无 `wx` 环境兜底。
+注意：部分 Node 版本（如 WSL 下 v24）`node --test <目录>` 的目录形式会报 `MODULE_NOT_FOUND`，请用上面的 glob 形式。
+
+端到端实测（模拟器/真机）按上文「开发者工具联调」章节在微信开发者工具里人工操作。
 
 ## 发布前清单
 

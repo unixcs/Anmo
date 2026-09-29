@@ -1,0 +1,6 @@
+{"file": "AGENTS.md", "reason": "根约束：模块边界/禁止事项/冻结决策 D24 D27"}
+{"file": "apps/customer/src/pages/BookingPage.vue", "reason": "弹层按钮翻转：立即预约(primary)在上=提交+置跳过标记，去完善(ghost)在下=存草稿跳资料页"}
+{"file": "apps/customer/src/pages/ProfilePage.vue", "reason": "save() 成功后检测 sessionStorage anmo.booking.draft 存在则跳回 /booking（草稿由 BookingPage onMounted takeDraft 恢复）"}
+{"file": "apps/weapp/config.js", "reason": "BASE_URL 支持 wx storage 键 anmo.base_url 覆盖（合法 http(s) 才生效），默认逻辑不变"}
+{"file": "apps/weapp/README.md", "reason": "新增联调章节：重导入路径/清缓存/不校验合法域名/D24 dev 登录/真机 IP/覆盖 BASE_URL"}
+{"file": "scripts/start-anmo.sh", "reason": "尾部提示行改口径：H5 登录已是手机号+密码，短信验证码提示过时"}

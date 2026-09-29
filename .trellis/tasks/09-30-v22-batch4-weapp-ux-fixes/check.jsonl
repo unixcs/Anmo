@@ -1,0 +1,3 @@
+{"file": "AGENTS.md", "reason": "验收对照根约束与冻结决策"}
+{"file": "apps/customer/src/pages/BookingPage.vue", "reason": "检查按钮语义/跳过标记/草稿保存不回归"}
+{"file": "apps/customer/src/pages/ProfilePage.vue", "reason": "检查返回逻辑仅在有草稿时触发且不影响普通资料编辑"}
