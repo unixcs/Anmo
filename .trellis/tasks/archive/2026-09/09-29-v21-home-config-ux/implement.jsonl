@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端改动入口：content 模块 settings 校验与下发"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "后端质量规范"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "前端（H5/admin/weapp）改动入口"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质量规范"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性：两端 pickHomeServices 口径"}

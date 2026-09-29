@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查后端改动"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "检查前端改动"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层口径一致性检查"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "settings 校验错误码一致性"}
