@@ -757,3 +757,25 @@ Phase 11 E2E
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: V2.2 第二批：H5 密码登录体系
+<!-- trellis-session: v=2 fp=fc5a0242f61d8d5d -->
+
+**Date**: 2026-09-29
+**Task**: V2.2 第二批：H5 密码登录体系
+**Branch**: `main`
+
+### Summary
+
+migration 014 重建 member（phone 可空+password_hash）；H5 注册/登录；小程序纯微信登录（首登直建号，废除 D25 bind_ticket）；撞号密码认领 claim（空壳校验+转绑+删除，单事务）；设/重置 H5 密码；admin 重置会员密码+徽标；SMS 下线（dev 过渡/off 410，生产必须 off 关闭 dev 任意登录洞）；AGENTS.md D25 修订+D27 新增。check 修复 2 处（迁移 FK 断言缺口、validatePhone 口径）；Murphy live 23/23 实质全绿（3 个脚本期望口径问题已甄别）
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b434c5f` | feat(auth): V2.2 第二批——H5 手机号+密码登录体系（member 014 重建 phone 可空+password_hash、微信首登直建号、撞号密码认领 claim、设/重置 H5 密码、admin 重置、SMS 下线 off 模式） |
+
+### Status
+
+[OK] **Completed**
