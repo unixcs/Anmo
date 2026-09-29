@@ -16,22 +16,27 @@ if [ ! -x /tmp/anmo-bin ] || [ "$ROOT/server/cmd/anmo/main.go" -nt /tmp/anmo-bin
 fi
 
 # 3) 后端（已监听则跳过）
-if ! curl -sf -o /dev/null http://127.0.0.1:8080/healthz; then
+if ! curl -sf --max-time 2 -o /dev/null http://127.0.0.1:8080/healthz; then
   echo "[2/4] 启动后端 :8080（SQLite: server/data/anmo.db）..."
-  nohup /tmp/anmo-bin -config "$ROOT/server/config.example.yaml" \
-    >> /tmp/anmo-server.log 2>&1 &
+  # 后端必须以 server/ 为 cwd：config 里 DB 是相对路径 data/anmo.db，
+  # migrations 目录也按进程 cwd 解析（在项目根启动会报 no such file or directory）。
+  # DB 路径再显式绝对化兜底，SQLite 报 CANTOPEN(14) 即此因。
+  (cd "$ROOT/server" && \
+    ANMO_DB_PATH="$ROOT/server/data/anmo.db" \
+    nohup /tmp/anmo-bin -config "$ROOT/server/config.example.yaml" \
+    >> /tmp/anmo-server.log 2>&1 &)
   for i in $(seq 1 20); do
-    curl -sf -o /dev/null http://127.0.0.1:8080/healthz && break
+    curl -sf --max-time 2 -o /dev/null http://127.0.0.1:8080/healthz && break
     sleep 0.5
   done
-  curl -sf -o /dev/null http://127.0.0.1:8080/healthz \
+  curl -sf --max-time 2 -o /dev/null http://127.0.0.1:8080/healthz \
     || { echo "后端启动失败，查看 /tmp/anmo-server.log"; exit 1; }
 else
   echo "[3/4] 后端已在运行"
 fi
 
 # 4) H5 dev server（已监听则跳过）
-if ! curl -sf -o /dev/null http://127.0.0.1:5173/; then
+if ! curl -sf --max-time 2 -o /dev/null http://127.0.0.1:5173/; then
   echo "[4/6] 启动 H5 :5173 ..."
   nohup npm --prefix "$ROOT/apps/customer" run dev \
     >> /tmp/anmo-h5.log 2>&1 &
@@ -44,7 +49,7 @@ fi
 #    5174 HTTP  —— 电脑/内置浏览器日常使用
 #    5175 HTTPS —— 手机扫码核销专用（摄像头要求安全上下文，自签证书首次需信任）
 bash "$ROOT/scripts/gen-dev-cert.sh"
-if ! curl -sf -o /dev/null http://127.0.0.1:5174/; then
+if ! curl -sf --max-time 2 -o /dev/null http://127.0.0.1:5174/; then
   echo "[5/6] 启动商家端 :5174 (HTTP) ..."
   nohup npm --prefix "$ROOT/apps/admin" run dev \
     >> /tmp/anmo-admin.log 2>&1 &
@@ -52,7 +57,7 @@ if ! curl -sf -o /dev/null http://127.0.0.1:5174/; then
 else
   echo "[5/6] 商家端(HTTP)已在运行"
 fi
-if ! curl -skf -o /dev/null https://127.0.0.1:5175/; then
+if ! curl -skf --max-time 2 -o /dev/null https://127.0.0.1:5175/; then
   echo "[6/6] 启动商家端 :5175 (HTTPS，手机扫码) ..."
   nohup npm --prefix "$ROOT/apps/admin" run dev:https \
     >> /tmp/anmo-admin-https.log 2>&1 &
