@@ -713,3 +713,25 @@ Phase 11 E2E
 
 ## Next
 - 发布小程序前必须配置真实 wx.app_id/secret（D24）与正式短信通道；生产 compose 中 ANMO_SMS_MODE=dev 记得切换
+
+
+## Session 2: V2.1 首页可配置化与小程序体验修复
+<!-- trellis-session: v=2 fp=6891e93eaed25c05 -->
+
+**Date**: 2026-09-29
+**Task**: V2.1 首页可配置化与小程序体验修复
+**Branch**: `main`
+
+### Summary
+
+四项修复：①首页服务推荐商家可配置（admin 配置卡 + settings home_service_limit/ids + H5/weapp pickHomeServices 同构筛选，limit∈{2,4,6,8}默认6，ids 有序子集优先，自适应）②门店电话链路核验（代码已闭环，生产需后台填 shop_phone）+ weapp 关于页补营业时间 ③weapp .input 显式 48px 修复登录占位截断 ④weapp 新增服务 Tab（pages/services 四件套 + tabBar 4 项对齐 H5）+ 首页全部服务入口。验收：trellis-check 全绿；墨菲对抗式 17 API 检查 + 10 场景矩阵全绿（真实服务临时库）；go/vue-tsc 构建全绿。提交 e073b69/65dee67/fd296f8 + spec 两条沉淀。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fd296f8` | docs(spec): weapp 原生 input 显式高度陷阱 + 顾客可见 settings 配置模式约定 |
+
+### Status
+
+[OK] **Completed**
