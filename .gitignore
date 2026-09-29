@@ -6,3 +6,9 @@ __pycache__/
 scripts/certs/*
 !scripts/certs/.gitignore
 server/config.yaml
+server/data/
+data/
+backups/
+
+.dev/
+.qoder/

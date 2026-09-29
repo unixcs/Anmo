@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"anmo/server/internal/shared"
@@ -26,7 +27,7 @@ func (p *Provider) Get(ctx context.Context, id string) (*Appointment, error) {
 }
 
 // Detail returns one appointment with its service snapshot — admin single
-// fetch, used by the scan-settlement flow to resolve ANMO-APT codes.
+// fetch for appointment detail views.
 func (p *Provider) Detail(ctx context.Context, id string) (*AppointmentDetail, error) {
 	a, err := p.Get(ctx, id)
 	if err != nil {
@@ -72,7 +73,7 @@ func (p *Provider) ServingNow(ctx context.Context) (*ServingSlot, error) {
 // GetTx is the tx-joining read for settlement flows.
 func (p *Provider) GetTx(ctx context.Context, tx shared.Tx, id string) (*Appointment, error) {
 	a, err := scanAppointment(tx.QueryRowContext(ctx,
-		`SELECT `+aptColumns+` FROM appointment WHERE id = ? FOR UPDATE`, id))
+		`SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, shared.NotFound("APT_NOT_FOUND", "预约不存在")
 	}
@@ -98,7 +99,7 @@ func (p *Provider) MarkCompleted(ctx context.Context, tx shared.Tx, id, operator
 		return shared.Conflict("APT_BAD_TRANSITION", "预约当前状态不可结算完成")
 	}
 	_, err = tx.ExecContext(ctx,
-		`UPDATE appointment SET status = ?, completed_at = NOW() WHERE id = ? AND status = ?`,
+		`UPDATE appointment SET status = ?, completed_at = datetime('now','+8 hours') WHERE id = ? AND status = ?`,
 		StatusCompleted, id, a.Status)
 	if err != nil {
 		return shared.Server("APT_TRANSITION", err)
@@ -114,7 +115,7 @@ type listFilter struct {
 	keyword  string
 }
 
-func (p *Provider) queryList(ctx context.Context, f listFilter, limit, offset int) ([]*Appointment, int64, error) {
+func (p *Provider) queryList(ctx context.Context, f listFilter, limit, offset int, newestFirst bool) ([]*Appointment, int64, error) {
 	where := "1=1"
 	args := []any{}
 	if f.MemberID != "" {
@@ -126,7 +127,7 @@ func (p *Provider) queryList(ctx context.Context, f listFilter, limit, offset in
 		args = append(args, f.Status)
 	}
 	if f.Date != "" {
-		where += " AND scheduled_start >= ? AND scheduled_start < ? + INTERVAL 1 DAY"
+		where += " AND scheduled_start >= ? AND scheduled_start < datetime(?, '+1 day')"
 		args = append(args, f.Date, f.Date)
 	}
 	var total int64
@@ -134,9 +135,15 @@ func (p *Provider) queryList(ctx context.Context, f listFilter, limit, offset in
 		`SELECT COUNT(*) FROM appointment WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, shared.Server("APT_COUNT", err)
 	}
+	// 顾客列表 newest-first：分页截断时保住最新的预约（R1 审查 P1#4）；
+	// 后台按日期过滤的排班视图仍按时间升序。
+	order := " ORDER BY scheduled_start"
+	if newestFirst {
+		order = " ORDER BY scheduled_start DESC"
+	}
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT `+aptColumns+` FROM appointment WHERE `+where+
-			` ORDER BY scheduled_start LIMIT ? OFFSET ?`,
+		`SELECT `+aptColumns+` FROM appointment WHERE `+where+order+
+			` LIMIT ? OFFSET ?`,
 		append(args, limit, offset)...)
 	if err != nil {
 		return nil, 0, shared.Server("APT_LIST", err)
@@ -179,7 +186,7 @@ func (p *Provider) decorateDayParts(ctx context.Context, list []*Appointment) {
 
 // ListMine returns a customer's appointments (newest start first).
 func (p *Provider) ListMine(ctx context.Context, memberID, status string, page shared.PageParams) ([]*Appointment, int64, error) {
-	return p.queryList(ctx, listFilter{MemberID: memberID, Status: status}, page.Limit(), page.Offset())
+	return p.queryList(ctx, listFilter{MemberID: memberID, Status: status}, page.Limit(), page.Offset(), true)
 }
 
 // GetMine returns a customer's own appointment (no internal fields leak is
@@ -197,7 +204,7 @@ func (p *Provider) GetMine(ctx context.Context, memberID, id string) (*Appointme
 
 // ListAdmin returns appointments with filters for the backoffice.
 func (p *Provider) ListAdmin(ctx context.Context, status, date string, page shared.PageParams) ([]*Appointment, int64, error) {
-	return p.queryList(ctx, listFilter{Status: status, Date: date}, page.Limit(), page.Offset())
+	return p.queryList(ctx, listFilter{Status: status, Date: date}, page.Limit(), page.Offset(), false)
 }
 
 // TodaySummary is the workbench header (plan §73).
@@ -240,6 +247,36 @@ func (p *Provider) ServicesOf(ctx context.Context, aptID string) ([]*Appointment
 	return out, nil
 }
 
+// ServicesOfMany batch-loads service snapshots for several appointments in
+// one query — list endpoints attach snapshots so customers see service names
+// without a detail round-trip per row.
+func (p *Provider) ServicesOfMany(ctx context.Context, aptIDs []string) (map[string][]*AppointmentService, error) {
+	out := make(map[string][]*AppointmentService, len(aptIDs))
+	if len(aptIDs) == 0 {
+		return out, nil
+	}
+	q := `SELECT id, appointment_id, service_id, service_name_snapshot, duration_minutes_snapshot, price_snapshot, quantity
+		 FROM appointment_service WHERE appointment_id IN (` +
+		strings.Repeat("?,", len(aptIDs)-1) + `?)`
+	args := make([]any, len(aptIDs))
+	for i, id := range aptIDs {
+		args[i] = id
+	}
+	rows, err := p.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, shared.Server("APT_SERVICE_QUERY", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		s := &AppointmentService{}
+		if err := rows.Scan(&s.ID, &s.AppointmentID, &s.ServiceID, &s.NameSnapshot, &s.DurationSnapshot, &s.PriceSnapshot, &s.Quantity); err != nil {
+			return nil, shared.Server("APT_SERVICE_SCAN", err)
+		}
+		out[s.AppointmentID] = append(out[s.AppointmentID], s)
+	}
+	return out, nil
+}
+
 // ServicesOfTx is the tx-joining snapshot read for settlement flows (D6).
 func (p *Provider) ServicesOfTx(ctx context.Context, tx shared.Tx, aptID string) ([]*AppointmentService, error) {
 	rows, err := tx.QueryContext(ctx,
@@ -265,7 +302,7 @@ func (p *Provider) Today(ctx context.Context, date string) (*TodaySummary, []*Ap
 	if date == "" {
 		date = shared.NowShanghai().Format("2006-01-02")
 	}
-	where := `scheduled_start >= ? AND scheduled_start < ? + INTERVAL 1 DAY`
+	where := `scheduled_start >= ? AND scheduled_start < datetime(?, '+1 day')`
 	args := []any{date, date}
 	rows, err := p.db.QueryContext(ctx,
 		`SELECT `+aptColumns+` FROM appointment WHERE `+where+` ORDER BY scheduled_start`, args...)

@@ -122,8 +122,9 @@ func TestDormantBoundary(t *testing.T) {
 
 	// mbr1 just created (0 days old) → NOT dormant at 60 days
 	// mbr2: backdate creation 61 days → dormant
+	backdate := shared.NowShanghai().AddDate(0, 0, -61).Format("2006-01-02 15:04:05")
 	if _, err := e.p.db.ExecContext(ctx,
-		`UPDATE member SET created_at = NOW() - INTERVAL 61 DAY WHERE id = ?`, e.mbr2); err != nil {
+		`UPDATE member SET created_at = ? WHERE id = ?`, backdate, e.mbr2); err != nil {
 		t.Fatalf("backdate: %v", err)
 	}
 	members, err := e.p.members.DormantMembers(ctx, 60)
@@ -135,7 +136,7 @@ func TestDormantBoundary(t *testing.T) {
 	}
 	// visited recently → not dormant
 	if _, err := e.p.db.ExecContext(ctx,
-		`UPDATE member SET last_visit_at = NOW() WHERE id = ?`, e.mbr2); err != nil {
+		`UPDATE member SET last_visit_at = datetime('now','+8 hours') WHERE id = ?`, e.mbr2); err != nil {
 		t.Fatalf("visit: %v", err)
 	}
 	members, err = e.p.members.DormantMembers(ctx, 60)

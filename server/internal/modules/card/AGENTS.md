@@ -9,7 +9,7 @@ card_template, card_service_rule（D4 挂模板级）, member_card, card_transac
 ## 公开 API（api.go）
 - 模板：TemplateCRUD、SetServiceRules
 - 顾客卡：`IssueCard(ctx, tx, memberID, templateID, operatorID)`、`Adjust(ctx, tx, cardID, delta, remark, operatorID)`、`Cancel(ctx, tx, cardID, operatorID)`
-- 核销协作：`LockForRedeem(ctx, tx, cardID)`（SELECT ... FOR UPDATE）、`ApplyRedeem(ctx, tx, cardID, quantity, ref)`（扣次+REDEEM 流水，返回 before/after）、`ApplyReversal(ctx, tx, cardID, quantity, ref)`（恢复+REVERSAL 流水）
+- 核销协作：`LockForRedeem(ctx, tx, cardID)`（事务内读卡；SQLite 单写者模型下写事务自带排他性）、`ApplyRedeem(ctx, tx, cardID, quantity, ref)`（扣次+REDEEM 流水，返回 before/after）、`ApplyReversal(ctx, tx, cardID, quantity, ref)`（恢复+REVERSAL 流水）
 - 查询：`ListByMember / Transactions(cardID) / UsableCards(ctx, memberID, serviceID)`
 
 ## 事务规则

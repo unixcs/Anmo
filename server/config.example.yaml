@@ -1,9 +1,10 @@
 server:
   addr: ":8080"
 
-mysql:
-  # 时区与多语句为迁移所需；multiStatements 供 migration runner 使用
-  dsn: "anmo:anmo-dev-2026@tcp(127.0.0.1:33306)/anmo?parseTime=true&loc=Asia%2FShanghai&time_zone=%27%2B08%3A00%27&charset=utf8mb4&multiStatements=true"
+database:
+  # SQLite 数据文件路径（2026-09-28 起，MySQL 已退役）。
+  # WAL 模式会产生 -wal/-shm 伴生文件；部署时把整个目录挂卷并纳入备份。
+  path: "data/anmo.db"
 
 auth:
   jwt_secret: "change-me-in-production"

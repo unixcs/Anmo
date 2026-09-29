@@ -1,27 +1,22 @@
+# Anmo 本地/集成 compose —— SQLite 版（2026-09-28 起，MySQL 容器已移除）。
+# 开发日常：后端 `go run ./cmd/anmo`（ANMO_DB_PATH 指向本地文件）；
+# 此文件用于容器形态的自测与演示部署，数据与备份都是宿主机目录挂载。
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: anmo-mysql
-    restart: unless-stopped
+  server:
+    build: ./server
+    image: anmo-server:sqlite
+    container_name: anmo-server
     environment:
-      MYSQL_ROOT_PASSWORD: anmo-root-2026
-      MYSQL_DATABASE: anmo
-      MYSQL_USER: anmo
-      MYSQL_PASSWORD: anmo-dev-2026
+      ANMO_SERVER_ADDR: ":8080"
+      ANMO_DB_PATH: "/data/anmo.db"
+      ANMO_AUTH_JWT_SECRET: "change-me-in-production"
+      ANMO_AUTH_ADMIN_PHONE: "13800000000"
+      ANMO_AUTH_ADMIN_PASSWORD_SEED: "anmo-admin-2026"
+      ANMO_SMS_MODE: "dev"
       TZ: Asia/Shanghai
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-time-zone=+08:00
-    ports:
-      - "33306:3306"
     volumes:
-      - anmo-mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-panmo-root-2026"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
-volumes:
-  anmo-mysql-data:
+      - ./data:/data          # SQLite 主文件 + WAL/SHM 伴生文件
+      - ./backups:/backups    # 定时快照（scripts/backup-sqlite.sh）
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

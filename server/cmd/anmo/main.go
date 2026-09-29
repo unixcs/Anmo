@@ -20,6 +20,7 @@ import (
 func main() {
 	cfgPath := flag.String("config", "", "path to config.yaml")
 	migrateOnly := flag.Bool("migrate", false, "apply migrations and exit")
+	backupTo := flag.String("backup", "", "write a consistent snapshot (VACUUM INTO) to this path and verify it, then exit")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -29,10 +30,19 @@ func main() {
 	}
 	log := logger.New(cfg.Log.Level)
 
-	db, err := database.Open(cfg.MySQL.DSN)
+	db, err := database.Open(cfg.Database.Path)
 	if err != nil {
 		log.Error("open database", "err", err)
 		os.Exit(1)
+	}
+
+	if *backupTo != "" {
+		if err := database.Backup(db, *backupTo); err != nil {
+			log.Error("backup", "err", err)
+			os.Exit(1)
+		}
+		log.Info("backup ok", "path", *backupTo)
+		return
 	}
 
 	applied, err := database.Migrate(context.Background(), db, "migrations")

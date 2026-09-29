@@ -12,9 +12,10 @@ import (
 
 type Config struct {
 	Server   Server   `yaml:"server"`
-	MySQL    MySQL    `yaml:"mysql"`
+	Database Database `yaml:"database"`
 	Auth     Auth     `yaml:"auth"`
 	SMS      SMS      `yaml:"sms"`
+	Wx       Wx       `yaml:"wx"`
 	Log      Log      `yaml:"log"`
 	Business Business `yaml:"business"`
 }
@@ -23,8 +24,10 @@ type Server struct {
 	Addr string `yaml:"addr"`
 }
 
-type MySQL struct {
-	DSN string `yaml:"dsn"`
+// Database — storage location. Since 2026-09-28 the storage layer is a single
+// SQLite file (WAL mode); MySQL has been retired.
+type Database struct {
+	Path string `yaml:"path"`
 }
 
 type Auth struct {
@@ -38,6 +41,15 @@ type Auth struct {
 type SMS struct {
 	Mode    string `yaml:"mode"` // dev: fixed code 123456
 	CodeTTL int    `yaml:"code_ttl_seconds"`
+}
+
+// Wx carries WeChat mini-program credentials (V2, plan §11). With AppID empty
+// the wx login endpoint falls back to dev openids (D24) — configure real
+// credentials before publishing the mini-program.
+type Wx struct {
+	AppID   string `yaml:"app_id"`
+	Secret  string `yaml:"secret"`
+	APIBase string `yaml:"api_base"` // code2session base, overridable for tests
 }
 
 type Log struct {
@@ -59,7 +71,7 @@ type Business struct {
 }
 
 // Load reads path (optional) and applies ANMO_SECTION_KEY env overrides,
-// e.g. ANMO_MYSQL_DSN, ANMO_AUTH_JWTSECRET, ANMO_SERVER_ADDR.
+// e.g. ANMO_DB_PATH, ANMO_AUTH_JWTSECRET, ANMO_SERVER_ADDR.
 func Load(path string) (*Config, error) {
 	cfg := &Config{}
 	if path != "" {
@@ -90,12 +102,14 @@ func applyEnv(cfg *Config) {
 // envOverrides maps ANMO_* environment variables to config setters.
 var envOverrides = map[string]func(*Config, string){
 	"ANMO_SERVER_ADDR":                   func(c *Config, v string) { c.Server.Addr = v },
-	"ANMO_MYSQL_DSN":                     func(c *Config, v string) { c.MySQL.DSN = v },
+	"ANMO_DB_PATH":                       func(c *Config, v string) { c.Database.Path = v },
 	"ANMO_AUTH_JWT_SECRET":               func(c *Config, v string) { c.Auth.JWTSecret = v },
 	"ANMO_AUTH_JWTSECRET":                func(c *Config, v string) { c.Auth.JWTSecret = v },
 	"ANMO_AUTH_ADMIN_PHONE":              func(c *Config, v string) { c.Auth.AdminPhone = v },
 	"ANMO_AUTH_ADMIN_PASSWORD_SEED":      func(c *Config, v string) { c.Auth.AdminPasswordSeed = v },
 	"ANMO_SMS_MODE":                      func(c *Config, v string) { c.SMS.Mode = v },
+	"ANMO_WX_APPID":                      func(c *Config, v string) { c.Wx.AppID = v },
+	"ANMO_WX_SECRET":                     func(c *Config, v string) { c.Wx.Secret = v },
 	"ANMO_LOG_LEVEL":                     func(c *Config, v string) { c.Log.Level = v },
 	"ANMO_BUSINESS_OPEN_TIME":            func(c *Config, v string) { c.Business.OpenTime = v },
 	"ANMO_BUSINESS_CLOSE_TIME":           func(c *Config, v string) { c.Business.CloseTime = v },
@@ -131,6 +145,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.SMS.CodeTTL == 0 {
 		cfg.SMS.CodeTTL = 300
+	}
+	if cfg.Wx.APIBase == "" {
+		cfg.Wx.APIBase = "https://api.weixin.qq.com"
 	}
 	if cfg.Log.Level == "" {
 		cfg.Log.Level = "info"
@@ -168,8 +185,8 @@ func setDefaults(cfg *Config) {
 }
 
 func validate(cfg *Config) error {
-	if cfg.MySQL.DSN == "" {
-		return fmt.Errorf("mysql.dsn is required")
+	if cfg.Database.Path == "" {
+		return fmt.Errorf("database.path is required")
 	}
 	if cfg.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret is required")

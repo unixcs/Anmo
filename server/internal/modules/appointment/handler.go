@@ -59,7 +59,7 @@ func (p *Provider) handleCustomerReschedule(w http.ResponseWriter, r *http.Reque
 		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
 		return
 	}
-	a, err := p.Reschedule(r.Context(), pr.ActorID, r.PathValue("id"), req.bookingReq(), true)
+	a, err := p.Reschedule(r.Context(), pr.ActorID, r.PathValue("id"), req.bookingReq(), true, "")
 	if err != nil {
 		shared.Fail(w, err)
 		return
@@ -130,7 +130,22 @@ func (p *Provider) handleCustomerList(w http.ResponseWriter, r *http.Request) {
 		shared.Fail(w, err)
 		return
 	}
-	shared.PageOK(w, list, total, shared.PageFromRequest(r))
+	ids := make([]string, len(list))
+	for i, a := range list {
+		ids[i] = a.ID
+	}
+	svcMap, err := p.ServicesOfMany(r.Context(), ids)
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	out := make([]*AppointmentWithServices, len(list))
+	for i, a := range list {
+		// §107：店主内部备注永不下发顾客端
+		a.InternalNote = ""
+		out[i] = &AppointmentWithServices{Appointment: *a, Services: svcMap[a.ID]}
+	}
+	shared.PageOK(w, out, total, shared.PageFromRequest(r))
 }
 
 func (p *Provider) handleCustomerGet(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +155,8 @@ func (p *Provider) handleCustomerGet(w http.ResponseWriter, r *http.Request) {
 		shared.Fail(w, err)
 		return
 	}
+	// §107：店主内部备注永不下发顾客端
+	a.InternalNote = ""
 	svcs, _ := p.ServicesOf(r.Context(), a.ID)
 	shared.OK(w, map[string]any{"appointment": a, "services": svcs})
 }
@@ -192,7 +209,7 @@ func (p *Provider) handleAdminReschedule(w http.ResponseWriter, r *http.Request)
 		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
 		return
 	}
-	a, err := p.Reschedule(r.Context(), "", r.PathValue("id"), req.bookingReq(), false)
+	a, err := p.Reschedule(r.Context(), "", r.PathValue("id"), req.bookingReq(), false, operatorOf(r))
 	if err != nil {
 		shared.Fail(w, err)
 		return

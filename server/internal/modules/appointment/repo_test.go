@@ -175,11 +175,11 @@ func TestRescheduleExcludesSelf(t *testing.T) {
 	}
 	// a reschedules onto its own current time is a no-op conflict-wise but
 	// moving onto 15:00 (b's slot) must fail
-	if _, err := e.p.Reschedule(ctx, e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 5, 15, 0)}, true); !shared.Is(err, "APT_SLOT_FULL") {
+	if _, err := e.p.Reschedule(ctx, e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 5, 15, 0)}, true, ""); !shared.Is(err, "APT_SLOT_FULL") {
 		t.Fatalf("want conflict, got %v", err)
 	}
 	// moving to a free slot works
-	moved, err := e.p.Reschedule(ctx, e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 5, 16, 0)}, true)
+	moved, err := e.p.Reschedule(ctx, e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 5, 16, 0)}, true, "")
 	if err != nil {
 		t.Fatalf("reschedule: %v", err)
 	}

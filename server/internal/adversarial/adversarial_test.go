@@ -403,27 +403,28 @@ func TestREVEAL_A4_PayIgnoresIdempotencyKey(t *testing.T) {
 
 // A5（BLOCKER 假设）：SettleByPay 的 VALID 检查是无锁 check-then-insert，
 // 并发下可产生一个预约两笔 VALID 收款，违反 D1。
-// 先用两条手动事务确定性复现代码中的确切语句序列；再用真实并发尝试。
+// SQLite 重写说明：BEGIN IMMEDIATE 下两个写事务无法同时存活（第二个在 BEGIN
+// 处排队），MySQL MVCC 允许的"并发快照交错"在结构上即被排除——这本身就是修复。
+// 因此确定性部分验证两件事：(1) 后继写者必然看到前一笔已提交状态（check 在锁内
+// 读到真值）；(2) 即使绕过应用层检查，uk_payment_valid_lock 仍拦截第二笔 VALID。
+// 再用真实并发（10 轮 × 3 协程）验证端到端恰好一笔成功。
 func TestREVEAL_A5_ConcurrentCashDoubleInsert(t *testing.T) {
 	e := newEnv(t)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 12, 0)
 	ctx := e.ctx()
 
-	// —— 确定性复现（复刻 settle.go:181-200 的语句序列）——
-	tx1, err1 := e.db.BeginTx(ctx, nil)
-	tx2, err2 := e.db.BeginTx(ctx, nil)
-	if err1 != nil || err2 != nil {
-		t.Fatalf("begin: %v %v", err1, err2)
+	// —— 写者 1：读 0 → 插入 VALID → 提交 ——
+	tx1, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin t1: %v", err)
 	}
-	for _, tx := range []shared.Tx{tx1, tx2} {
-		var n int
-		if err := tx.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM payment WHERE appointment_id = ? AND status = 'VALID'`, aptID).Scan(&n); err != nil {
-			t.Fatalf("count: %v", err)
-		}
-		if n != 0 {
-			t.Fatalf("环境脏: %d", n)
-		}
+	var n int
+	if err := tx1.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM payment WHERE appointment_id = ? AND status = 'VALID'`, aptID).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("环境脏: %d", n)
 	}
 	if _, err := tx1.ExecContext(ctx,
 		`INSERT INTO payment (id, appointment_id, member_id, amount, method, status, reference_no, remark)
@@ -433,6 +434,19 @@ func TestREVEAL_A5_ConcurrentCashDoubleInsert(t *testing.T) {
 	}
 	if err := tx1.Commit(); err != nil {
 		t.Fatalf("t1 commit: %v", err)
+	}
+
+	// —— 写者 2（在 t1 提交后必然才能拿到写锁）：读到 t1，直接插第二笔 VALID 被约束拦截 ——
+	tx2, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin t2: %v", err)
+	}
+	if err := tx2.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM payment WHERE appointment_id = ? AND status = 'VALID'`, aptID).Scan(&n); err != nil {
+		t.Fatalf("count2: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("后继写者未看到已提交的第一笔收款（count=%d）——check-then-insert 将失效", n)
 	}
 	if _, err := tx2.ExecContext(ctx,
 		`INSERT INTO payment (id, appointment_id, member_id, amount, method, status, reference_no, remark)
@@ -644,7 +658,7 @@ func TestGUARD_A9_ConcurrentCreateAndRescheduleSameSlot(t *testing.T) {
 	out := make(chan res, 3)
 	go func() {
 		<-start
-		_, err := e.apt.Reschedule(ctx, e.mbrA, mover, appointment.BookingReq{StartTime: target}, true)
+		_, err := e.apt.Reschedule(ctx, e.mbrA, mover, appointment.BookingReq{StartTime: target}, true, "")
 		out <- res{"reschedule", err}
 	}()
 	go func() {
@@ -678,25 +692,23 @@ func TestGUARD_A9_ConcurrentCreateAndRescheduleSameSlot(t *testing.T) {
 	}
 }
 
-// A10：改期目标时段在 GET_LOCK 等待期间被第三方占用 → 改期必须失败。
-// 构造：先抢走日历锁，插入一条已提交的冲突预约，再放锁 —— 等待中的改期
-// 在拿到锁后必须重新检查冲突。
+// A10：改期目标时段在写锁等待期间被第三方占用 → 改期必须失败。
+// SQLite 构造（等价原 GET_LOCK 场景）：第三方先开写事务（BEGIN IMMEDIATE
+// 立即持有写锁），改期在 BEGIN 处排队；期间第三方落库冲突预约并提交——
+// 放锁后改期拿到写锁，其事务内冲突检查必须读到已提交的冲突行。
 func TestGUARD_A10_RescheduleConflictAfterLockWait(t *testing.T) {
 	e := newEnv(t)
 	mover := e.aptCreate(t, e.mbrA, e.svc60, 2, 10, 0)
 	target := e.slot(2, 16, 0)
 	targetEnd := endOf(target, 60)
 
-	conn, err := e.db.Conn(e.ctx())
+	// 第三方写事务：持有 SQLite 唯一写锁
+	tx, err := e.db.BeginTx(e.ctx(), nil)
 	if err != nil {
-		t.Fatalf("conn: %v", err)
+		t.Fatalf("begin rival tx: %v", err)
 	}
-	defer conn.Close()
-	if _, err := conn.ExecContext(e.ctx(), `SELECT GET_LOCK('anmo:appointment:calendar', 0)`); err != nil {
-		t.Fatalf("get lock: %v", err)
-	}
-	// 第三方预约（绕过 provider 直接落库、立即提交）
-	if _, err := conn.ExecContext(e.ctx(),
+	// 第三方预约（未提交，占住写锁）
+	if _, err := tx.ExecContext(e.ctx(),
 		`INSERT INTO appointment (id, appointment_no, member_id, scheduled_start, scheduled_end, status)
 		 VALUES (?,?,?,?,?, 'WAITING')`,
 		shared.NewID(), fmt.Sprintf("APT%sX%d", shared.NowShanghai().Format("20060102"), 999), e.mbrB, target, targetEnd); err != nil {
@@ -707,12 +719,12 @@ func TestGUARD_A10_RescheduleConflictAfterLockWait(t *testing.T) {
 	go func() {
 		c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
-		_, err := e.apt.Reschedule(c, e.mbrA, mover, appointment.BookingReq{StartTime: target}, true)
+		_, err := e.apt.Reschedule(c, e.mbrA, mover, appointment.BookingReq{StartTime: target}, true, "")
 		res <- err
 	}()
-	time.Sleep(300 * time.Millisecond) // 让改期进入 GET_LOCK 等待
-	if _, err := conn.ExecContext(context.Background(), `SELECT RELEASE_LOCK('anmo:appointment:calendar')`); err != nil {
-		t.Fatalf("release: %v", err)
+	time.Sleep(300 * time.Millisecond) // 让改期进入 BEGIN IMMEDIATE 写锁等待
+	if err := tx.Commit(); err != nil { // 提交即放锁，冲突行同时可见
+		t.Fatalf("commit rival: %v", err)
 	}
 	if err := <-res; err == nil {
 		t.Errorf("REVEALED：锁等待期间被占用的时段，改期仍然成功（冲突检查未在锁后执行）")
@@ -779,7 +791,7 @@ func TestGUARD_A12_BusinessHourBoundaries(t *testing.T) {
 	}
 	// 改期路径同样受 D15 约束
 	m := e.aptCreate(t, e.mbrA, e.svc60, 3, 10, 0)
-	if _, err := e.apt.Reschedule(ctx, e.mbrA, m, appointment.BookingReq{StartTime: e.slot(3, 23, 0)}, false); !shared.Is(err, "APT_OUT_OF_HOURS") {
+	if _, err := e.apt.Reschedule(ctx, e.mbrA, m, appointment.BookingReq{StartTime: e.slot(3, 23, 0)}, false, "admin"); !shared.Is(err, "APT_OUT_OF_HOURS") {
 		t.Errorf("改期到 23:00 未被营业时间拦截: %v", err)
 	}
 }
@@ -876,8 +888,9 @@ func TestREVEAL_A16_ReverseRevivesExpiredCard(t *testing.T) {
 		t.Fatalf("settle: %v", err)
 	}
 	// 让卡过期（valid_until 置为昨天）并触发 sweep
+	yesterday := shared.NowShanghai().AddDate(0, 0, -1).Format("2006-01-02")
 	if _, err := e.db.ExecContext(ctx,
-		`UPDATE member_card SET valid_until = DATE_SUB(CURDATE(), INTERVAL 1 DAY) WHERE id = ?`, cardID); err != nil {
+		`UPDATE member_card SET valid_until = ? WHERE id = ?`, yesterday, cardID); err != nil {
 		t.Fatalf("expire: %v", err)
 	}
 	if _, err := e.cards.SweepExpired(ctx); err != nil {

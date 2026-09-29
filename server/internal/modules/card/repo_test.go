@@ -215,6 +215,39 @@ func TestAdjustReactivatesUsedUp(t *testing.T) {
 	}
 }
 
+func TestAdjustDrainToZeroMarksUsedUp(t *testing.T) {
+	e := newCardEnv(t)
+	ctx := context.Background()
+
+	// 调整扣到 0 与核销同口径（D13）：ACTIVE → USED_UP
+	c, err := e.p.Adjust(ctx, e.card, -10, "扣完", "op-1")
+	if err != nil {
+		t.Fatalf("adjust down: %v", err)
+	}
+	if c.RemainingCount != 0 || c.Status != "USED_UP" {
+		t.Fatalf("want USED_UP/0 after adjust, got %s/%d", c.Status, c.RemainingCount)
+	}
+	// 加回后复活
+	c, err = e.p.Adjust(ctx, e.card, 1, "补次", "op-1")
+	if err != nil {
+		t.Fatalf("adjust up: %v", err)
+	}
+	if c.Status != "ACTIVE" || c.RemainingCount != 1 {
+		t.Fatalf("want ACTIVE/1, got %s/%d", c.Status, c.RemainingCount)
+	}
+	// EXPIRED 不因调整复活（D18 同口径）
+	if _, err := e.p.db.ExecContext(ctx, `UPDATE member_card SET status='EXPIRED' WHERE id=?`, e.card); err != nil {
+		t.Fatal(err)
+	}
+	c, err = e.p.Adjust(ctx, e.card, 1, "过期后补", "op-1")
+	if err != nil {
+		t.Fatalf("adjust expired: %v", err)
+	}
+	if c.Status != "EXPIRED" {
+		t.Fatalf("expired card must not reactivate, got %s", c.Status)
+	}
+}
+
 func TestUsableCardsFiltering(t *testing.T) {
 	e := newCardEnv(t)
 	ctx := context.Background()

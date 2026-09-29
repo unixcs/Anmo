@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 
 	"anmo/server/internal/shared"
 )
@@ -61,8 +60,7 @@ func (p *Provider) CreateTemplate(ctx context.Context, in NewTemplate) (*Templat
 		 VALUES (?,?,?,?,?,?,?,?)`,
 		t.ID, t.Name, t.Type, t.TotalCount, t.ValidityType, t.ValidFrom, t.ValidUntil, t.PriceCents)
 	if err != nil {
-		var me *mysql.MySQLError
-		if errors.As(err, &me) && me.Number == 1062 {
+		if shared.IsDupKey(err) {
 			return nil, shared.Conflict("CARD_TEMPLATE_NAME_EXISTS", "模板名称已存在")
 		}
 		return nil, shared.Server("CARD_TEMPLATE_INSERT", err)
@@ -141,7 +139,7 @@ func (p *Provider) SetServiceRules(ctx context.Context, templateID string, servi
 		}
 		for _, sid := range serviceIDs {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT IGNORE INTO card_service_rule (id, card_template_id, service_id) VALUES (?,?,?)`,
+				`INSERT OR IGNORE INTO card_service_rule (id, card_template_id, service_id) VALUES (?,?,?)`,
 				shared.NewID(), templateID, sid); err != nil {
 				return shared.Server("CARD_RULE_SET", err)
 			}

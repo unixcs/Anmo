@@ -90,4 +90,47 @@ func (p *Provider) handleSMSVerify(w http.ResponseWriter, r *http.Request) {
 	shared.OK(w, map[string]string{"token": token, "member_id": memberID})
 }
 
+// handleWxLogin — V2 小程序登录（公开）：code → 已绑定 openid 直发顾客 Token，
+// 未绑定返回 bind_ticket（D25）。这是 root 公开路由，与 SMS 同级。
+func (p *Provider) handleWxLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	token, memberID, ticket, needsBind, err := p.WxLogin(r.Context(), req.Code)
+	if err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	if needsBind {
+		shared.OK(w, map[string]any{"needs_bind": true, "bind_ticket": ticket})
+		return
+	}
+	shared.OK(w, map[string]any{"token": token, "member_id": memberID})
+}
+
+// handleWxBind — 顾客持 Token + bind_ticket 绑定微信（顾客鉴权路由）。
+func (p *Provider) handleWxBind(w http.ResponseWriter, r *http.Request) {
+	pr, ok := middleware.PrincipalFrom(r.Context())
+	if !ok || pr.ActorType != "CUSTOMER" {
+		shared.Unauthorized("请先登录").Write(w)
+		return
+	}
+	var req struct {
+		BindTicket string `json:"bind_ticket"`
+	}
+	if err := shared.DecodeJSON(r, &req); err != nil {
+		shared.BadRequest("BAD_JSON", "请求格式错误").Write(w)
+		return
+	}
+	if err := p.WxBind(r.Context(), pr.ActorID, req.BindTicket); err != nil {
+		shared.Fail(w, err)
+		return
+	}
+	shared.OK(w, map[string]bool{"bound": true})
+}
+
 var _ = shared.OK

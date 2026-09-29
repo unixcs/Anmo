@@ -6,6 +6,8 @@ package identity
 
 import (
 	"log/slog"
+	"net/http"
+	"time"
 
 	"anmo/server/internal/config"
 
@@ -22,6 +24,7 @@ type Provider struct {
 	tokens  *tokenService
 	sms     *smsStore
 	sender  smsSender
+	wxHTTP  *http.Client
 }
 
 // New builds the module Provider. Dependencies are injected by main.
@@ -33,6 +36,7 @@ func New(db shared.DB, cfg *config.Config, members *member.Provider, log *slog.L
 		tokens:  &tokenService{secret: []byte(cfg.Auth.JWTSecret)},
 		sms:     newSMSStore(),
 		sender:  devSender{log: log},
+		wxHTTP:  &http.Client{Timeout: 10 * time.Second},
 	}
 }
 

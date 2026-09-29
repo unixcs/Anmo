@@ -1,30 +1,18 @@
 // Package testsupport provides DB-backed test scaffolding shared by module
 // tests. It is a test-only dependency (no production imports).
+//
+// 2026-09-28 存储层迁移：每个测试获得一个一次性 SQLite 文件库（t.TempDir），
+// 迁移后即用即弃——不再依赖外部 MySQL DSN，测试在任何机器上都能跑。
 package testsupport
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql"
-
 	"anmo/server/internal/database"
-	"anmo/server/internal/shared"
 )
-
-// DSN returns the integration-test MySQL DSN or skips the test.
-func DSN(t *testing.T) string {
-	t.Helper()
-	dsn := os.Getenv("ANMO_TEST_MYSQL_DSN")
-	if dsn == "" {
-		t.Skip("ANMO_TEST_MYSQL_DSN not set; skipping DB test")
-	}
-	return dsn
-}
 
 // findMigrationsDir walks up from the working directory until it finds
 // server/migrations (identified by its first migration file).
@@ -45,35 +33,16 @@ func findMigrationsDir(t *testing.T) string {
 	return ""
 }
 
-// withSchema injects the database name into a DSN of the form
-// user:pass@tcp(host:port)/?params (replacing the empty dbname).
-func withSchema(dsn, schema string) string {
-	i := strings.Index(dsn, "?")
-	if i < 0 {
-		return strings.TrimRight(dsn, "/") + "/" + schema
-	}
-	return dsn[:i] + schema + dsn[i:]
-}
-
-// NewSchemaDB creates a throwaway database, applies all migrations and returns
-// a pool bound to it (database name carried by the DSN so every pooled
-// connection lands in the right schema).
+// NewSchemaDB creates a throwaway SQLite database in t.TempDir(), applies all
+// migrations and returns the pool. Concurrency semantics (WAL + BEGIN
+// IMMEDIATE) match production because database.Open applies the same DSN.
 func NewSchemaDB(t *testing.T, prefix string) *database.Pool {
 	t.Helper()
-	rootDSN := DSN(t)
-	raw, err := sql.Open("mysql", rootDSN)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	schema := prefix + shared.NewID()
-	if _, err := raw.Exec("CREATE DATABASE `" + schema + "`"); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	t.Cleanup(func() { raw.Exec("DROP DATABASE `" + schema + "`"); raw.Close() })
+	path := filepath.Join(t.TempDir(), prefix+".db")
 
-	pool, err := database.Open(withSchema(rootDSN, schema))
+	pool, err := database.Open(path)
 	if err != nil {
-		t.Fatalf("open schema pool: %v", err)
+		t.Fatalf("open sqlite pool: %v", err)
 	}
 	t.Cleanup(func() { pool.(*database.Pool).DB.Close() })
 

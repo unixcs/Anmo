@@ -310,11 +310,12 @@ type Closure struct {
 	CreatedAt string `json:"created_at"`
 }
 
-const closureColumns = `id, DATE_FORMAT(closure_date, '%Y-%m-%d'), day_part, remark,
- DATE_FORMAT(created_at, '%Y-%m-%d %H:%i')`
+const closureColumns = `id, strftime('%Y-%m-%d', closure_date), day_part, remark,
+ strftime('%Y-%m-%d %H:%M', created_at)`
 
-// CreateClosure closes half-day(s) inside the calendar lock and reports how
-// many active bookings the merchant is taking on (D22 informed consent).
+// CreateClosure closes half-day(s) in a serialized write transaction and
+// reports how many active bookings the merchant is taking on (D22 informed
+// consent; 串行化由 BEGIN IMMEDIATE 提供).
 func (p *Provider) CreateClosure(ctx context.Context, date, dayPart, remark, operatorID string) (int, error) {
 	if dayPart != "AM" && dayPart != "PM" && dayPart != "FULL" {
 		return 0, shared.BadRequest("CLOSURE_BAD_PART", "闭店范围需为 AM / PM / FULL")
@@ -336,11 +337,6 @@ func (p *Provider) CreateClosure(ctx context.Context, date, dayPart, remark, ope
 		return 0, err
 	}
 	conflict := 0
-	unlock, err := p.acquireCalendar(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer unlock()
 	err = shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
 		for _, part := range parts {
 			var n int

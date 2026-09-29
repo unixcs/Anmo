@@ -11,31 +11,39 @@ CREATE TABLE member (
   status        VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
   remark        VARCHAR(500) NOT NULL DEFAULT '',
   last_visit_at DATETIME     NULL,
-  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_member_phone (phone),
-  UNIQUE KEY uk_member_no (member_no),
-  KEY idx_member_status_created (status, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  created_at    DATETIME     NOT NULL DEFAULT (datetime('now','+8 hours')),
+  updated_at    DATETIME     NOT NULL DEFAULT (datetime('now','+8 hours')),
+  CONSTRAINT uk_member_phone UNIQUE (phone),
+  CONSTRAINT uk_member_no UNIQUE (member_no)
+);
+
+CREATE INDEX idx_member_status_created ON member (status, created_at);
+
+CREATE TRIGGER trg_member_updated_at AFTER UPDATE ON member
+FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at
+BEGIN
+  UPDATE member SET updated_at = datetime('now','+8 hours') WHERE id = NEW.id;
+END;
 
 CREATE TABLE member_tag (
   id         CHAR(26)    NOT NULL PRIMARY KEY,
   name       VARCHAR(30) NOT NULL,
-  created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_member_tag_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  created_at DATETIME    NOT NULL DEFAULT (datetime('now','+8 hours')),
+  CONSTRAINT uk_member_tag_name UNIQUE (name)
+);
 
 CREATE TABLE member_tag_rel (
   id         CHAR(26)  NOT NULL PRIMARY KEY,
   member_id  CHAR(26)  NOT NULL,
   tag_id     CHAR(26)  NOT NULL,
-  created_at DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_member_tag_rel (member_id, tag_id),
-  KEY idx_member_tag_rel_member (member_id),
-  KEY idx_member_tag_rel_tag (tag_id),
+  created_at DATETIME  NOT NULL DEFAULT (datetime('now','+8 hours')),
+  CONSTRAINT uk_member_tag_rel UNIQUE (member_id, tag_id),
   CONSTRAINT fk_mtr_member FOREIGN KEY (member_id) REFERENCES member (id),
   CONSTRAINT fk_mtr_tag FOREIGN KEY (tag_id) REFERENCES member_tag (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
+
+CREATE INDEX idx_member_tag_rel_member ON member_tag_rel (member_id);
+CREATE INDEX idx_member_tag_rel_tag ON member_tag_rel (tag_id);
 
 -- 常用标签种子（plan §13）
 INSERT INTO member_tag (id, name) VALUES

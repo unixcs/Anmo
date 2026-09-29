@@ -105,7 +105,7 @@ func (p *Provider) RunDaily(ctx context.Context) (map[string]any, error) {
 		for _, item := range items {
 			detail, _ := json.Marshal(item)
 			if _, err := p.db.ExecContext(ctx,
-				`INSERT IGNORE INTO ops_insight_snapshot (id, snapshot_date, kind, member_id, detail)
+				`INSERT OR IGNORE INTO ops_insight_snapshot (id, snapshot_date, kind, member_id, detail)
 				 VALUES (?,?,?,?,?)`,
 				shared.NewID(), today, kind, item.MemberID, string(detail)); err != nil {
 				return nil, shared.Server("OPS_SNAPSHOT", err)

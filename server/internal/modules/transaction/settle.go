@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/go-sql-driver/mysql"
-
 	"anmo/server/internal/modules/appointment"
 	"anmo/server/internal/shared"
 )
@@ -57,24 +55,14 @@ func scanRedemption(row interface{ Scan(...any) error }) (*Redemption, error) {
 	return rd, err
 }
 
-// isDupKey reports a MySQL duplicate-key error (any unique index).
+// isDupKey reports a unique-constraint violation (any unique index) —
+// engine-agnostic predicate lives in shared (SQLite 方言).
 func isDupKey(err error) bool {
-	var me *mysql.MySQLError
-	return errors.As(err, &me) && me.Number == 1062
-}
-
-// isDeadlock reports MySQL 1213/1205 lock errors — safe to surface as a
-// retryable conflict (verified: no data damage, tx rolled back).
-func isDeadlock(err error) bool {
-	var me *mysql.MySQLError
-	if !errors.As(err, &me) {
-		return false
-	}
-	return me.Number == 1213 || me.Number == 1205
+	return shared.IsDupKey(err)
 }
 
 func wrapTxErr(code string, err error) error {
-	if isDeadlock(err) {
+	if shared.IsBusy(err) {
 		return shared.Conflict("LOCK_RETRY", "操作繁忙，请重试")
 	}
 	return shared.Server(code, err)
@@ -280,7 +268,7 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM appointment WHERE member_id = ?
 			   AND status IN ('WAITING','IN_SERVICE')
-			   AND scheduled_start >= ? AND scheduled_start < ? + INTERVAL 1 DAY`,
+			   AND scheduled_start >= ? AND scheduled_start < datetime(?, '+1 day')`,
 			c.MemberID, day, day).Scan(&nApt); err != nil {
 			return shared.Server("RDM_WALKIN_APT_QUERY", err)
 		}
@@ -427,7 +415,7 @@ func (p *Provider) ReverseRedemption(ctx context.Context, redemptionID, reason, 
 		}
 		// now take the redemption row lock and re-verify status
 		rd, err = scanRedemption(tx.QueryRowContext(ctx,
-			`SELECT `+redemptionColumns+` FROM redemption WHERE id = ? FOR UPDATE`, redemptionID))
+			`SELECT `+redemptionColumns+` FROM redemption WHERE id = ?`, redemptionID))
 		if err != nil {
 			return shared.Server("RDM_QUERY", err)
 		}
@@ -457,7 +445,7 @@ func (p *Provider) ReverseRedemption(ctx context.Context, redemptionID, reason, 
 		// original CARD payment voided (D1). Located by the shared
 		// idempotency key — appointment_id is NULL for walk-in redemptions.
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE payment SET status = 'VOIDED', remark = CONCAT(remark, '；核销撤销')
+			`UPDATE payment SET status = 'VOIDED', remark = remark || '；核销撤销'
 			 WHERE idempotency_key = ? AND method = 'CARD' AND status = 'VALID'`, rd.IdemKey); err != nil {
 			return wrapTxErr("PAY_VOID", err)
 		}

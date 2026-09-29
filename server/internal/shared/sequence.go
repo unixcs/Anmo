@@ -6,14 +6,13 @@ import (
 )
 
 // NextSeq atomically increments a named counter and returns the new value.
-// The row lock (taken by UPDATE) is held until the surrounding transaction
-// commits, so concurrent writers block and then read committed values —
-// sequential, race-free business numbers. The INSERT IGNORE first ensures the
-// row exists for new names (a concurrent insert is waited on by MySQL's
-// duplicate-key check, then ignored).
+// Callers run inside a write transaction (BEGIN IMMEDIATE serializes all
+// writers in the SQLite single-writer model), so the read-modify-write is
+// race-free and committed values are strictly monotonic. The INSERT OR
+// IGNORE first ensures the row exists for new names.
 func NextSeq(ctx context.Context, tx Tx, name string) (int64, error) {
 	if _, err := tx.ExecContext(ctx,
-		`INSERT IGNORE INTO sys_sequence (name, value) VALUES (?, 0)`, name); err != nil {
+		`INSERT OR IGNORE INTO sys_sequence (name, value) VALUES (?, 0)`, name); err != nil {
 		return 0, Server("SEQ_INIT", err)
 	}
 	res, err := tx.ExecContext(ctx,

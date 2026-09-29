@@ -224,7 +224,7 @@ func (p *Provider) SavePageConfig(ctx context.Context, page string, blocks []Pag
 	}
 	_, err = p.db.ExecContext(ctx,
 		`INSERT INTO content_page_config (id, page, blocks, updated_by) VALUES (?, ?, ?, ?)
-		 ON DUPLICATE KEY UPDATE blocks = VALUES(blocks), updated_by = VALUES(updated_by)`,
+		 ON CONFLICT(page) DO UPDATE SET blocks = excluded.blocks, updated_by = excluded.updated_by`,
 		shared.NewID(), page, raw, operatorID)
 	if err != nil {
 		return shared.Server("CONTENT_SAVE", err)
@@ -368,9 +368,10 @@ func (p *Provider) SaveSetting(ctx context.Context, key, value, operatorID strin
 		return err
 	}
 	_, err := p.db.ExecContext(ctx,
-		`INSERT INTO content_system_setting (id, setting_key, setting_value, updated_by, updated_at)
-		 VALUES (?, ?, ?, ?, NOW())
-		 ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_by = VALUES(updated_by)`,
+		`INSERT INTO content_system_setting (id, setting_key, setting_value, updated_by)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value,
+		   updated_by = excluded.updated_by`,
 		shared.NewID(), key, value, operatorID)
 	if err != nil {
 		return shared.Server("SETTING_SAVE", err)

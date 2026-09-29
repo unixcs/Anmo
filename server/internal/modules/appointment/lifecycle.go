@@ -21,8 +21,9 @@ const (
 	StatusNoShow         = "NO_SHOW"
 )
 
-// calendarLock serializes conflict checks for the single-therapist calendar (D5).
-const calendarLock = "anmo:appointment:calendar"
+// 冲突检查的串行化（原 D5 MySQL GET_LOCK）由 SQLite 单写者模型承接：所有写事务
+// 经 _txlock=immediate 在 BEGIN 时排队获得写锁，事务提交前其他写者看不到中间状态，
+// 因此 closure/capacity/冲突检查与 INSERT 天然原子（无需显式日历锁）。
 
 // Appointment — appointment row.
 type Appointment struct {
@@ -35,7 +36,7 @@ type Appointment struct {
 	SlotType       string     `json:"slot_type"`               // SPECIFIC | HALF_DAY (D20)
 	DayPart        string     `json:"day_part,omitempty"`      // AM | PM，按上下午分界计算（展示用）
 	CustomerNote   string     `json:"customer_note"`
-	InternalNote   string     `json:"internal_note"`
+	InternalNote   string     `json:"internal_note,omitempty"` // §107：顾客端一律置空，omitempty 保证键也不出现
 	ConfirmedAt    *time.Time `json:"confirmed_at"`
 	StartedAt      *time.Time `json:"started_at"`
 	CompletedAt    *time.Time `json:"completed_at"`
@@ -79,6 +80,14 @@ type AppointmentService struct {
 	Quantity         int    `json:"quantity"`
 }
 
+// AppointmentWithServices — list item carrying the service snapshot so
+// customers see service names without a per-row detail call (additive field;
+// consumers that ignore `services` keep working unchanged).
+type AppointmentWithServices struct {
+	Appointment
+	Services []*AppointmentService `json:"services,omitempty"`
+}
+
 // statusLog appends a transition record.
 func statusLog(ctx context.Context, tx shared.Tx, aptID, from, to, operatorType, operatorID, remark string) error {
 	if _, err := tx.ExecContext(ctx,
@@ -113,9 +122,9 @@ func (p *Provider) nextAppointmentNo(ctx context.Context, tx shared.Tx) (string,
 	return fmt.Sprintf("APT%s%04d", day, seq), nil
 }
 
-// Create books a new appointment for a member: one transaction with the
-// calendar lock, closure/capacity checks, snapshot insert and status log
-// (§53/D20). req is either an exact slot or a fuzzy half-day.
+// Create books a new appointment for a member: one serialized write
+// transaction covering closure/capacity checks, the snapshot insert and the
+// status log (§53/D20). req is either an exact slot or a fuzzy half-day.
 func (p *Provider) Create(ctx context.Context, memberID, serviceID string, req BookingReq, note string) (*Appointment, error) {
 	item, err := p.services.GetItem(ctx, serviceID)
 	if err != nil {
@@ -138,11 +147,6 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID string, req B
 	}
 
 	var out *Appointment
-	unlock, err := p.acquireCalendar(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
 	err = shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
 		if err := checkClosures(ctx, tx, bounds, win); err != nil {
 			return err
@@ -183,31 +187,16 @@ func (p *Provider) Create(ctx context.Context, memberID, serviceID string, req B
 	return out, nil
 }
 
-// acquireCalendar takes the calendar serialization lock on a dedicated
-// connection. The caller defers unlock() so the lock is held through COMMIT —
-// the next writer's conflict check then sees committed state (D5).
-func (p *Provider) acquireCalendar(ctx context.Context) (shared.LockHandle, error) {
-	locker, ok := p.db.(shared.NamedLocker)
-	if !ok {
-		return nil, shared.Server("LOCK_UNSUPPORTED", nil)
-	}
-	h, err := locker.NamedLock(ctx, calendarLock, 15)
-	if err != nil {
-		return nil, shared.Conflict("APT_LOCK_BUSY", "预约繁忙，请重试")
-	}
-	return shared.LockHandle(h), nil
-}
-
 // transition applies a guarded state change (D8) and logs it.
 func (p *Provider) transition(ctx context.Context, tx shared.Tx, id, from, to, operatorType, operatorID, remark string) (*Appointment, error) {
 	q := `UPDATE appointment SET status = ?`
 	switch to {
 	case StatusInService:
-		q += ", started_at = NOW()"
+		q += ", started_at = datetime('now','+8 hours')"
 	case StatusCompleted:
-		q += ", completed_at = NOW()"
+		q += ", completed_at = datetime('now','+8 hours')"
 	case StatusCancelled:
-		q += ", cancelled_at = NOW()"
+		q += ", cancelled_at = datetime('now','+8 hours')"
 	}
 	q += ` WHERE id = ? AND status = ?`
 	res, err := tx.ExecContext(ctx, q, to, id, from)
@@ -243,7 +232,7 @@ func (p *Provider) Start(ctx context.Context, id, operatorID string) (*Appointme
 func (p *Provider) Complete(ctx context.Context, id, operatorID string) (*Appointment, error) {
 	var out *Appointment
 	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ? FOR UPDATE`, id))
+		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
 		if errors.Is(err, sql.ErrNoRows) {
 			return shared.NotFound("APT_NOT_FOUND", "预约不存在")
 		}
@@ -261,11 +250,21 @@ func (p *Provider) Complete(ctx context.Context, id, operatorID string) (*Appoin
 	return out, err
 }
 
+// customerTooLate — 顾客取消/改期的时限判定（§31/D20）。具体时间预约按开始
+// 时刻留 CancelMinAheadHrs 提前量；模糊预约没有固定开始时刻，与创建同窗口
+// （半天未结束即可操作），避免"上午 11 点约的下午单 11:01 就无法取消"。
+func (p *Provider) customerTooLate(a *Appointment) bool {
+	if a.SlotType == SlotTypeHalfDay {
+		return !a.ScheduledEnd.After(shared.NowShanghai())
+	}
+	return a.ScheduledStart.Before(shared.NowShanghai().Add(time.Duration(p.cfg.Business.CancelMinAheadHrs) * time.Hour))
+}
+
 // CancelByCustomer cancels with the 2-hour rule (§31).
 func (p *Provider) CancelByCustomer(ctx context.Context, memberID, id string) (*Appointment, error) {
 	var out *Appointment
 	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ? FOR UPDATE`, id))
+		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
 		if errors.Is(err, sql.ErrNoRows) {
 			return shared.NotFound("APT_NOT_FOUND", "预约不存在")
 		}
@@ -278,8 +277,8 @@ func (p *Provider) CancelByCustomer(ctx context.Context, memberID, id string) (*
 		if a.Status != StatusWaiting {
 			return shared.Conflict("APT_BAD_TRANSITION", "当前状态不可取消")
 		}
-		if a.ScheduledStart.Before(shared.NowShanghai().Add(time.Duration(p.cfg.Business.CancelMinAheadHrs) * time.Hour)) {
-			return shared.Conflict("APT_CANCEL_TOO_LATE", "距开始不足 2 小时，请联系店家取消")
+		if p.customerTooLate(a) {
+			return shared.Conflict("APT_CANCEL_TOO_LATE", "已超出可取消时间，请联系店家取消")
 		}
 		out, err = p.transition(ctx, tx, id, a.Status, StatusCancelled, "CUSTOMER", memberID, "顾客取消")
 		return err
@@ -291,7 +290,7 @@ func (p *Provider) CancelByCustomer(ctx context.Context, memberID, id string) (*
 func (p *Provider) CancelByAdmin(ctx context.Context, id, operatorID, reason string) (*Appointment, error) {
 	var out *Appointment
 	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ? FOR UPDATE`, id))
+		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
 		if errors.Is(err, sql.ErrNoRows) {
 			return shared.NotFound("APT_NOT_FOUND", "预约不存在")
 		}
@@ -321,15 +320,11 @@ func (p *Provider) NoShow(ctx context.Context, id, operatorID string) (*Appointm
 // Reschedule moves an appointment to a new time or half-day on the same
 // appointment (§32/D8/D20): conflicts and capacity exclude the appointment
 // itself; fuzzy→specific and specific→fuzzy are both allowed.
-func (p *Provider) Reschedule(ctx context.Context, memberID, id string, req BookingReq, byCustomer bool) (*Appointment, error) {
+// byCustomer=false 时 memberID 不参与归属校验，操作者记 operatorID。
+func (p *Provider) Reschedule(ctx context.Context, memberID, id string, req BookingReq, byCustomer bool, operatorID string) (*Appointment, error) {
 	var out *Appointment
-	unlock, err := p.acquireCalendar(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	err = shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
-		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ? FOR UPDATE`, id))
+	err := shared.RunInTx(ctx, p.db, func(tx shared.Tx) error {
+		a, err := scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))
 		if errors.Is(err, sql.ErrNoRows) {
 			return shared.NotFound("APT_NOT_FOUND", "预约不存在")
 		}
@@ -342,8 +337,8 @@ func (p *Provider) Reschedule(ctx context.Context, memberID, id string, req Book
 		if a.Status != StatusWaiting {
 			return shared.Conflict("APT_BAD_TRANSITION", "当前状态不可改期")
 		}
-		if byCustomer && a.ScheduledStart.Before(shared.NowShanghai().Add(time.Duration(p.cfg.Business.CancelMinAheadHrs)*time.Hour)) {
-			return shared.Conflict("APT_RESCHEDULE_TOO_LATE", "距开始不足 2 小时，请联系店家改期")
+		if byCustomer && p.customerTooLate(a) {
+			return shared.Conflict("APT_RESCHEDULE_TOO_LATE", "已超出可改期时间，请联系店家改期")
 		}
 		// duration comes from the snapshot (specific targets need it)
 		var dur int
@@ -375,7 +370,11 @@ func (p *Provider) Reschedule(ctx context.Context, memberID, id string, req Book
 			return shared.Server("APT_RESCHEDULE", err)
 		}
 		from := a.Status
-		if err := statusLog(ctx, tx, id, from, from, "CUSTOMER", memberID, "改期"); err != nil {
+		opType, opID := "CUSTOMER", memberID
+		if !byCustomer {
+			opType, opID = "ADMIN", operatorID
+		}
+		if err := statusLog(ctx, tx, id, from, from, opType, opID, "改期"); err != nil {
 			return err
 		}
 		out, err = scanAppointment(tx.QueryRowContext(ctx, `SELECT `+aptColumns+` FROM appointment WHERE id = ?`, id))

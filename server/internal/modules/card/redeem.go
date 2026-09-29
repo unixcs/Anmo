@@ -11,11 +11,12 @@ import (
 // redeem.go — the tx-joining primitives the transaction module composes into
 // the settlement transaction (AGENTS.md 核销协作; D6).
 
-// LockForRedeem locks the member_card row (SELECT ... FOR UPDATE) inside the
-// caller's transaction and returns it.
+// LockForRedeem reads the member_card row inside the caller's transaction.
+// MySQL 版经 SELECT ... FOR UPDATE 加行锁；SQLite 单写者模型下写事务自带排他性，
+// 读到的即是本事务开始后的唯一真值。
 func (p *Provider) LockForRedeem(ctx context.Context, tx shared.Tx, cardID string) (*MemberCard, error) {
 	c, err := scanCard(tx.QueryRowContext(ctx,
-		`SELECT `+cardColumns+` FROM member_card WHERE id = ? FOR UPDATE`, cardID))
+		`SELECT `+cardColumns+` FROM member_card WHERE id = ?`, cardID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, shared.NotFound("CARD_NOT_FOUND", "会员卡不存在")
 	}
@@ -129,6 +130,9 @@ func (p *Provider) Adjust(ctx context.Context, cardID string, delta int, remark,
 		status := c.Status
 		if status == "USED_UP" && after > 0 {
 			status = "ACTIVE"
+		} else if status == "ACTIVE" && after == 0 {
+			// 与核销同口径（D13）：0 次即用完
+			status = "USED_UP"
 		}
 		if _, e := tx.ExecContext(ctx,
 			`UPDATE member_card SET remaining_count = ?, status = ? WHERE id = ?`,
@@ -318,10 +322,11 @@ func (p *Provider) LowBalanceCards(ctx context.Context, threshold int) ([]*Membe
 
 // ExpiringCards returns ACTIVE cards expiring within N days (§86).
 func (p *Provider) ExpiringCards(ctx context.Context, days int) ([]*MemberCard, error) {
+	cutoff := shared.NowShanghai().AddDate(0, 0, days).Format("2006-01-02")
 	rows, err := p.db.QueryContext(ctx,
 		`SELECT `+cardColumns+` FROM member_card
 		 WHERE status = 'ACTIVE' AND valid_until IS NOT NULL
-		   AND valid_until < CURDATE() + INTERVAL ? DAY`, days)
+		   AND valid_until < ?`, cutoff)
 	if err != nil {
 		return nil, shared.Server("CARD_EXP", err)
 	}
@@ -341,9 +346,10 @@ func (p *Provider) ExpiringCards(ctx context.Context, days int) ([]*MemberCard, 
 // Lazy validation at redeem time remains the hard constraint; this sweep only
 // keeps the displayed status in sync.
 func (p *Provider) SweepExpired(ctx context.Context) (int64, error) {
+	today := shared.NowShanghai().Format("2006-01-02")
 	res, err := p.db.ExecContext(ctx,
 		`UPDATE member_card SET status = 'EXPIRED'
-		 WHERE status = 'ACTIVE' AND valid_until IS NOT NULL AND valid_until < CURDATE()`)
+		 WHERE status = 'ACTIVE' AND valid_until IS NOT NULL AND valid_until < ?`, today)
 	if err != nil {
 		return 0, shared.Server("CARD_SWEEP", err)
 	}

@@ -367,3 +367,38 @@ func TestConcurrentBookingAPI(t *testing.T) {
 		t.Fatalf("Case 2: %d succeeded, want exactly 1 (statuses=%v)", success, statuses)
 	}
 }
+
+// TestWxLoginFlow — V2 小程序登录全链路（HTTP 层，plan §11）：wx login →
+// needs_bind → 短信登录 → bind → 二次 login 直发 token，同一 member。
+func TestWxLoginFlow(t *testing.T) {
+	c := newServer(t)
+
+	res := c.ok("POST", "/api/auth/wx/login", map[string]string{"code": "wx-code-1"})
+	d := res["data"].(map[string]any)
+	if d["needs_bind"] != true || str(d, "bind_ticket") == "" {
+		t.Fatalf("first wx login = %v", d)
+	}
+	ticket := str(d, "bind_ticket")
+
+	// bind 需要顾客 Token（D25：凭 ticket 不能直接落库）
+	if status, _ := c.do("POST", "/api/auth/wx/bind", map[string]string{"bind_ticket": ticket}); status != 401 {
+		t.Fatalf("bind without token = %d, want 401", status)
+	}
+
+	c.ok("POST", "/api/auth/sms/send", map[string]string{"phone": "13911114444"})
+	res = c.ok("POST", "/api/auth/sms/verify", map[string]string{"phone": "13911114444", "code": "123456"})
+	c.token = str(res["data"].(map[string]any), "token")
+	c.ok("POST", "/api/auth/wx/bind", map[string]string{"bind_ticket": ticket})
+
+	// 二次 login：直发 token，落到同一 member
+	res = c.ok("POST", "/api/auth/wx/login", map[string]string{"code": "wx-code-1"})
+	d = res["data"].(map[string]any)
+	if d["needs_bind"] == true || str(d, "token") == "" {
+		t.Fatalf("second wx login = %v", d)
+	}
+	c.token = str(d, "token")
+	prof := c.ok("GET", "/api/me/profile", nil)
+	if got := str(prof["data"].(map[string]any)["member"].(map[string]any), "phone"); got != "13911114444" {
+		t.Fatalf("bound member phone = %s", got)
+	}
+}

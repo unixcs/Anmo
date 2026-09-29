@@ -108,7 +108,7 @@ func (p *Provider) SetTags(ctx context.Context, memberID string, tagIDs []string
 		}
 		for _, tid := range tagIDs {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT IGNORE INTO member_tag_rel (id, member_id, tag_id) VALUES (?, ?, ?)`,
+				`INSERT OR IGNORE INTO member_tag_rel (id, member_id, tag_id) VALUES (?, ?, ?)`,
 				shared.NewID(), memberID, tid); err != nil {
 				return shared.Server("TAG_SET", err)
 			}

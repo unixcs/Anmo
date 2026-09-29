@@ -2,44 +2,25 @@ package database
 
 import (
 	"context"
-	"crypto/rand"
-	"database/sql"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/oklog/ulid/v2"
 )
 
-func randomSchemaName() string {
-	return "anmo_migrate_" + strings.ToLower(ulid.MustNew(ulid.Now(), ulid.Monotonic(rand.Reader, 0)).String())
-}
-
-// TestMigrateIdempotentAndComplete runs the runner twice against a temp schema
-// and asserts idempotency plus the 24-table completeness baseline (AGENTS.md D3).
+// TestMigrateIdempotentAndComplete runs the runner twice against a temp SQLite
+// file and asserts idempotency plus the 27-table completeness baseline
+// (AGENTS.md D3: 24 业务表 + sys_sequence；+ schema_migrations、新 checklist 对齐).
 func TestMigrateIdempotentAndComplete(t *testing.T) {
-	dsn := os.Getenv("ANMO_TEST_MYSQL_DSN")
-	if dsn == "" {
-		t.Skip("ANMO_TEST_MYSQL_DSN not set; skipping DB integration test")
-	}
-	root0, err := sql.Open("mysql", dsn)
+	dbPath := filepath.Join(t.TempDir(), "migrate_test.db")
+	db, err := Open(dbPath)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	root := &Pool{DB: root0}
-	defer root0.Close()
-
-	schema := randomSchemaName()
-	if _, err := root.Exec("CREATE DATABASE `" + schema + "`"); err != nil {
-		t.Fatalf("create schema: %v", err)
-	}
-	defer root.Exec("DROP DATABASE `" + schema + "`")
-
-	if _, err := root.Exec("USE `" + schema + "`"); err != nil {
-		t.Fatalf("use schema: %v", err)
-	}
-	db := root
+	defer func() {
+		if closer, ok := db.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
 	ctx := context.Background()
 
 	migDir, err := filepath.Abs("../../migrations")
@@ -69,7 +50,7 @@ func TestMigrateIdempotentAndComplete(t *testing.T) {
 		"ops_operation_log": true, "ops_insight_snapshot": true,
 		"sys_sequence": true, // 009: technical counter table
 	}
-	rows, err := db.Query(`SELECT table_name FROM information_schema.tables WHERE table_schema = ?`, schema)
+	rows, err := db.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
 	if err != nil {
 		t.Fatalf("list tables: %v", err)
 	}

@@ -61,7 +61,7 @@ func TestSpecificCoexistsWithFuzzy(t *testing.T) {
 func TestFuzzyToSpecificReschedule(t *testing.T) {
 	e := newAptEnv(t, nil)
 	a := halfDay(t, e, e.mbr1, "PM", 4)
-	moved, err := e.p.Reschedule(context.Background(), e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 4, 14, 0)}, false)
+	moved, err := e.p.Reschedule(context.Background(), e.mbr1, a.ID, BookingReq{StartTime: slotAt(t, 4, 14, 0)}, false, "admin")
 	if err != nil {
 		t.Fatalf("fuzzy→specific reschedule: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestFuzzyToSpecificReschedule(t *testing.T) {
 		t.Fatalf("rescheduled = %s %s", moved.SlotType, moved.ScheduledStart.Format("15:04"))
 	}
 	// and back to fuzzy
-	back, err := e.p.Reschedule(context.Background(), e.mbr1, a.ID, BookingReq{Date: dateAt(t, 4), DayPart: "PM"}, true)
+	back, err := e.p.Reschedule(context.Background(), e.mbr1, a.ID, BookingReq{Date: dateAt(t, 4), DayPart: "PM"}, true, "")
 	if err != nil {
 		t.Fatalf("specific→fuzzy reschedule: %v", err)
 	}
