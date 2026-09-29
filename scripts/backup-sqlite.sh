@@ -40,10 +40,15 @@ do_restore_test() {
   local latest
   latest="$(ls -1t "$BACKUPS"/anmo-*.db | head -1)"
   echo "restore-test on $(basename "$latest")"
-  docker run --rm -v "$BACKUPS":/backups:ro \
-    -e ANMO_DB_PATH="/backups/$(basename "$latest")" \
+  # 快照本身保持只读：拷贝到临时目录后再做启动级演练（WAL 模式开库需要写权限）
+  rm -rf /tmp/anmo-restore-test && mkdir -p /tmp/anmo-restore-test
+  cp "$latest" /tmp/anmo-restore-test/anmo.db && chown -R 10001:10001 /tmp/anmo-restore-test
+  docker run --rm -v /tmp/anmo-restore-test:/data \
+    -e ANMO_DB_PATH=/data/anmo.db \
     -e ANMO_AUTH_JWT_SECRET=restore-test \
-    --entrypoint /app/anmo anmo-server:sqlite -migrate
+    --entrypoint /app/anmo anmo-server:v2 -migrate
+  rc=$?; rm -rf /tmp/anmo-restore-test
+  return $rc
   echo "restore-test OK: 最近快照可被服务进程打开并完成 schema 校验"
 }
 
