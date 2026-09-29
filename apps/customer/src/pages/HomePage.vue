@@ -4,6 +4,7 @@ import { api } from '../core/api/endpoints'
 import type { HomeAnnouncement, HomeBanner, HomeBlock, StoreStatus } from '../core/api/endpoints'
 import type { ServiceItem } from '../core/models/models'
 import { yuan } from '../core/utils/format'
+import { pickHomeServices } from '../core/utils/home-services'
 import ShopCard from '../components/ShopCard.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 
@@ -62,7 +63,8 @@ onMounted(async () => {
     blocks.value = (home.blocks && home.blocks.length > 0 ? home.blocks : DEFAULT_BLOCKS).filter(
       (b) => b.type !== 'banner' || banners.value.length > 0,
     )
-    services.value = catalog.services.slice(0, 6)
+    // 首页服务推荐（V2.1）：settings 失败时 catch 回落 {}，函数内部回落默认 limit 6
+    services.value = pickHomeServices(catalog.services, settings)
     if (settings.open_time && settings.close_time) {
       hours.value = `${settings.open_time} - ${settings.close_time}`
     }

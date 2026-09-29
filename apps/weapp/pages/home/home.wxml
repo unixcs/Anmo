@@ -51,6 +51,7 @@
       <view wx:if="{{blk === 'service_list'}}" class="section">
         <view class="section-head">
           <text class="section-head-title">服务推荐</text>
+          <text class="section-head-more" bindtap="goServices">全部服务</text>
         </view>
         <view class="svc-grid">
           <view

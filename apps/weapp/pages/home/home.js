@@ -108,6 +108,8 @@ Page({
             longitude: d.shop_longitude || '',
           },
         })
+        // settings 晚于服务目录到达时重算一次展示列表（两者并行的竞态兜底）
+        this.applyServices()
       })
       .catch(() => {})
       .then(() => done && done())
@@ -120,7 +122,7 @@ Page({
         const announcements = (home.announcements || []).map((a) =>
           a.content ? a.title + ' · ' + a.content : a.title,
         )
-        const services = (catalog.services || [])
+        this.catalogServices = (catalog.services || [])
           .filter((s) => s.status === 'ACTIVE')
           .map((s) => ({
             id: s.id,
@@ -129,16 +131,28 @@ Page({
             minutes: s.duration_minutes,
             price: fmt.yuan(s.default_price),
           }))
-        this.setData({ announcements, services, blocks: fmt.homeBlocks(home.blocks) })
+        this.setData({ announcements, blocks: fmt.homeBlocks(home.blocks) })
+        this.applyServices()
       })
       .catch(() => {})
       .then(() => done && done())
+  },
+
+  // 服务推荐展示列表（V2.1）：目录与 settings 都就绪后按 pickHomeServices 口径筛选；
+  // 任一方未就绪时先以当前可得数据展示，另一方到达后在各自 then 里重算
+  applyServices() {
+    if (!this.catalogServices) return
+    this.setData({ services: fmt.pickHomeServices(this.catalogServices, getApp().globalData.settings || {}) })
   },
 
   goBooking(e) {
     // booking 是 tab 页，switchTab 不能带参 → 经 globalData 传递预选服务
     getApp().globalData.pendingServiceId = e.currentTarget.dataset.id || ''
     wx.switchTab({ url: '/pages/booking/booking' })
+  },
+
+  goServices() {
+    wx.switchTab({ url: '/pages/services/services' })
   },
 
   goAbout() {

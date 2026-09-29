@@ -1,0 +1,65 @@
+/* services 页（镜像 H5 ServicesPage） */
+.group {
+  margin-top: 32rpx;
+}
+
+.group:first-of-type {
+  margin-top: 0;
+}
+
+.group-title {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: var(--muted-foreground);
+  margin-bottom: 16rpx;
+}
+
+.svc {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.svc:last-of-type {
+  margin-bottom: 0;
+}
+
+.svc-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.svc-name {
+  font-weight: 600;
+  font-size: 30rpx;
+  line-height: 42rpx;
+}
+
+.svc-desc {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: var(--muted-foreground);
+  margin: 6rpx 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.svc-meta {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: var(--muted-foreground);
+}
+
+.dot-sep {
+  opacity: 0.6;
+}
+
+.svc-price {
+  color: var(--primary);
+}

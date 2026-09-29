@@ -38,7 +38,7 @@ onMounted(async () => {
     upcoming.value = (apts ?? []).filter(
       (a) =>
         (a.status === 'WAITING' || a.status === 'IN_SERVICE') &&
-        a.scheduled_start.slice(0, 10) >= todayStr,
+        a.scheduled_start.slice(0, 10) >= today,
     ).length
   } catch (e) {
     notify((e as Error).message)

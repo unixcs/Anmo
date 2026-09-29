@@ -84,9 +84,42 @@
           </el-form>
         </el-card>
 
+        <!-- 首页服务推荐（V2.1）：顾客端首页"服务推荐"区块的数量与排序 -->
+        <el-card shadow="never" style="margin-bottom: 14px">
+          <template #header><b>首页服务推荐</b><span class="hint" style="margin-left: 10px">控制顾客端首页"服务推荐"区块展示哪些服务</span></template>
+          <el-form label-width="80px">
+            <el-form-item label="显示数量">
+              <el-radio-group v-model="rec.limit">
+                <el-radio-button :value="2">2 个</el-radio-button>
+                <el-radio-button :value="4">4 个</el-radio-button>
+                <el-radio-button :value="6">6 个</el-radio-button>
+                <el-radio-button :value="8">8 个</el-radio-button>
+              </el-radio-group>
+              <span class="hint" style="margin-left: 10px">默认 6 个；在架服务不足时全部展示</span>
+            </el-form-item>
+            <el-form-item label="展示服务">
+              <div class="rec-list">
+                <div v-for="s in recServices" :key="s.id" class="rec-row">
+                  <el-checkbox
+                    :model-value="rec.ids.includes(s.id)"
+                    @change="(v: string | number | boolean) => toggleRec(s.id, Boolean(v))"
+                  >{{ s.name }}</el-checkbox>
+                  <span class="hint rec-meta">{{ s.duration_minutes }} 分钟 · {{ yuan(s.default_price) }}</span>
+                  <template v-if="rec.ids.includes(s.id)">
+                    <el-button size="small" link :disabled="rec.ids[0] === s.id" @click="moveRec(s.id, -1)">上移</el-button>
+                    <el-button size="small" link :disabled="rec.ids[rec.ids.length - 1] === s.id" @click="moveRec(s.id, 1)">下移</el-button>
+                  </template>
+                </div>
+                <div class="hint">不勾选任何服务 = 按服务排序自动取前 N 张；已下架服务不再显示在列表，但其勾选配置保留（重新上架即恢复）</div>
+              </div>
+            </el-form-item>
+            <el-form-item><el-button type="primary" :loading="recSaving" @click="saveRec">保存推荐配置</el-button></el-form-item>
+          </el-form>
+        </el-card>
+
         <!-- 门店信息（goal §18-§22）：地址/经纬度/电话，顾客端三处卡片展示 -->
         <el-card shadow="never" style="margin-bottom: 14px">
-          <template #header><b>门店信息</b><span class="hint" style="margin-left: 10px">顾客端点击地址唤起地图导航、点击电话直接拨号</span></template>
+          <template #header><b>门店信息</b><span class="hint" style="margin-left: 10px">顾客端点击地址唤起地图导航、点击电话直接拨号；保存后顾客端首页门店卡与关于页立即生效</span></template>
           <el-form label-width="80px">
             <el-form-item label="门店电话"><el-input v-model="shop.phone" maxlength="32"
               placeholder="如 13800000000（可填座机区号）" style="max-width: 320px" /></el-form-item>
@@ -176,6 +209,7 @@ import {
   getPageConfig,
   listAnnouncements,
   listBanners,
+  listServices,
   saveAnnouncement,
   saveBanner,
   savePageConfig,
@@ -184,7 +218,9 @@ import {
   setBannerStatus,
   type Announcement,
   type Banner,
+  type ServiceItem,
 } from '../core/api/admin'
+import { yuan } from '../core/format'
 
 const BLOCK_TYPES = ['banner', 'announcement', 'service_list', 'activity', 'richtext'] as const
 const BLOCK_TYPE_TEXT: Record<string, string> = {
@@ -229,6 +265,13 @@ async function load() {
       const s = await getSettings()
       settingRows.value = Object.entries(s ?? {}).map(([key, value]) => ({ key, value }))
       fillBiz(s ?? {})
+      // 推荐配置的服务选项：仅 ACTIVE，按 sort 排序（后端已按 sort,created_at 返回，稳定排序保序）
+      try {
+        const list = (await listServices()) ?? []
+        recServices.value = list.filter((svc) => svc.status === 'ACTIVE').sort((a, b) => a.sort - b.sort)
+      } catch {
+        /* 服务选项拉取失败不阻塞设置加载（数量与已勾选项仍可保存） */
+      }
     }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载失败')
@@ -362,6 +405,45 @@ const bizSaving = ref(false)
 const home = ref({ title: '', body: '' })
 const homeSaving = ref(false)
 
+// ---------- 首页服务推荐（V2.1） ----------
+const rec = ref({ limit: 6, ids: [] as string[] })
+const recServices = ref<ServiceItem[]>([])
+const recSaving = ref(false)
+
+function toggleRec(id: string, on: boolean): void {
+  if (on) {
+    if (!rec.value.ids.includes(id)) rec.value.ids.push(id)
+  } else {
+    rec.value.ids = rec.value.ids.filter((x) => x !== id)
+  }
+}
+
+function moveRec(id: string, dir: -1 | 1): void {
+  const ids = rec.value.ids
+  const i = ids.indexOf(id)
+  const j = i + dir
+  if (i < 0 || j < 0 || j >= ids.length) return
+  const next = ids.slice()
+  next[i] = ids[j]
+  next[j] = ids[i]
+  rec.value.ids = next
+}
+
+async function saveRec(): Promise<void> {
+  recSaving.value = true
+  try {
+    await saveKeys([
+      ['home_service_limit', String(rec.value.limit)],
+      ['home_service_ids', JSON.stringify(rec.value.ids)],
+    ])
+    ElMessage.success('首页服务推荐已保存')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    recSaving.value = false
+  }
+}
+
 // ---------- 门店信息（§18-§22） ----------
 const shop = ref({ phone: '', address: '', latitude: '', longitude: '' })
 const shopSaving = ref(false)
@@ -374,6 +456,14 @@ function fillBiz(map: Record<string, string>): void {
   if (map['business_noon_split']) biz.value.noon = map['business_noon_split']
   home.value.title = map['home_title'] ?? ''
   home.value.body = map['home_body'] ?? ''
+  // 首页服务推荐（V2.1）：数量缺省 6；ids 反序列化失败视为未配置（顾客端回落全量）
+  rec.value.limit = Number(map['home_service_limit']) || 6
+  try {
+    const ids = JSON.parse(map['home_service_ids'] || '[]') as unknown
+    rec.value.ids = Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    rec.value.ids = []
+  }
   shop.value.phone = map['shop_phone'] ?? ''
   shop.value.address = map['shop_address'] ?? ''
   shop.value.latitude = map['shop_latitude'] ?? ''
@@ -488,5 +578,17 @@ onMounted(() => {
   display: flex;
   gap: 10px;
   margin-bottom: 12px;
+}
+.rec-list {
+  width: 100%;
+}
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.rec-meta {
+  flex: 1;
 }
 </style>

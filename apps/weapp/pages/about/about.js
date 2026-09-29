@@ -11,6 +11,7 @@ Page({
     shop: { address: '', phone: '', latitude: '', longitude: '' },
     heroTitle: '',
     heroBody: '',
+    hours: '',
     status: '',
     statusClass: '',
     loggedIn: false,
@@ -36,6 +37,8 @@ Page({
       },
       heroTitle: d.home_title || '',
       heroBody: d.home_body || '',
+      // 营业时间（对齐 H5 AboutPage）：两端都配置了才展示
+      hours: d.open_time && d.close_time ? d.open_time + ' - ' + d.close_time : '',
     })
   },
 

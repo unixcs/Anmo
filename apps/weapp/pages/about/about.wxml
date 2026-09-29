@@ -12,6 +12,12 @@
     <text>当前门店状态：{{status}}</text>
   </view>
 
+  <!-- 营业时间（对齐 H5 AboutPage）：settings 配置了才展示 -->
+  <view wx:if="{{hours}}" class="card plain hours">
+    <app-icon name="clock" size="32" />
+    <text>营业时间 {{hours}}</text>
+  </view>
+
   <shop-card address="{{shop.address}}" phone="{{shop.phone}}" latitude="{{shop.latitude}}" longitude="{{shop.longitude}}" />
 
   <!-- 门店地址/电话/营业状态属顾客资源：从分享进来还没登录时给出入口 -->

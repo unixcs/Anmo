@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/home/home",
+    "pages/services/services",
     "pages/booking/booking",
     "pages/me/me",
     "pages/appointments/appointments",
@@ -25,6 +26,10 @@
       {
         "pagePath": "pages/home/home",
         "text": "首页"
+      },
+      {
+        "pagePath": "pages/services/services",
+        "text": "服务"
       },
       {
         "pagePath": "pages/booking/booking",

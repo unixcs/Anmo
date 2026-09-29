@@ -167,6 +167,36 @@ function homeBlocks(blocks) {
   return picked.length ? picked : HOME_BLOCK_TYPES.slice()
 }
 
+// 首页服务推荐筛选（V2.1，与 H5 core/utils/home-services 逐行同口径）：
+// limit ∈ {2,4,6,8} 否则 6；home_service_ids 配置非空时按其顺序取存在的服务
+// （跳过已下架/删除），否则全量（后端已按 sort,created_at 排序）；
+// 最后统一截取前 limit 张（不足则全展示）。settings 缺失/解析失败传 {} 即回落默认。
+function pickHomeServices(services, settings) {
+  const s = settings || {}
+  const limitNum = Number(s.home_service_limit)
+  const limit = [2, 4, 6, 8].indexOf(limitNum) >= 0 ? limitNum : 6
+  let ids = []
+  if (s.home_service_ids) {
+    try {
+      const v = JSON.parse(s.home_service_ids)
+      if (Array.isArray(v)) ids = v.filter((x) => typeof x === 'string')
+    } catch (e) {
+      ids = []
+    }
+  }
+  let picked
+  if (ids.length > 0) {
+    const byId = {}
+    services.forEach((svc) => {
+      byId[svc.id] = svc
+    })
+    picked = ids.map((id) => byId[id]).filter((svc) => !!svc)
+  } else {
+    picked = services
+  }
+  return picked.slice(0, limit)
+}
+
 module.exports = {
   pad,
   bjNow,
@@ -187,5 +217,6 @@ module.exports = {
   txText,
   trimPastSlots,
   homeBlocks,
+  pickHomeServices,
   txQty,
 }

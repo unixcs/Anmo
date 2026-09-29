@@ -355,11 +355,20 @@ button.btn[disabled]:not([type]) {
   background: var(--input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
   font-size: 15px;
   line-height: 22px;
   color: var(--foreground);
   box-sizing: border-box;
+}
+
+/* 微信原生 input 需要显式 height 才能保证占位/正文垂直居中（总高 48px 与原 12+22+12+2border 一致） */
+.input {
+  height: 48px;
+  padding: 0 14px;
+}
+
+.textarea {
+  padding: 12px 14px;
   min-height: 0;
 }
 
