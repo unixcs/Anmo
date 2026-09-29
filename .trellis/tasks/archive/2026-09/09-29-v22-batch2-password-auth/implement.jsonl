@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层入口与 Pre-Development Checklist"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "migration 只增不改/SQLite 重建表/触发器索引重建约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "settings/质量门槛与错误码风格"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "weapp input 显式高度陷阱（新登录页/密码弹层涉及）与 H5 组件惯例"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端构建/type-check 门槛"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性：错误码→两端文案映射、登录态切换"}
+{"file": "docs/2026929plan.md", "reason": "源计划 §二/§三 账号体系需求原文"}

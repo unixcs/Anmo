@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查错误码/事务/测试覆盖是否符合后端约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 014 migration 是否符合只增不改与 SQLite 重建规范"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质检门槛"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "错误码/字段变更跨端一致性检查"}
+{"file": "docs/2026929plan.md", "reason": "对照 §二 验收标准核查"}
