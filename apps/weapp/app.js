@@ -7,6 +7,7 @@ App({
     settings: null,
     loggedIn: false,
     pendingServiceId: '', // 首页→预约页的预选服务（tab 页不能带参跳转）
+    pendingProfileEdit: '', // 预约页/首登提醒→我的页：自动展开资料编辑（V2.2 R4）
     bindTicket: '', // 静默登录拿到的未绑定票据，短信登录后自动绑定（D25）
     session: null, // 启动登录态 Promise
     sessionSettled: false,

@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, type BookingHalfDay, type BookingOptions } from '../core/api/endpoints'
 import type { ServiceItem } from '../core/models/models'
 import { candidateDays, partOpen, partMeta, todayStr, trimPastSlots, type DayOption } from '../core/logic/booking'
 import { yuan } from '../core/utils/format'
+import { profileProgress } from '../core/utils/profile'
 import { notify } from '../platform/notify/toast'
 import ShopCard from '../components/ShopCard.vue'
+import AppSheet from '../components/ui/AppSheet.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
 import AppButton from '../components/ui/AppButton.vue'
 import AppSkeleton from '../components/ui/AppSkeleton.vue'
 
 const route = useRoute()
+const router = useRouter()
 
 const services = ref<ServiceItem[]>([])
 const serviceId = ref('')
@@ -30,16 +33,68 @@ const svcErr = ref(false)
 const success = ref<{ name: string; date: string; time: string; fuzzy: boolean } | null>(null)
 const shop = ref({ address: '', phone: '', latitude: '', longitude: '' })
 
+// 资料完善半屏提示（V2.2 R4）：拿原始资料判完善度，拉不到不阻塞预约
+const member = ref<{ name?: string; phone?: string } | null>(null)
+const profileSheet = ref(false)
+
 const selectedService = computed(() => services.value.find((s) => s.id === serviceId.value))
 const half = computed<BookingHalfDay | null>(() => {
   if (!options.value || !part.value) return null
   return part.value === 'AM' ? options.value.am : options.value.pm
 })
-const submitLabel = computed(() => {
-  if (!selectedService.value || !part.value) return ''
-  const t = slotTime.value ? ` ${slotTime.value}` : ` ${part.value === 'AM' ? '上午' : '下午'}`
-  return `${selectedService.value.name} · ${day.value[dayIdx.value]?.label.slice(0, 5)}${t}`
+
+// 底部固定提交条（V2.2 R1，与小程序 booking 同语义）：置灰三态 + 摘要行
+const submitDisabled = computed(
+  () => busy.value || !selectedService.value || day.value.length === 0 || !part.value,
+)
+const submitText = computed(() => {
+  if (busy.value) return '提交中…'
+  if (!selectedService.value) return '请先选择服务'
+  if (!day.value.length) return '请先选择日期'
+  if (!part.value) return '请先选择上午或下午'
+  return '立即预约'
 })
+const submitSummary = computed(() => {
+  if (!selectedService.value || !part.value) return ''
+  const d = day.value[dayIdx.value]
+  const t = slotTime.value || '店家安排时间'
+  return `${selectedService.value.name} · ${d?.label.slice(0, 5)} ${part.value === 'AM' ? '上午' : '下午'} ${t}`
+})
+
+// ---- 资料完善往返的已选保留（V2.2 R4）：H5 路由离开会重建页面实例，草稿存 sessionStorage ----
+interface BookingDraft {
+  serviceId: string
+  dayIdx: number
+  part: '' | 'AM' | 'PM'
+  slotTime: string
+  note: string
+}
+let pendingDraft: BookingDraft | null = null
+
+function takeDraft(): BookingDraft | null {
+  try {
+    const raw = sessionStorage.getItem('anmo.booking.draft')
+    if (!raw) return null
+    sessionStorage.removeItem('anmo.booking.draft')
+    return JSON.parse(raw) as BookingDraft
+  } catch {
+    return null
+  }
+}
+
+// 选项就绪后恢复上/下午与具体时段：半天当前仍可选才恢复（与 pickPart 同门槛）
+function applyPendingDraft(): void {
+  if (!pendingDraft) return
+  const d = pendingDraft
+  pendingDraft = null
+  if (!d.part || !options.value) return
+  const half = d.part === 'AM' ? options.value.am : options.value.pm
+  if (!partOpen(half)) return
+  part.value = d.part
+  if (d.slotTime && (half.slots ?? []).some((s) => s.time === d.slotTime && s.remaining >= 1)) {
+    slotTime.value = d.slotTime
+  }
+}
 
 // 服务目录加载失败要给"网络不可用 + 重试"，不能让空列表伪装成"暂未上架服务"
 async function loadServices(): Promise<void> {
@@ -48,10 +103,14 @@ async function loadServices(): Promise<void> {
     const catalog = await api.catalog()
     services.value = catalog.services
     svcErr.value = false
-    const preset = route.query.service as string | undefined
+    const preset = (route.query.service as string | undefined) || pendingDraft?.serviceId || ''
     if (preset && services.value.some((s) => s.id === preset)) serviceId.value = preset
     day.value = candidateDays()
+    if (pendingDraft && pendingDraft.dayIdx > 0 && pendingDraft.dayIdx < day.value.length) {
+      dayIdx.value = pendingDraft.dayIdx
+    }
     if (serviceId.value) await refreshOptions()
+    applyPendingDraft()
   } catch {
     svcErr.value = true
   } finally {
@@ -59,7 +118,18 @@ async function loadServices(): Promise<void> {
   }
 }
 
-onMounted(loadServices)
+onMounted(() => {
+  const draft = takeDraft()
+  if (draft) {
+    pendingDraft = draft
+    note.value = draft.note || ''
+  }
+  void loadServices()
+  api
+    .myProfile()
+    .then((r) => (member.value = r.member))
+    .catch(() => {})
+})
 
 async function refreshOptions(): Promise<void> {
   const date = day.value[dayIdx.value]?.value
@@ -93,6 +163,34 @@ function pickPart(p: 'AM' | 'PM'): void {
   slotTime.value = ''
 }
 
+// ---- 资料完善半屏提示（V2.2 R4）----
+// 去完善：已选存 sessionStorage，返回后恢复；不置跳过标记，完善前再次提交仍会提醒
+function goProfileSheet(): void {
+  profileSheet.value = false
+  try {
+    sessionStorage.setItem(
+      'anmo.booking.draft',
+      JSON.stringify({
+        serviceId: serviceId.value,
+        dayIdx: dayIdx.value,
+        part: part.value,
+        slotTime: slotTime.value,
+        note: note.value,
+      } satisfies BookingDraft),
+    )
+  } catch {
+    /* 存储不可用仅损失"已选保留"体验 */
+  }
+  router.push('/me/profile')
+}
+
+// 先跳过：置本地标记永久静默，继续原提交流程
+function skipProfileSheet(): void {
+  localStorage.setItem('anmo.profile.bookingSkipped', '1')
+  profileSheet.value = false
+  void submit()
+}
+
 async function submit(): Promise<void> {
   if (!selectedService.value || !part.value) {
     notify('请先选择服务、日期和上午/下午')
@@ -104,6 +202,15 @@ async function submit(): Promise<void> {
     dayIdx.value = 0
     void refreshOptions()
     notify('日期已更新，请重新选择时间')
+    return
+  }
+  // 资料完善半屏提示（V2.2 R4）：资料不全且未永久跳过 → 拦截首次点击
+  if (
+    member.value &&
+    profileProgress(member.value).pct < 100 &&
+    !localStorage.getItem('anmo.profile.bookingSkipped')
+  ) {
+    profileSheet.value = true
     return
   }
   busy.value = true
@@ -149,7 +256,7 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <div class="page booking">
+  <div class="page booking" :class="{ 'with-bar': !success }">
     <!-- 预约成功页（§19：服务/日期/时间 + 门店信息卡，地址导航电话拨号） -->
     <section v-if="success" class="done rise">
       <div class="done-icon">
@@ -264,18 +371,22 @@ async function submit(): Promise<void> {
         <textarea v-model="note" rows="2" class="textarea" placeholder="身体状况、偏好等" />
       </section>
 
-      <AppButton
-        variant="primary"
-        size="lg"
-        block
-        :loading="busy"
-        :disabled="!part"
-        class="submit"
-        @click="submit"
-      >
-        {{ part ? `提交预约：${submitLabel}` : '请先选择上午 / 下午' }}
-      </AppButton>
-      <p class="fuzzy-hint">只选上午/下午提交 = 模糊预约，具体时间由店主安排，可能需要等待。</p>
+      <!-- 底部固定提交条（V2.2 R1）：不随内容滚动，bottom 让开 App.vue 底部 tab 栏 -->
+      <div class="submit-bar">
+        <p v-if="submitSummary" class="submit-info num">{{ submitSummary }}</p>
+        <AppButton variant="primary" size="lg" block :loading="busy" :disabled="submitDisabled" @click="submit">
+          {{ submitText }}
+        </AppButton>
+        <p class="submit-hint">只选上午/下午提交 = 模糊预约，具体时间由店主安排，可能需要等待。</p>
+      </div>
+      <!-- 资料完善半屏提示（V2.2 R4）：资料不全时首次点提交弹出，轻量不打断 -->
+      <AppSheet :open="profileSheet" title="完善一下资料" @close="profileSheet = false">
+        <p class="sheet-body">填写手机号，方便技师联系您确认预约。</p>
+        <div class="sheet-ops">
+          <AppButton variant="primary" block @click="goProfileSheet">去完善</AppButton>
+          <AppButton variant="ghost" block @click="skipProfileSheet">先跳过，继续预约</AppButton>
+        </div>
+      </AppSheet>
     </template>
   </div>
 </template>
@@ -498,15 +609,51 @@ async function submit(): Promise<void> {
   color: var(--muted-foreground);
 }
 
-.submit {
-  margin-top: 24px;
+/* 底部固定提交条（V2.2 R1）：bottom 让开 tab 栏（--tabbar-h 与 App.vue .tabbar 同步），
+   iPhone 底部安全区随 tab 栏一起让位；内容区 .with-bar 预留等高留白防备注被盖 */
+.booking.with-bar {
+  padding-bottom: calc(215px + env(safe-area-inset-bottom));
 }
 
-.fuzzy-hint {
-  color: var(--muted-foreground);
+.submit-bar {
+  position: fixed;
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px rgba(34, 30, 27, 0.06);
+  padding: 10px 16px;
+  z-index: 30;
+}
+
+.submit-info {
   font: var(--font-caption);
+  color: var(--muted-foreground);
   text-align: center;
-  margin: 10px 0 0;
+  margin: 0 0 6px;
+}
+
+.submit-hint {
+  font: var(--font-caption);
+  color: var(--muted-foreground);
+  text-align: center;
+  margin: 6px 0 0;
+}
+
+/* 资料完善半屏（V2.2 R4） */
+.sheet-body {
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  margin: 0 0 14px;
+}
+
+.sheet-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* 预约成功页 */

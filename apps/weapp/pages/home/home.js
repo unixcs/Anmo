@@ -1,5 +1,6 @@
 // home — 首页：门店动态状态（§17 三态不落库）+ 动态文案 + 公告 + 服务目录 + 门店卡。
 const { api } = require('../../utils/api')
+const auth = require('../../utils/auth')
 const fmt = require('../../utils/format')
 
 const STATUS_TEXT = { FREE: '空闲中', SERVING: '服务中', BUSY: '忙碌中' }
@@ -64,12 +65,41 @@ Page({
     const finish = () => {
       if (--pending === 0) {
         this.setData({ loading: false })
+        // 首登资料完善提醒（V2.2 R4）：settings 与资料都在手后才判，避免与加载竞态
+        this.maybeFirstLoginPrompt()
         if (done) done()
       }
     }
     this.loadStatus(finish)
     this.loadSettings(finish)
     this.loadHome(finish)
+  },
+
+  // 首登资料完善提醒（V2.2 R4）：后台开关开启且资料不全时进首页提示一次；
+  // 展示即计数（置本地标记），无论用户去完善还是暂不，之后不再弹；已完善不弹。
+  maybeFirstLoginPrompt() {
+    const s = getApp().globalData.settings || {}
+    if (s.profile_first_login_prompt !== '1') return
+    if (wx.getStorageSync('anmo_profile_first_prompted')) return
+    const check = (profile) => {
+      if (!profile || fmt.profileProgress(profile).pct >= 100) return
+      wx.setStorageSync('anmo_profile_first_prompted', 1)
+      wx.showModal({
+        title: '完善资料',
+        content: '完善称呼与手机号，方便预约联系',
+        confirmText: '去完善',
+        cancelText: '暂不',
+        confirmColor: '#a94a43',
+        success: (r) => {
+          if (!r.confirm) return
+          getApp().globalData.pendingProfileEdit = true
+          wx.switchTab({ url: '/pages/me/me' })
+        },
+      })
+    }
+    const cached = auth.cachedProfile()
+    if (cached) check(cached)
+    else api.myProfile().then((d) => check(d.member)).catch(() => {})
   },
 
   loadStatus(done) {

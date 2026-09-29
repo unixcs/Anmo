@@ -19,6 +19,12 @@
       <view class="btn sm outline pressable" bindtap="startEdit">编辑</view>
     </view>
 
+    <!-- 资料完善度（V2.2 R4）：矮提示条，已完善隐藏；去完善 = 展开本页姓名编辑 -->
+    <view wx:if="{{progress.pct < 100}}" class="profile-tip">
+      <text class="tip-text num">资料完善度 {{progress.pct}}%｜{{progressText}}</text>
+      <text class="tip-go pressable" bindtap="startEdit">去完善</text>
+    </view>
+
     <!-- 统计瓦片 -->
     <view class="me-stats">
       <view class="stat"><text class="stat-label">会员卡</text><text class="stat-value num">{{stats.cards}}<text class="stat-hint">张</text></text></view>

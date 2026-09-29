@@ -70,12 +70,39 @@
 /* 备注 */
 .counter { text-align: right; font-size: 12px; margin-top: 4px; }
 
-.submit { margin-top: 24px; }
-.fuzzy-hint {
+/* 底部固定提交条（V2.2 R1）：常驻不随内容滚动，iPhone 底部安全区让位 */
+.page-body.with-bar { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+.submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+.submit-info {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  text-align: center;
+  margin-bottom: 6px;
+}
+.submit-hint {
   color: var(--muted-foreground);
   font-size: 12px;
   text-align: center;
-  margin-top: 10px;
+  margin-top: 6px;
+}
+
+/* 资料完善半屏（V2.2 R4）：按钮纵向堆叠 */
+.profile-sheet-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 /* 成功页 */

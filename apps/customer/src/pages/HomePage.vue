@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { api } from '../core/api/endpoints'
 import type { HomeAnnouncement, HomeBanner, HomeBlock, StoreStatus } from '../core/api/endpoints'
 import type { ServiceItem } from '../core/models/models'
 import { yuan } from '../core/utils/format'
 import { pickHomeServices } from '../core/utils/home-services'
+import { profileProgress } from '../core/utils/profile'
+import { currentToken } from '../platform/auth/session'
 import ShopCard from '../components/ShopCard.vue'
+import AppDialog from '../components/ui/AppDialog.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
+
+const router = useRouter()
 
 const services = ref<ServiceItem[]>([])
 const banners = ref<HomeBanner[]>([])
@@ -49,6 +55,29 @@ function blockText(data: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : ''
 }
 
+// 首登资料完善提醒（V2.2 R4）：后台开关开启且已登录资料不全时进首页提示一次；
+// 展示即计数（置本地标记），无论去完善还是暂不，之后不再弹；已完善/未登录不弹。
+const firstPrompt = ref(false)
+
+async function maybeFirstLoginPrompt(settings: Record<string, string>): Promise<void> {
+  if (settings.profile_first_login_prompt !== '1') return
+  if (localStorage.getItem('anmo.profile.firstPrompted')) return
+  if (!currentToken()) return
+  try {
+    const res = await api.myProfile()
+    if (profileProgress(res.member).pct >= 100) return
+    localStorage.setItem('anmo.profile.firstPrompted', '1')
+    firstPrompt.value = true
+  } catch {
+    /* 拉不到资料（未登录/网络）不弹 */
+  }
+}
+
+function onFirstPromptConfirm(): void {
+  firstPrompt.value = false
+  router.push('/me/profile')
+}
+
 onMounted(async () => {
   void loadStatus()
   statusTimer = window.setInterval(loadStatus, 60000)
@@ -77,6 +106,8 @@ onMounted(async () => {
       latitude: settings.shop_latitude ?? '',
       longitude: settings.shop_longitude ?? '',
     }
+    // 首登资料完善提醒（V2.2 R4）：settings 在手后才判，避免与加载竞态
+    void maybeFirstLoginPrompt(settings)
   } catch {
     services.value = []
     blocks.value = DEFAULT_BLOCKS
@@ -181,6 +212,17 @@ function onBannerErr(bn: HomeBanner): void {
         <ShopCard v-bind="shop" />
       </section>
     </div>
+
+    <!-- 首登资料完善提醒（V2.2 R4）：后台开关控制，默认关；提示一次不再弹 -->
+    <AppDialog
+      :open="firstPrompt"
+      title="完善资料"
+      body="完善称呼与手机号，方便预约联系"
+      confirm-text="去完善"
+      cancel-text="暂不"
+      @close="firstPrompt = false"
+      @confirm="onFirstPromptConfirm"
+    />
   </div>
 </template>
 

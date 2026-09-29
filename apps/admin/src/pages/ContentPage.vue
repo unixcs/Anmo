@@ -126,13 +126,31 @@
             <el-form-item label="门店地址"><el-input v-model="shop.address" maxlength="200"
               placeholder="省市区+街道门牌，如：XX市XX区XX路12号3楼" /></el-form-item>
             <el-form-item label="经纬度">
-              <el-input v-model="shop.longitude" placeholder="经度 lng，如 120.153576" style="width: 220px" />
-              <el-input v-model="shop.latitude" placeholder="纬度 lat，如 30.287459" style="width: 220px; margin-left: 8px" />
+              <el-input v-model="shop.longitude" placeholder="经度 lng，如 120.153576" style="width: 200px"
+                @blur="checkShopCoord" />
+              <el-input v-model="shop.latitude" placeholder="纬度 lat，如 30.287459" style="width: 200px; margin-left: 8px"
+                @blur="checkShopCoord" />
+              <el-button style="margin-left: 8px" @click="openPicker">地图选点</el-button>
             </el-form-item>
             <el-form-item>
-              <span class="hint">经纬度获取：在高德地图网页版定位到门店，网址栏或分享链接里 lng= 与 lat= 后的数字。填好后顾客点地址即可导航；不填则地址不可点击。</span>
+              <span class="hint">可点「地图选点」在高德地图搜索或拖拽选取；也可手动输入（经度 73~135、纬度 3~53，保存时自动保留 6 位小数）。填好后顾客点地址即可导航；不填则地址不可点击。</span>
             </el-form-item>
             <el-form-item><el-button type="primary" :loading="shopSaving" @click="saveShop">保存门店信息</el-button></el-form-item>
+          </el-form>
+        </el-card>
+
+        <!-- 高德地图配置（V2.2 R2）：地图选点用的 JS API Key，仅本页使用，不下发顾客端 -->
+        <el-card shadow="never" style="margin-bottom: 14px">
+          <template #header><b>高德地图配置</b><span class="hint" style="margin-left: 10px">仅用于上方「地图选点」，不下发顾客端</span></template>
+          <el-form label-width="80px">
+            <el-form-item label="JS Key"><el-input v-model="amap.key" maxlength="64"
+              placeholder="高德开放平台 Web端(JS API) Key" style="max-width: 420px" /></el-form-item>
+            <el-form-item label="安全密钥"><el-input v-model="amap.code" maxlength="64"
+              placeholder="与 Key 配套的 jscode；未开启数字签名校验可留空" style="max-width: 420px" /></el-form-item>
+            <el-form-item>
+              <span class="hint">在高德开放平台申请 Web端(JS API) Key 并配置域名白名单，仅用于本页选点</span>
+            </el-form-item>
+            <el-form-item><el-button type="primary" :loading="amapSaving" @click="saveAmap">保存高德配置</el-button></el-form-item>
           </el-form>
         </el-card>
 
@@ -199,6 +217,10 @@
       <el-button type="primary" :loading="saving" @click="saveAnnForm">保存</el-button>
     </template>
   </el-dialog>
+
+  <!-- 高德地图选点（V2.2 R2）：确认后回填经纬度输入框，需再点「保存门店信息」落库 -->
+  <AmapPicker v-model="pickerVisible" :api-key="amap.key" :js-code="amap.code" :init-lng="shop.longitude"
+    :init-lat="shop.latitude" @confirm="onPickerConfirm" />
 </template>
 
 <script setup lang="ts">
@@ -221,6 +243,7 @@ import {
   type ServiceItem,
 } from '../core/api/admin'
 import { yuan } from '../core/format'
+import AmapPicker from '../components/AmapPicker.vue'
 
 const BLOCK_TYPES = ['banner', 'announcement', 'service_list', 'activity', 'richtext'] as const
 const BLOCK_TYPE_TEXT: Record<string, string> = {
@@ -448,6 +471,50 @@ async function saveRec(): Promise<void> {
 const shop = ref({ phone: '', address: '', latitude: '', longitude: '' })
 const shopSaving = ref(false)
 
+// ---------- 高德地图配置（V2.2 R2） ----------
+const amap = ref({ key: '', code: '' })
+const amapSaving = ref(false)
+const pickerVisible = ref(false)
+
+// 经纬度手动校验（R2）：空值放行（允许不填）；成对校验数字与范围（经度 73~135 / 纬度 3~53）
+function shopCoordError(): string {
+  const lng = shop.value.longitude.trim()
+  const lat = shop.value.latitude.trim()
+  if (!lng && !lat) return ''
+  if (!lng || !lat) return '请输入正确的经纬度'
+  const lo = Number(lng)
+  const la = Number(lat)
+  if (Number.isNaN(lo) || Number.isNaN(la) || lo < 73 || lo > 135 || la < 3 || la > 53) {
+    return '请输入正确的经纬度'
+  }
+  return ''
+}
+
+function checkShopCoord(): void {
+  const msg = shopCoordError()
+  if (msg) ElMessage.warning(msg)
+}
+
+// 空值原样放行；非空四舍五入保留 6 位小数（如 120.123456789 → 120.123457）
+function normCoord(v: string): string {
+  const t = v.trim()
+  return t ? Number(t).toFixed(6) : ''
+}
+
+function openPicker(): void {
+  if (!amap.value.key.trim()) {
+    ElMessage.warning('未配置高德 Key，请在下方「高德地图配置」填写')
+    return
+  }
+  pickerVisible.value = true
+}
+
+function onPickerConfirm(p: { lng: string; lat: string }): void {
+  shop.value.longitude = p.lng
+  shop.value.latitude = p.lat
+  ElMessage.success('已回填选点坐标，请记得保存门店信息')
+}
+
 function fillBiz(map: Record<string, string>): void {
   if (map['business_open_time']) biz.value.open = map['business_open_time']
   if (map['business_close_time']) biz.value.close = map['business_close_time']
@@ -468,6 +535,9 @@ function fillBiz(map: Record<string, string>): void {
   shop.value.address = map['shop_address'] ?? ''
   shop.value.latitude = map['shop_latitude'] ?? ''
   shop.value.longitude = map['shop_longitude'] ?? ''
+  // 高德地图配置（V2.2 R2）：仅 admin 全量读取，顾客端不下发
+  amap.value.key = map['amap_js_key'] ?? ''
+  amap.value.code = map['amap_js_code'] ?? ''
 }
 
 async function saveKeys(pairs: [string, string][]): Promise<void> {
@@ -489,19 +559,39 @@ async function saveHome(): Promise<void> {
 }
 
 async function saveShop(): Promise<void> {
+  const coordMsg = shopCoordError()
+  if (coordMsg) {
+    ElMessage.error(coordMsg)
+    return
+  }
   shopSaving.value = true
   try {
     await saveKeys([
       ['shop_phone', shop.value.phone.trim()],
       ['shop_address', shop.value.address.trim()],
-      ['shop_latitude', shop.value.latitude.trim()],
-      ['shop_longitude', shop.value.longitude.trim()],
+      ['shop_latitude', normCoord(shop.value.latitude)],
+      ['shop_longitude', normCoord(shop.value.longitude)],
     ])
     ElMessage.success('门店信息已保存')
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '保存失败')
   } finally {
     shopSaving.value = false
+  }
+}
+
+async function saveAmap(): Promise<void> {
+  amapSaving.value = true
+  try {
+    await saveKeys([
+      ['amap_js_key', amap.value.key.trim()],
+      ['amap_js_code', amap.value.code.trim()],
+    ])
+    ElMessage.success('高德地图配置已保存')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    amapSaving.value = false
   }
 }
 

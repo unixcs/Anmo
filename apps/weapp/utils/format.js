@@ -197,6 +197,16 @@ function pickHomeServices(services, settings) {
   return picked.slice(0, limit)
 }
 
+// 资料完善度（V2.2 R4，与 H5 core/utils/profile 逐行同构）：
+// name 与 phone 均非空 = 100%，填一个 = 50%，全空 = 0；missing 按序给出缺失字段。
+function profileProgress(member) {
+  const m = member || {}
+  const missing = []
+  if (!(m.name || '').trim()) missing.push('name')
+  if (!(m.phone || '').trim()) missing.push('phone')
+  return { pct: 100 - missing.length * 50, missing }
+}
+
 module.exports = {
   pad,
   bjNow,
@@ -218,5 +228,6 @@ module.exports = {
   trimPastSlots,
   homeBlocks,
   pickHomeServices,
+  profileProgress,
   txQty,
 }

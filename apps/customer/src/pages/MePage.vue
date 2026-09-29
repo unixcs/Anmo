@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { api } from '../core/api/endpoints'
 import type { MemberCard } from '../core/models/models'
 import { todayStr } from '../core/logic/booking'
+import { profileProgress, type ProfileProgress } from '../core/utils/profile'
 import { signOut } from '../platform/auth/session'
 import { useRouter } from 'vue-router'
 import { notify } from '../platform/notify/toast'
@@ -16,6 +17,14 @@ const phone = ref('')
 const cardCount = ref(0)
 const remainingTotal = ref(0)
 const upcoming = ref(0)
+// 资料完善度（V2.2 R4）：默认 100（未加载前不渲染提示条）
+const progress = ref<ProfileProgress>({ pct: 100, missing: [] })
+const progressText = computed(() => {
+  const missing = progress.value.missing
+  if (missing.includes('name') && missing.includes('phone')) return '完善称呼与手机号'
+  if (missing.includes('name')) return '完善称呼'
+  return '完善手机号，方便预约联系'
+})
 
 onMounted(async () => {
   try {
@@ -23,6 +32,7 @@ onMounted(async () => {
     name.value = res.member.name || '未设置昵称'
     memberNo.value = res.member.member_no
     phone.value = res.member.phone
+    progress.value = profileProgress(res.member)
     // 统计块：卡与即将到店（失败不影响页面主体）
     const [cards, apts] = await Promise.all([
       api.myCards().catch((): MemberCard[] => []),
@@ -60,6 +70,12 @@ function logout(): void {
         <div class="name">{{ name }}</div>
         <div class="no num">会员号 {{ memberNo }}</div>
       </div>
+    </div>
+
+    <!-- 资料完善度（V2.2 R4）：矮提示条，已完善隐藏，不弹窗不挡操作 -->
+    <div v-if="progress.pct < 100" class="profile-tip">
+      <span class="tip-text num">资料完善度 {{ progress.pct }}%｜{{ progressText }}</span>
+      <button type="button" class="tip-go pressable" @click="router.push('/me/profile')">去完善</button>
     </div>
 
     <!-- 统计 -->
@@ -117,6 +133,32 @@ function logout(): void {
   font: var(--font-sub);
   color: var(--muted-foreground);
   margin-top: 2px;
+}
+
+.profile-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--primary-soft);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin: -8px 4px 16px;
+}
+
+.tip-text {
+  flex: 1;
+  font: var(--font-caption);
+  color: var(--foreground);
+}
+
+.tip-go {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 0;
+  font: 600 12px/16px var(--font-stack);
+  color: var(--primary);
+  cursor: pointer;
 }
 
 .stats {

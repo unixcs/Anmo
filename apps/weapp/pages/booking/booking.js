@@ -1,6 +1,7 @@
 // booking — 预约页（D20 口径与顾客 H5 同一语义）：
 // 服务必选 → 日期（30 天内）→ 上下午必选 → 可选具体时间（名额共享）→ 提交。
 const { api } = require('../../utils/api')
+const auth = require('../../utils/auth')
 const fmt = require('../../utils/format')
 
 const AHEAD_DAYS = 30
@@ -32,6 +33,7 @@ Page({
     slot: '',
     note: '',
     busy: false,
+    profileSheet: false, // 资料完善半屏提示（V2.2 R4）
     success: null, // {no, name, date, time, fuzzy}
     shop: { address: '', phone: '', latitude: '', longitude: '' },
     loggedIn: true,
@@ -160,6 +162,28 @@ Page({
     wx.navigateTo({ url: '/pages/about/about' })
   },
 
+  // ---- 资料完善半屏提示（V2.2 R4）----
+  // 资料不全且未永久跳过时拦截首次提交；「先跳过」置本地标记后不再弹，其余关闭动作可再次提醒
+  // 半屏面板挡泡（catchtap 空实现：阻止点面板误触遮罩关闭）
+  noop() {},
+
+  closeProfileSheet() {
+    this.setData({ profileSheet: false })
+  },
+
+  goProfile() {
+    // 已选信息随 tab 页实例保留，完善后返回预约页无需重选
+    this.setData({ profileSheet: false })
+    getApp().globalData.pendingProfileEdit = true
+    wx.switchTab({ url: '/pages/me/me' })
+  },
+
+  skipProfile() {
+    wx.setStorageSync('anmo_profile_booking_skipped', 1)
+    this.setData({ profileSheet: false })
+    this.submit() // 继续原提交流程
+  },
+
   submit() {
     const { services, svcIdx, days, dayIdx, part, slot, note, busy, loggedIn } = this.data
     if (busy) return
@@ -181,6 +205,16 @@ Page({
     if (!day || days[0].value !== fmt.todayStr()) {
       this.loadOptions()
       wx.showToast({ title: '请重新选择时间', icon: 'none' })
+      return
+    }
+    // 资料完善半屏提示（V2.2 R4）：只提醒不拦截人——跳过一次后永不再弹
+    const profile = auth.cachedProfile()
+    if (
+      profile &&
+      fmt.profileProgress(profile).pct < 100 &&
+      !wx.getStorageSync('anmo_profile_booking_skipped')
+    ) {
+      this.setData({ profileSheet: true })
       return
     }
     // 与 H5 同口径：选了槽 → start_time；只选半天 → date + day_part

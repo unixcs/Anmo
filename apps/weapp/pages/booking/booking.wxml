@@ -1,4 +1,4 @@
-<view class="page-body">
+<view class="page-body {{success ? '' : 'with-bar'}}">
   <!-- 预约成功页内态（§19：服务/日期/时间 + 单号 + 门店信息卡） -->
   <block wx:if="{{success}}">
     <view class="done">
@@ -105,13 +105,35 @@
       <view class="counter muted num">{{note.length}}/200</view>
     </view>
 
-    <button class="btn primary lg block submit" loading="{{busy}}" disabled="{{busy || !part}}" bindtap="submit">
-      {{busy
-        ? '提交中…'
-        : (part
-          ? '提交预约：' + services[svcIdx].name + ' · ' + days[dayIdx].label + ' ' + days[dayIdx].sub + ' ' + (slot || (part === 'AM' ? '上午' : '下午'))
-          : '请先选择上午 / 下午')}}
-    </button>
-    <view class="fuzzy-hint">只选上午/下午提交 = 模糊预约，具体时间由店主安排，可能需要等待。</view>
+    <!-- 底部固定提交条（V2.2 R1）：不随内容滚动；摘要行选完才显示 -->
+    <view class="submit-bar">
+      <view wx:if="{{svcIdx >= 0 && dayIdx >= 0 && part}}" class="submit-info num">
+        {{services[svcIdx].name}} · {{days[dayIdx].label}} {{days[dayIdx].sub}} {{part === 'AM' ? '上午' : '下午'}} · {{slot || '店家安排时间'}}
+      </view>
+      <button class="btn primary lg block" loading="{{busy}}"
+              disabled="{{busy || svcIdx < 0 || dayIdx < 0 || !part}}" bindtap="submit">
+        {{busy
+          ? '提交中…'
+          : (svcIdx < 0
+            ? '请先选择服务'
+            : (dayIdx < 0
+              ? '请先选择日期'
+              : (part ? '立即预约' : '请先选择上午或下午')))}}
+      </button>
+      <view class="submit-hint">只选上午/下午提交 = 模糊预约，具体时间由店主安排，可能需要等待。</view>
+    </view>
+
+    <!-- 资料完善半屏提示（V2.2 R4）：资料不全时首次点提交弹出，轻量不打断 -->
+    <view wx:if="{{profileSheet}}" class="mask" bindtap="closeProfileSheet">
+      <view class="sheet" catchtap="noop">
+        <view class="sheet-grab"></view>
+        <view class="sheet-title">完善一下资料</view>
+        <view class="sheet-sub">填写手机号，方便技师联系您确认预约。</view>
+        <view class="profile-sheet-ops">
+          <button class="btn primary block" bindtap="goProfile">去完善</button>
+          <button class="btn ghost block" bindtap="skipProfile">先跳过，继续预约</button>
+        </view>
+      </view>
+    </view>
   </block>
 </view>

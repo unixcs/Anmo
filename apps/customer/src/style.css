@@ -26,6 +26,11 @@
   --input: #ffffff;
   --ring: rgba(169, 74, 67, 0.3);
 
+  /* 底部 tab 栏高度（App.vue .tabbar 同步点：6px*2 padding + 22 图标 + 2 间距 + 14 文案 = 50px）；
+     固定悬浮条（如预约页提交条）用 bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)) 让位，
+     改 tabbar 结构时必须同步此值 */
+  --tabbar-h: 50px;
+
   /* 圆角 / 阴影 / 动效（§2.3 §2.4） */
   --radius-sm: 8px;
   --radius-md: 12px;

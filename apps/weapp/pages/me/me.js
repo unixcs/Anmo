@@ -9,6 +9,8 @@ Page({
     member: null, // {name, member_no, phone}
     avatar: '客',
     stats: { cards: 0, remaining: 0, upcoming: 0 },
+    progress: { pct: 100, missing: [] }, // 资料完善度（V2.2 R4），未加载/已完善不渲染提示条
+    progressText: '',
     editing: false,
     name: '',
     gender: '',
@@ -18,7 +20,13 @@ Page({
     // 先出缓存资料再拉最新，切 tab 不闪空白
     const cached = auth.cachedProfile()
     if (cached) this.setMember(cached)
-    getApp().ready((loggedIn) => {
+    // 预约页「去完善」/首登提醒跳转过来：自动展开资料编辑（V2.2 R4）
+    const app = getApp()
+    if (app.globalData.pendingProfileEdit) {
+      app.globalData.pendingProfileEdit = ''
+      if (cached) this.startEdit()
+    }
+    app.ready((loggedIn) => {
       if (loggedIn) {
         this.refresh()
         this.loadStats()
@@ -30,10 +38,20 @@ Page({
 
   setMember(member) {
     // 头像字与展示名同源（未设置昵称 → "未"），与 H5 同口径
+    // 资料完善度文案（V2.2 R4，与 H5 MePage 同文案）：按缺失字段变化
+    const prog = fmt.profileProgress(member)
+    const missing = prog.missing
     this.setData({
       loggedIn: true,
       member,
       avatar: (member && member.name ? member.name : '未设置昵称').slice(0, 1) || '客',
+      progress: prog,
+      progressText:
+        missing.indexOf('name') >= 0 && missing.indexOf('phone') >= 0
+          ? '完善称呼与手机号'
+          : missing.indexOf('name') >= 0
+            ? '完善称呼'
+            : '完善手机号，方便预约联系',
     })
   },
 

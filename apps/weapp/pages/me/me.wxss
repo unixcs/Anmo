@@ -24,6 +24,19 @@
 
 .me-stats { display: flex; gap: 10px; margin-bottom: 20px; }
 
+/* 资料完善度提示条（V2.2 R4，与 H5 MePage 同构） */
+.profile-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--primary-soft);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin: -8px 4px 16px;
+}
+.tip-text { flex: 1; font-size: 11px; line-height: 16px; color: var(--foreground); }
+.tip-go { flex-shrink: 0; color: var(--primary); font-size: 12px; line-height: 16px; font-weight: 600; }
+
 /* 编辑资料 */
 .edit-card { padding: 16px; margin-bottom: 16px; animation: anmo-rise 0.2s var(--ease) both; }
 .edit-ops { display: flex; gap: 10px; margin-top: 16px; }
