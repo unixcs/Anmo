@@ -5,6 +5,7 @@ import type { HomeAnnouncement, HomeBanner, HomeBlock, StoreStatus } from '../co
 import type { ServiceItem } from '../core/models/models'
 import { yuan } from '../core/utils/format'
 import ShopCard from '../components/ShopCard.vue'
+import AppIcon from '../components/ui/AppIcon.vue'
 
 const services = ref<ServiceItem[]>([])
 const banners = ref<HomeBanner[]>([])
@@ -20,15 +21,16 @@ const store = ref<StoreStatus | null>(null)
 let statusTimer: number | undefined
 
 const STATUS_TEXT: Record<string, string> = { FREE: '空闲中', SERVING: '服务中', BUSY: '忙碌中' }
+const STATUS_CLS: Record<string, string> = { FREE: 'free', SERVING: 'serving', BUSY: 'busy' }
 const statusText = ref('')
-const statusClass = ref('')
+const statusCls = ref('')
 
 async function loadStatus(): Promise<void> {
   try {
     const s = await api.storeStatus()
     store.value = s
-    statusText.value = s.status === 'SERVING' && s.free_at ? `服务中 · 预计 ${s.free_at} 空闲` : (STATUS_TEXT[s.status] ?? '')
-    statusClass.value = s.status.toLowerCase()
+    statusText.value = s.status === 'SERVING' && s.free_at ? `服务中 · ${s.free_at} 后空闲` : (STATUS_TEXT[s.status] ?? '')
+    statusCls.value = STATUS_CLS[s.status] ?? ''
   } catch {
     statusText.value = ''
   }
@@ -53,7 +55,7 @@ onMounted(async () => {
     const [home, catalog, settings] = await Promise.all([
       api.home(),
       api.catalog(),
-      api.publicSettings().catch(() => ({})),
+      api.publicSettings().catch(() => ({} as Record<string, string>)),
     ])
     banners.value = home.banners ?? []
     announcements.value = home.announcements ?? []
@@ -82,103 +84,358 @@ onMounted(async () => {
 onUnmounted(() => {
   if (statusTimer !== undefined) window.clearInterval(statusTimer)
 })
+
+// 脏图/失效图直接从轮播里摘掉，不留破图占位
+function onBannerErr(bn: HomeBanner): void {
+  banners.value = banners.value.filter((b) => b.id !== bn.id)
+}
 </script>
 
 <template>
-  <div class="page home">
-    <section class="hero">
-      <div class="hero-top">
-        <h1>{{ heroTitle || '安摩 · 到店按摩' }}</h1>
-        <span v-if="statusText" class="store-status" :class="statusClass">{{ statusText }}</span>
+  <div class="home">
+    <!-- 顶栏：品牌印 + 状态灯（宣纸底，不做满屏大色块） -->
+    <header class="hero">
+      <div class="hero-row">
+        <div class="hero-brand">
+          <span class="seal">安摩</span>
+          <div class="hero-text">
+            <h1>{{ heroTitle || '安摩 · 到店按摩' }}</h1>
+            <p>{{ heroBody || '专业肩颈腰背放松，静候您的到来' }}</p>
+          </div>
+        </div>
+        <span v-if="statusText" class="store-status" :class="statusCls">
+          <i class="dot" />{{ statusText }}
+        </span>
       </div>
-      <p>{{ heroBody || '专业肩颈腰背放松，静候您的到来' }}</p>
-    </section>
+      <RouterLink to="/booking" class="hero-cta btn primary lg block pressable">
+        <AppIcon name="calendar" :size="18" />
+        立即预约
+      </RouterLink>
+    </header>
 
-    <template v-for="(b, i) in blocks" :key="i">
-      <!-- 轮播图 -->
-      <section v-if="b.type === 'banner' && banners.length > 0" class="banners">
-        <a v-for="bn in banners" :key="bn.id" class="banner" :href="bn.link || 'javascript:;'">
-          <img :src="bn.image" :alt="bn.title" loading="lazy" />
-        </a>
-      </section>
+    <div class="page home-body">
+      <template v-for="(b, i) in blocks" :key="i">
+        <!-- 轮播图 -->
+        <section v-if="b.type === 'banner' && banners.length > 0" class="banners">
+          <a v-for="bn in banners" :key="bn.id" class="banner pressable" :href="bn.link || 'javascript:;'">
+            <img :src="bn.image" :alt="bn.title" loading="lazy" @error="onBannerErr(bn)" />
+          </a>
+        </section>
 
-      <!-- 公告 -->
-      <section v-else-if="b.type === 'announcement' && announcements.length > 0" class="notice">
-        <span class="notice-tag">公告</span>
-        <div class="notice-body">
-          <p v-for="a in announcements" :key="a.id">{{ a.title }}<template v-if="a.content"> · {{ a.content }}</template></p>
+        <!-- 公告 -->
+        <section v-else-if="b.type === 'announcement' && announcements.length > 0" class="notice card plain">
+          <span class="notice-tag">公告</span>
+          <div class="notice-body">
+            <p v-for="a in announcements" :key="a.id">
+              {{ a.title }}<template v-if="a.content"> · {{ a.content }}</template>
+            </p>
+          </div>
+        </section>
+
+        <!-- 服务列表 -->
+        <section v-else-if="b.type === 'service_list'" class="section">
+          <div class="section-head">
+            <h2>{{ blockText(b.data, 'title') || '服务推荐' }}</h2>
+            <RouterLink to="/services" class="more">
+              全部服务
+              <AppIcon name="chevron-right" :size="14" />
+            </RouterLink>
+          </div>
+          <div class="grid">
+            <RouterLink
+              v-for="s in services"
+              :key="s.id"
+              :to="`/booking?service=${s.id}`"
+              class="card svc-card pressable"
+            >
+              <div class="svc-name">{{ s.name }}</div>
+              <div class="svc-meta">{{ s.duration_minutes }} 分钟</div>
+              <div class="svc-price money">¥{{ yuan(s.default_price) }}</div>
+            </RouterLink>
+          </div>
+        </section>
+
+        <!-- 活动 -->
+        <section v-else-if="b.type === 'activity'" class="card block-card">
+          <h3 class="accent-title">{{ blockText(b.data, 'title') || '店内活动' }}</h3>
+          <p v-if="blockText(b.data, 'text')" class="block-text">{{ blockText(b.data, 'text') }}</p>
+        </section>
+
+        <!-- 富文本 -->
+        <section v-else-if="b.type === 'richtext'" class="card block-card">
+          <h3 v-if="blockText(b.data, 'title')" class="block-title">{{ blockText(b.data, 'title') }}</h3>
+          <p v-if="blockText(b.data, 'text') || blockText(b.data, 'content')" class="block-text">
+            {{ blockText(b.data, 'text') || blockText(b.data, 'content') }}
+          </p>
+        </section>
+      </template>
+
+      <!-- 门店信息 -->
+      <section class="shop-section">
+        <div class="hours-row card plain">
+          <AppIcon name="clock" :size="16" />
+          <span>营业时间 {{ hours }}</span>
         </div>
+        <ShopCard v-bind="shop" />
       </section>
-
-      <!-- 服务列表 -->
-      <section v-else-if="b.type === 'service_list'" class="section">
-        <div class="section-head">
-          <h2>{{ blockText(b.data, 'title') || '服务推荐' }}</h2>
-          <RouterLink to="/services" class="more">全部服务 →</RouterLink>
-        </div>
-        <div class="grid">
-          <RouterLink v-for="s in services" :key="s.id" :to="`/booking?service=${s.id}`" class="card">
-            <div class="card-name">{{ s.name }}</div>
-            <div class="card-meta">{{ s.duration_minutes }} 分钟</div>
-            <div class="card-price">¥{{ yuan(s.default_price) }}</div>
-          </RouterLink>
-        </div>
-      </section>
-
-      <!-- 活动 -->
-      <section v-else-if="b.type === 'activity'" class="activity">
-        <h3>{{ blockText(b.data, 'title') || '店内活动' }}</h3>
-        <p v-if="blockText(b.data, 'text')">{{ blockText(b.data, 'text') }}</p>
-      </section>
-
-      <!-- 富文本 -->
-      <section v-else-if="b.type === 'richtext'" class="richtext">
-        <h3 v-if="blockText(b.data, 'title')">{{ blockText(b.data, 'title') }}</h3>
-        <p v-if="blockText(b.data, 'text') || blockText(b.data, 'content')">
-          {{ blockText(b.data, 'text') || blockText(b.data, 'content') }}
-        </p>
-      </section>
-    </template>
-
-    <section class="info">
-      <div>🕘 营业时间 {{ hours }}</div>
-      <ShopCard v-bind="shop" />
-    </section>
-    <RouterLink to="/booking" class="cta">立即预约</RouterLink>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.home { padding: 0 0 20px; }
-.hero { background: linear-gradient(135deg, var(--primary), #a03e3e); color: var(--card); padding: 40px 20px; }
-.hero-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.hero h1 { margin: 0 0 6px; font-size: 24px; }
-.hero p { margin: 0; opacity: .9; }
-.store-status { background: rgba(255,255,255,.2); border-radius: 999px; padding: 4px 12px; font-size: 13px; white-space: nowrap; }
-.store-status.free { background: rgba(103,194,58,.35); }
-.store-status.serving { background: rgba(230,162,60,.4); }
-.banners { display: flex; gap: 10px; overflow-x: auto; margin: 12px 12px 0; padding-bottom: 2px; }
-.banner { flex: 0 0 82%; border-radius: 12px; overflow: hidden; background: var(--border); }
-.banner img { width: 100%; height: 130px; object-fit: cover; display: block; }
-.notice { display: flex; align-items: center; gap: 8px; background: var(--card); margin: 12px; padding: 10px 14px; border-radius: 12px; }
-.notice-tag { flex: 0 0 auto; color: var(--primary); font-weight: 600; font-size: 13px; }
-.notice-body { overflow: hidden; }
-.notice-body p { margin: 0; font-size: 13px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.section { margin: 12px; }
-.section-head { display: flex; justify-content: space-between; align-items: baseline; }
-.section-head h2 { font-size: 17px; }
-.more { color: var(--primary); font-size: 13px; text-decoration: none; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-.card { background: var(--card); border-radius: 12px; padding: 14px; text-decoration: none; color: inherit; }
-.card-name { font-weight: 600; }
-.card-meta { color: var(--muted-foreground); font-size: 13px; margin: 4px 0; }
-.card-price { color: var(--primary); font-weight: 600; }
-.activity { background: var(--card); margin: 12px; padding: 14px; border-radius: 12px; }
-.activity h3 { margin: 0 0 6px; font-size: 15px; color: var(--primary); }
-.activity p { margin: 0; font-size: 13px; color: var(--muted-foreground); }
-.richtext { background: var(--card); margin: 12px; padding: 14px; border-radius: 12px; }
-.richtext h3 { margin: 0 0 6px; font-size: 15px; }
-.richtext p { margin: 0; font-size: 13px; color: var(--muted-foreground); }
-.info { display: flex; flex-direction: column; gap: 6px; background: var(--card); margin: 12px; padding: 14px; border-radius: 12px; font-size: 14px; color: var(--muted-foreground); }
-.cta { display: block; margin: 20px 12px; text-align: center; background: var(--primary); color: var(--card); padding: 14px; border-radius: 12px; text-decoration: none; font-size: 16px; }
+.home {
+  animation: anmo-rise 0.2s var(--ease) both;
+}
+
+/* 顶栏 */
+.hero {
+  padding: 28px 16px 20px;
+}
+
+.hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero-brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.seal {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: 600 17px/1 var(--font-stack);
+  letter-spacing: 2px;
+  text-indent: 2px;
+  box-shadow: var(--shadow-card);
+}
+
+.hero-text h1 {
+  font: var(--font-title);
+  margin: 0;
+}
+
+.hero-text p {
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 190px;
+}
+
+.store-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: var(--font-caption);
+  border-radius: var(--radius-full);
+  padding: 5px 10px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.store-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+  animation: anmo-breathe 2s ease-in-out infinite;
+}
+
+.store-status.free {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.store-status.free .dot {
+  background: var(--success);
+}
+
+.store-status.serving {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.store-status.serving .dot {
+  background: var(--warning);
+}
+
+.store-status.busy {
+  background: var(--destructive-soft);
+  color: var(--destructive);
+}
+
+.store-status.busy .dot {
+  background: var(--destructive);
+}
+
+.hero-cta {
+  margin-top: 16px;
+}
+
+/* 内容区 */
+.home-body {
+  padding-top: 0;
+}
+
+.banners {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.banners::-webkit-scrollbar {
+  display: none;
+}
+
+.banner {
+  flex: 0 0 84%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--muted);
+  box-shadow: var(--shadow-card);
+}
+
+.banner img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  display: block;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+}
+
+.notice-tag {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font: 600 var(--font-caption);
+  background: var(--primary-soft);
+  border-radius: var(--radius-full);
+  padding: 3px 8px;
+}
+
+.notice-body {
+  overflow: hidden;
+}
+
+.notice-body p {
+  margin: 0;
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.section {
+  margin-top: 24px;
+}
+
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-head h2 {
+  font: var(--font-title);
+  margin: 0;
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted-foreground);
+  font: var(--font-sub);
+  text-decoration: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.svc-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.svc-name {
+  font-weight: 600;
+}
+
+.svc-meta {
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  margin: 4px 0;
+}
+
+.svc-price {
+  color: var(--primary);
+}
+
+.block-card {
+  margin-top: 12px;
+}
+
+.block-title {
+  font: 600 15px/22px var(--font-stack);
+  margin: 0 0 6px;
+}
+
+.accent-title {
+  font: 600 15px/22px var(--font-stack);
+  margin: 0 0 6px;
+  color: var(--accent);
+}
+
+.block-text {
+  margin: 0;
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  line-height: 1.7;
+}
+
+.shop-section {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hours-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+}
 </style>

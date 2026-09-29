@@ -1,0 +1,140 @@
+/* qrcode 页（镜像 H5 QRCodePage） */
+.qr-block {
+  text-align: center;
+  padding: 20px 18px;
+}
+
+.qr-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.brand-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 20rpx;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 30rpx;
+  font-weight: 600;
+  letter-spacing: 4rpx;
+  text-indent: 4rpx;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  font-size: 22rpx;
+  color: var(--success);
+  background: var(--success-soft);
+  border-radius: var(--radius-full);
+  padding: 8rpx 20rpx;
+}
+
+.live-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--success);
+  animation: anmo-breathe 2s ease-in-out infinite;
+}
+
+.qr {
+  width: 440rpx;
+  height: 440rpx;
+  margin: 0 auto;
+  display: block;
+}
+
+.who {
+  margin-top: 20rpx;
+}
+
+.who-name {
+  font-size: 34rpx;
+  line-height: 48rpx;
+  font-weight: 600;
+}
+
+.who-no {
+  font-size: 26rpx;
+  color: var(--muted-foreground);
+  margin-top: 4rpx;
+}
+
+.clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 20rpx;
+  font-size: 26rpx;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-radius: var(--radius-full);
+  padding: 8rpx 24rpx;
+}
+
+.hint {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: var(--muted-foreground);
+  margin-top: 28rpx;
+  border-top: 1px dashed var(--border);
+  padding-top: 24rpx;
+}
+
+/* 今日预约文字列表 */
+.today-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16rpx;
+  margin: 32rpx 0 20rpx;
+}
+
+.today-title {
+  font-size: 40rpx;
+  line-height: 56rpx;
+  font-weight: 600;
+}
+
+.today-count {
+  font-size: 22rpx;
+  color: var(--muted-foreground);
+}
+
+.today-list {
+  padding: 8rpx 32rpx;
+}
+
+.today-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx 0;
+}
+
+.today-row + .today-row {
+  border-top: 1px solid var(--border);
+}
+
+.row-time {
+  flex: 0 0 88rpx;
+  font-weight: 600;
+  font-size: 30rpx;
+}
+
+.row-svc {
+  flex: 1;
+  min-width: 0;
+  font-size: 26rpx;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

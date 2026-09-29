@@ -1,7 +1,7 @@
 <template>
   <el-dialog :model-value="modelValue" title="扫码结算" width="min(600px, 94vw)"
     @update:model-value="$emit('update:modelValue', $event)" @open="onOpen" @close="onClose">
-    <!-- 第一步：扫码 / 输入（识别 ANMO-MEMBER 会员卡码 与 ANMO-APT 预约单码） -->
+    <!-- 第一步：扫码 / 输入（识别 ANMO-MEMBER 会员码） -->
     <template v-if="step === 'scan'">
       <div class="cam-wrap">
         <video v-show="camReady" ref="videoEl" class="cam" muted playsinline />
@@ -24,7 +24,7 @@
         </el-button>
         <el-button type="success" :loading="qrDecoding" @click="fileEl?.click()">📷 拍照识别二维码</el-button>
       </div>
-      <p class="hint">扫顾客「核销码」（按卡结算）或「预约单码」（关联该预约结算）；无预约扫卡也能直接扣卡结算。也可在下方手动输入手机号。</p>
+      <p class="hint">扫顾客「核销码」定位会员后选择预约按卡结算；无预约扫卡也能直接扣卡结算。也可在下方手动输入手机号。</p>
 
       <div class="manual">
         <el-input v-model="manual" placeholder="手动输入：手机号（11位）" clearable
@@ -116,7 +116,6 @@ import { computed, ref, watch } from 'vue'
 import jsQR from 'jsqr'
 import { ElMessage } from 'element-plus'
 import {
-  getAppointment,
   getMember,
   getToday,
   listCardTemplates,
@@ -126,8 +125,6 @@ import {
   redeemCard,
   redeemWalkIn,
   settlePayment,
-  type Appointment,
-  type AppointmentService,
   type Member,
   type MemberCard,
   type TodayAppointment,
@@ -135,7 +132,6 @@ import {
 import { APT_STATUS_TEXT, fmtTime, todayStr } from '../core/format'
 
 const MEMBER_PREFIX = 'ANMO-MEMBER:'
-const APT_PREFIX = 'ANMO-APT:'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
@@ -328,18 +324,14 @@ async function decodeImageFile(file: File): Promise<{ data: string } | null> {
   return jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })
 }
 
-// ---------- 识别与解析：按前缀分流（卡码 → 会员；预约单码 → 预约） ----------
+// ---------- 识别与解析：会员码 → 定位会员 ----------
 async function handleCode(raw: string): Promise<void> {
   const content = raw.trim()
-  if (content.startsWith(APT_PREFIX)) {
-    await resolveFromAppointment(content.slice(APT_PREFIX.length))
-    return
-  }
   if (content.startsWith(MEMBER_PREFIX)) {
     await resolveMember(content.slice(MEMBER_PREFIX.length))
     return
   }
-  ElMessage.warning('不是本店二维码（应为 ANMO-MEMBER 或 ANMO-APT 开头）')
+  ElMessage.warning('不是本店核销码（应为 ANMO-MEMBER 开头）')
   if (canUseCamera) await startCamera()
 }
 
@@ -364,23 +356,10 @@ async function submitManual(): Promise<void> {
 }
 
 // ---------- 结算单装配 ----------
-async function resolveFromAppointment(aptId: string): Promise<void> {
-  resolving.value = true
-  try {
-    const d = await getAppointment(aptId)
-    await assemble(d.member_id, d)
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '预约单解析失败')
-    if (canUseCamera) await startCamera()
-  } finally {
-    resolving.value = false
-  }
-}
-
 async function resolveMember(memberId: string): Promise<void> {
   resolving.value = true
   try {
-    await assemble(memberId, null)
+    await assemble(memberId)
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '识别失败')
     if (canUseCamera) await startCamera()
@@ -389,8 +368,8 @@ async function resolveMember(memberId: string): Promise<void> {
   }
 }
 
-/** 拉齐会员/卡/预约/服务目录并初始化结算单；scanned 非空时为预约单码入口 */
-async function assemble(memberId: string, scanned: (Appointment & { service: AppointmentService | null }) | null): Promise<void> {
+/** 拉齐会员/卡/今日预约/服务目录并初始化结算单 */
+async function assemble(memberId: string): Promise<void> {
   const [detail, cards, tpl, today, svcs] = await Promise.all([
     getMember(memberId),
     listMemberCards(memberId),
@@ -408,13 +387,7 @@ async function assemble(memberId: string, scanned: (Appointment & { service: App
   manual.value = ''
   step.value = 'settle'
 
-  // 扫预约单码：把该预约放进选项并预选（含非今日预约/已取消——后者按散客结算）
-  if (scanned && !myApts.value.some((a) => a.id === scanned.id)) {
-    myApts.value = [{ ...scanned, service: scanned.service ?? null } as TodayAppointment, ...myApts.value]
-  }
-
-  const preferred = scanned?.id
-    ?? activeApts.value.find((a) => a.status === 'IN_SERVICE')?.id
+  const preferred = activeApts.value.find((a) => a.status === 'IN_SERVICE')?.id
     ?? activeApts.value[0]?.id
     ?? ''
   selectedAptId.value = preferred
@@ -449,7 +422,7 @@ async function refreshMember(): Promise<void> {
   if (member.value) {
     resolving.value = true
     try {
-      await assemble(member.value.id, null)
+      await assemble(member.value.id)
     } finally {
       resolving.value = false
     }

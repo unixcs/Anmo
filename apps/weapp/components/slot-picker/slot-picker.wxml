@@ -1,0 +1,48 @@
+<view wx:if="{{options && !options.open}}" class="tip closed-tip">
+  <app-icon name="calendar-x" size="18" />
+  <text>这一天休息，看看别的日期吧</text>
+</view>
+<view wx:elif="{{options}}" class="picker">
+  <view class="parts">
+    <view class="part pressable {{part === 'AM' ? 'picked' : ''}} {{options.am && (options.am.closed || options.am.ended || options.am.remaining < 1) ? 'off' : ''}}"
+          data-part="AM" bindtap="pickPart">
+      <view class="part-name">上午</view>
+      <view class="part-meta" wx:if="{{!options.am || options.am.closed}}">已闭店</view>
+      <view class="part-meta" wx:elif="{{options.am.ended}}">时段已过</view>
+      <view class="part-meta" wx:elif="{{options.am.remaining < 1}}">已约满</view>
+      <view class="part-meta" wx:else>剩 {{options.am.remaining}} 个名额</view>
+    </view>
+    <view class="part pressable {{part === 'PM' ? 'picked' : ''}} {{options.pm && (options.pm.closed || options.pm.ended || options.pm.remaining < 1) ? 'off' : ''}}"
+          data-part="PM" bindtap="pickPart">
+      <view class="part-name">下午</view>
+      <view class="part-meta" wx:if="{{!options.pm || options.pm.closed}}">已闭店</view>
+      <view class="part-meta" wx:elif="{{options.pm.ended}}">时段已过</view>
+      <view class="part-meta" wx:elif="{{options.pm.remaining < 1}}">已约满</view>
+      <view class="part-meta" wx:else>剩 {{options.pm.remaining}} 个名额</view>
+    </view>
+  </view>
+
+  <block wx:if="{{part}}">
+    <view class="slot-title">具体时间（可不选，由店家安排）</view>
+    <view class="slots">
+      <block wx:if="{{part === 'AM'}}">
+        <view wx:for="{{options.am.slots}}" wx:key="time"
+              class="slot pressable num {{item.time === slot ? 'picked' : ''}} {{item.remaining < 1 ? 'full' : ''}}"
+              data-part="AM" data-time="{{item.time}}" data-remaining="{{item.remaining}}" bindtap="pickSlot">
+          {{item.time}}
+          <view wx:if="{{item.remaining < 1}}" class="slot-full-badge">满</view>
+        </view>
+      </block>
+      <block wx:else>
+        <view wx:for="{{options.pm.slots}}" wx:key="time"
+              class="slot pressable num {{item.time === slot ? 'picked' : ''}} {{item.remaining < 1 ? 'full' : ''}}"
+              data-part="PM" data-time="{{item.time}}" data-remaining="{{item.remaining}}" bindtap="pickSlot">
+          {{item.time}}
+          <view wx:if="{{item.remaining < 1}}" class="slot-full-badge">满</view>
+        </view>
+      </block>
+    </view>
+  </block>
+  <view class="hint" wx:if="{{part}}">不选具体时间即为模糊预约：名额共享，具体时间由店主安排</view>
+</view>
+<view wx:else class="tip muted">正在查询可约时段…</view>

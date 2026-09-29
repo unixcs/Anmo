@@ -1,0 +1,110 @@
+<view class="page-body">
+  <!-- 顶栏：品牌印 + 状态灯（镜像 H5 HomePage hero） -->
+  <view class="hero">
+    <view class="hero-row">
+      <view class="hero-brand">
+        <view class="seal">安摩</view>
+        <view class="hero-text">
+          <view class="hero-title">{{heroTitle}}</view>
+          <view class="hero-sub" wx:if="{{heroBody}}">{{heroBody}}</view>
+          <view class="hero-sub" wx:else>专业肩颈腰背放松，静候您的到来</view>
+        </view>
+      </view>
+      <view wx:if="{{status}}" class="status-pill {{status.cls}}">
+        <view class="status-dot" />
+        <text>{{status.text}}</text>
+      </view>
+    </view>
+    <button wx:if="{{loggedIn}}" class="btn primary lg block pressable hero-cta" data-id="" bindtap="goBooking">
+      <app-icon name="calendar" size="34" />
+      <text> 立即预约</text>
+    </button>
+  </view>
+
+  <!-- 未登录：内容接口都是顾客 JWT 资源（与 H5 同口径），先引导登录 -->
+  <view wx:if="{{!loggedIn}}" class="card">
+    <view class="empty">
+      <view class="empty-icon"><app-icon name="user" size="76" stroke-width="1.4" /></view>
+      <view class="empty-main">登录后开始使用</view>
+      <view class="empty-sub">登录后可预约、查会员卡、出示核销码</view>
+      <button class="btn secondary sm pressable" bindtap="goLogin">立即登录</button>
+    </view>
+  </view>
+
+  <block wx:else>
+    <!-- 骨架 -->
+    <block wx:if="{{loading && !services.length}}">
+      <view class="skeleton card" />
+      <view class="skeleton card" />
+    </block>
+
+    <block wx:for="{{blocks}}" wx:for-item="blk" wx:key="*this">
+      <!-- 公告 -->
+      <view wx:if="{{blk === 'announcement' && announcements.length}}" class="card plain notice">
+        <text class="notice-tag">公告</text>
+        <view class="notice-body">
+          <view wx:for="{{announcements}}" wx:key="*this" class="notice-line">{{item}}</view>
+        </view>
+      </view>
+
+      <!-- 服务推荐（双列卡片网格，镜像 H5） -->
+      <view wx:if="{{blk === 'service_list'}}" class="section">
+        <view class="section-head">
+          <text class="section-head-title">服务推荐</text>
+        </view>
+        <view class="svc-grid">
+          <view
+            wx:for="{{services}}"
+            wx:key="id"
+            class="card svc-card pressable"
+            data-id="{{item.id}}"
+            bindtap="goBooking"
+          >
+            <view class="svc-name">{{item.name}}</view>
+            <view class="svc-meta" wx:if="{{item.desc}}">{{item.desc}}</view>
+            <view class="svc-foot">
+              <text class="svc-price money">{{item.price}}</text>
+              <text class="svc-mins num">{{item.minutes}} 分钟</text>
+            </view>
+          </view>
+        </view>
+        <view wx:if="{{!loading && !services.length}}" class="empty">
+          <view class="empty-icon"><app-icon name="inbox" size="76" stroke-width="1.4" /></view>
+          <view class="empty-main">暂未上架服务</view>
+          <view class="empty-sub">商家上架后会显示在这里</view>
+        </view>
+      </view>
+    </block>
+
+    <shop-card address="{{shop.address}}" phone="{{shop.phone}}" latitude="{{shop.latitude}}" longitude="{{shop.longitude}}" />
+
+    <!-- 快捷入口 -->
+    <view class="quick">
+      <view class="quick-item pressable" bindtap="goApts">
+        <app-icon name="calendar" size="40" />
+        <text class="quick-name">我的预约</text>
+        <text class="quick-sub">改期 / 取消</text>
+      </view>
+      <view class="quick-item pressable" bindtap="goCards">
+        <app-icon name="wallet" size="40" />
+        <text class="quick-name">会员卡</text>
+        <text class="quick-sub">余额与明细</text>
+      </view>
+      <view class="quick-item pressable" bindtap="goQR">
+        <app-icon name="qr" size="40" />
+        <text class="quick-name">核销码</text>
+        <text class="quick-sub">到店出示</text>
+      </view>
+    </view>
+
+    <!-- 门店介绍 -->
+    <view class="cell" bindtap="goAbout">
+      <view class="cell-icon"><app-icon name="info" size="36" /></view>
+      <view class="cell-body">
+        <text class="cell-title">门店介绍</text>
+        <text class="cell-desc">营业时间、地址与联系方式</text>
+      </view>
+      <view class="chevron"><app-icon name="chevron-right" size="30" /></view>
+    </view>
+  </block>
+</view>

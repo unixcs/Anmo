@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "预约",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "slot-picker": "/components/slot-picker/slot-picker",
+    "shop-card": "/components/shop-card/shop-card"
+  }
+}

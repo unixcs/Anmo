@@ -1,0 +1,45 @@
+{
+  "pages": [
+    "pages/home/home",
+    "pages/booking/booking",
+    "pages/me/me",
+    "pages/appointments/appointments",
+    "pages/cards/cards",
+    "pages/qrcode/qrcode",
+    "pages/login/login",
+    "pages/about/about"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#F6F4F0",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "安摩 · 到店按摩",
+    "backgroundColor": "#F6F4F0",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "color": "#8B857C",
+    "selectedColor": "#A94A43",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/booking/booking",
+        "text": "预约"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents",
+  "usingComponents": {
+    "app-icon": "/components/app-icon/app-icon"
+  }
+}

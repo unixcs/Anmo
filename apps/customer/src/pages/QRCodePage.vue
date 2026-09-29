@@ -2,52 +2,48 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import QRCode from 'qrcode'
 import { api } from '../core/api/endpoints'
+import type { Appointment } from '../core/models/models'
+import { todayStr as bjTodayStr } from '../core/logic/booking'
 import { notify } from '../platform/notify/toast'
+import AppIcon from '../components/ui/AppIcon.vue'
+import AppStatusBadge from '../components/ui/AppStatusBadge.vue'
+import AppSkeleton from '../components/ui/AppSkeleton.vue'
+import AppEmpty from '../components/ui/AppEmpty.vue'
 
-interface Appointment {
-  id: string
-  status: string
-  scheduled_start: string
-  slot_type?: string
-  day_part?: string
-  service_name?: string
+// 核销码页（BRAND-GUIDELINES §6 / D21）：顾客永远只出示一个码。
+// 会员码 ANMO-MEMBER:<member_id> 仅对持 ACTIVE 卡顾客展示；
+// 今日预约以文字列表呈现在码下方，商家扫码后自选预约结算——
+// 不再生成 ANMO-APT 预约单码（历史多码 bug 的根源）。
+
+interface TodayApt extends Appointment {
+  serviceNames: string
 }
 
 const name = ref('')
 const memberNo = ref('')
-const phone = ref('')
 const memberId = ref('')
 const memberQr = ref('')
-// 核销码门槛（D21）：只有持有效会员卡的顾客才出会员码
 const hasActiveCard = ref(false)
-const cardsReady = ref(false)
+const loading = ref(true)
 const nowText = ref('')
-// 今日待服务预约的预约单码（ANMO-APT，商家扫码直接关联该预约结算）
-const todayApts = ref<Appointment[]>([])
-const aptQrs = ref<Record<string, string>>({})
+const todayApts = ref<TodayApt[]>([])
 let timer: number | undefined
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
+}
 
 function tick(): void {
   const d = new Date()
-  const p = (n: number): string => String(n).padStart(2, '0')
-  nowText.value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  nowText.value = `${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const todayStr = computed(() => nowText.value.slice(0, 10))
+// "今天"用北京时间锚定（与预约页/小程序同口径）：跨店营业日界限不由设备时区决定
+const todayStr = computed(bjTodayStr)
 
 function aptTime(a: Appointment): string {
   if (a.slot_type === 'HALF_DAY') return a.day_part === 'AM' ? '上午' : '下午'
   return a.scheduled_start.slice(11, 16)
-}
-
-async function renderAptCodes(): Promise<void> {
-  for (const a of todayApts.value) {
-    aptQrs.value[a.id] = await QRCode.toDataURL(`ANMO-APT:${a.id}`, {
-      width: 560,
-      margin: 4,
-      errorCorrectionLevel: 'M',
-    })
-  }
 }
 
 onMounted(async () => {
@@ -57,39 +53,37 @@ onMounted(async () => {
     const [profile, cards, apts] = await Promise.all([
       api.myProfile(),
       api.myCards(),
-      api.myAppointments(),
+      api.myAppointments(''),
     ])
     name.value = profile.member.name || '未设置昵称'
     memberNo.value = profile.member.member_no
-    phone.value = profile.member.phone
     memberId.value = profile.member.id
     hasActiveCard.value = (cards ?? []).some((c) => c.status === 'ACTIVE')
-    cardsReady.value = true
     if (hasActiveCard.value) {
-      // 会员码内容：固定前缀 + 会员ID，商家端扫码定位会员后按卡结算
       memberQr.value = await QRCode.toDataURL(`ANMO-MEMBER:${memberId.value}`, {
         width: 560,
-        margin: 4,
+        margin: 2,
         errorCorrectionLevel: 'M',
+        color: { dark: '#221E1B', light: '#FFFFFF' },
       })
     }
-    todayApts.value = (apts ?? []).filter(
-      (a) =>
-        (a.status === 'WAITING' || a.status === 'IN_SERVICE') &&
-        a.scheduled_start.slice(0, 10) === todayStr.value,
-    )
-    // 列表端点不带服务名，逐单补齐（今日待服务预约通常 0-2 个）
-    for (const a of todayApts.value) {
-      try {
-        const d = await api.appointment(a.id)
-        a.service_name = d.services?.[0]?.service_name_snapshot ?? ''
-      } catch {
-        a.service_name = ''
-      }
-    }
-    await renderAptCodes()
+    // 列表项已内嵌 services 快照，无需逐单拉详情
+    todayApts.value = (apts ?? [])
+      .filter(
+        (a) =>
+          (a.status === 'WAITING' || a.status === 'IN_SERVICE') &&
+          a.scheduled_start.slice(0, 10) === todayStr.value,
+      )
+      .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
+      .map((a) => {
+        const item = a as Appointment & { services?: { service_name_snapshot: string }[] }
+        const names = (item.services ?? []).map((s) => s.service_name_snapshot).filter(Boolean)
+        return { ...a, serviceNames: names.join(' · ') }
+      })
   } catch (e) {
     notify((e as Error).message)
+  } finally {
+    loading.value = false
   }
 })
 
@@ -100,67 +94,207 @@ onUnmounted(() => {
 
 <template>
   <div class="page qrcode">
-    <div class="card">
-      <p class="tip">到店结算时，向商家出示对应二维码</p>
-
-      <!-- 今日预约单码：商家扫码直接关联该预约结算 -->
-      <template v-if="todayApts.length > 0">
-        <div v-for="a in todayApts" :key="a.id" class="apt-block">
-          <p class="apt-label">今日预约 · {{ a.service_name || '服务' }} · {{ aptTime(a) }}</p>
-          <img v-if="aptQrs[a.id]" :src="aptQrs[a.id]" alt="预约单码" class="qr" />
-          <p class="apt-sub">出示此码，商家扫码后直接开始本次服务结算</p>
-        </div>
-      </template>
-      <p v-else class="none-apt">今日没有待到店的预约</p>
-
-      <div class="divider" />
-
-      <!-- 会员卡核销码（D21：持有效卡才出码） -->
-      <template v-if="cardsReady && !hasActiveCard">
-        <div class="locked">
-          <div class="locked-icon">🔒</div>
-          <p class="locked-title">暂无有效会员卡</p>
-          <p class="locked-text">办卡后可出示会员码按卡结算，更方便。<br />可到店咨询店主办理。</p>
-          <RouterLink to="/services" class="locked-link">先看看服务项目 →</RouterLink>
-        </div>
-      </template>
-      <template v-else>
-        <p class="sec-label">会员卡核销码</p>
-        <img v-if="memberQr" :src="memberQr" alt="我的核销码" class="qr" />
-        <div v-else class="loading">生成中…</div>
-      </template>
-
-      <div class="who">
-        <div class="name">{{ name }}</div>
-        <div class="no">手机号 {{ phone }}</div>
-        <div class="no">会员号 {{ memberNo }}</div>
-        <div class="clock">🕒 {{ nowText }}</div>
-      </div>
-      <p class="hint">· 每次结算由商家确认后生效，扣减对应次数<br />· 请勿将二维码截图发给他人</p>
+    <div class="page-head">
+      <h1>我的核销码</h1>
+      <p class="sub">到店后出示给商家，扫码即完成服务登记</p>
     </div>
+
+    <AppSkeleton v-if="loading" variant="card" />
+
+    <template v-else>
+      <!-- 会员码块：仅持 ACTIVE 卡顾客可见（D21） -->
+      <div v-if="hasActiveCard" class="qr-block card">
+        <div class="qr-top">
+          <span class="brand-seal">安摩</span>
+          <span class="live"><i class="live-dot" />有效会员</span>
+        </div>
+        <img v-if="memberQr" :src="memberQr" alt="我的核销码" class="qr" />
+        <div class="who">
+          <div class="name">{{ name }}</div>
+          <div class="no num">会员号 {{ memberNo }}</div>
+        </div>
+        <div class="clock num">
+          <AppIcon name="clock" :size="14" />
+          {{ nowText }}
+        </div>
+        <p class="hint">每次结算由商家确认后生效，请勿将二维码截图发给他人</p>
+      </div>
+
+      <!-- 无卡：锁定引导，不出任何码 -->
+      <div v-else class="card">
+        <AppEmpty
+          icon="lock"
+          main="暂无有效会员卡"
+          sub="办卡后出示会员码即可按卡结算，可到店咨询店主办理"
+        >
+          <RouterLink to="/services" class="btn secondary sm">先看看服务项目</RouterLink>
+        </AppEmpty>
+      </div>
+
+      <!-- 今日预约：文字列表（不做预约单码） -->
+      <div v-if="hasActiveCard" class="today">
+        <div class="today-head">
+          <h2>今日预约</h2>
+          <span v-if="todayApts.length" class="count">{{ todayApts.length }} 个</span>
+        </div>
+        <div v-if="todayApts.length" class="card plain today-list">
+          <div v-for="a in todayApts" :key="a.id" class="today-row">
+            <span class="time num">{{ aptTime(a) }}</span>
+            <span class="svc">{{ a.serviceNames || '到店与商家确认服务' }}</span>
+            <AppStatusBadge :status="a.status" />
+          </div>
+        </div>
+        <AppEmpty v-else icon="calendar" main="今天没有预约" sub="需要的话可以现在约一个">
+          <RouterLink to="/booking" class="btn secondary sm">去预约</RouterLink>
+        </AppEmpty>
+      </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.qrcode { padding: 24px 16px; display: flex; justify-content: center; }
-.card { background: var(--card); border-radius: 16px; padding: 22px 18px; width: 100%; max-width: 380px; text-align: center; }
-.tip { margin: 0 0 14px; font-size: 14px; color: var(--primary); font-weight: 600; }
-.apt-block { margin-bottom: 6px; }
-.apt-label { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--foreground); }
-.apt-sub { color: var(--muted-foreground); font-size: 12px; margin: 4px 0 0; }
-.none-apt { color: var(--muted-foreground); font-size: 13px; margin: 0 0 6px; }
-.divider { border-top: 1px dashed var(--border); margin: 14px 0; }
-.sec-label { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--foreground); }
-.qr { width: 100%; max-width: 240px; display: block; margin: 0 auto; }
-.loading { padding: 30px 0; color: var(--muted-foreground); }
-.locked { padding: 10px 0 20px; }
-.locked-icon { font-size: 34px; }
-.locked-title { font-size: 16px; font-weight: 600; color: var(--muted-foreground); margin: 8px 0 6px; }
-.locked-text { color: var(--muted-foreground); font-size: 13px; line-height: 1.8; }
-.locked-link { display: inline-block; margin-top: 10px; color: var(--primary); font-size: 14px; text-decoration: none; }
-.who { margin-top: 14px; }
-.name { font-size: 17px; font-weight: 600; }
-.no { color: var(--muted-foreground); font-size: 13px; margin-top: 2px; }
-.clock { color: var(--muted-foreground); font-size: 14px; margin-top: 8px; font-variant-numeric: tabular-nums; }
-.hint { margin-top: 14px; text-align: left; color: var(--muted-foreground); font-size: 12px; line-height: 1.8; }
+.qrcode {
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* 会员码块 */
+.qr-block {
+  text-align: center;
+  padding: 20px 18px;
+}
+
+.qr-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.brand-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: 600 15px/1 var(--font-stack);
+  letter-spacing: 2px;
+  text-indent: 2px;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: var(--font-caption);
+  color: var(--success);
+  background: var(--success-soft);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: anmo-breathe 2s ease-in-out infinite;
+}
+
+.qr {
+  width: 100%;
+  max-width: 230px;
+  display: block;
+  margin: 0 auto;
+}
+
+.who {
+  margin-top: 10px;
+}
+
+.name {
+  font: 600 17px/24px var(--font-stack);
+}
+
+.no {
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-radius: var(--radius-full);
+  padding: 4px 12px;
+}
+
+.hint {
+  font: var(--font-caption);
+  color: var(--muted-foreground);
+  margin: 14px 0 0;
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+}
+
+/* 今日预约文字列表 */
+.today {
+  margin-top: 24px;
+}
+
+.today-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.today-head h2 {
+  font: var(--font-title);
+  margin: 0;
+}
+
+.count {
+  font: var(--font-caption);
+  color: var(--muted-foreground);
+}
+
+.today-list {
+  padding: 4px 16px;
+}
+
+.today-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.today-row + .today-row {
+  border-top: 1px solid var(--border);
+}
+
+.today-row .time {
+  flex: 0 0 44px;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.today-row .svc {
+  flex: 1;
+  min-width: 0;
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

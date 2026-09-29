@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import AppIcon, { type IconName } from './components/ui/AppIcon.vue'
+
 const route = useRoute()
-const TABS = [
-  { path: '/', label: '首页', icon: '🏠', match: ['home'] },
-  { path: '/services', label: '服务', icon: '💆', match: ['services'] },
-  { path: '/booking', label: '预约', icon: '📅', match: ['booking'] },
-  { path: '/me', label: '我的', icon: '👤', match: ['me', 'cards', 'my-appointments', 'history', 'profile'] },
+const TABS: { path: string; label: string; icon: IconName; match: string[] }[] = [
+  { path: '/', label: '首页', icon: 'home', match: ['home'] },
+  { path: '/services', label: '服务', icon: 'sparkles', match: ['services'] },
+  { path: '/booking', label: '预约', icon: 'calendar', match: ['booking'] },
+  { path: '/me', label: '我的', icon: 'user', match: ['me', 'cards', 'my-appointments', 'history', 'profile', 'qrcode'] },
 ]
+
 function active(tab: { match: string[] }): boolean {
   return tab.match.includes(route.name as string)
 }
@@ -25,24 +28,55 @@ function active(tab: { match: string[] }): boolean {
         class="tab"
         :class="{ active: active(tab) }"
       >
-        <span class="tab-icon">{{ tab.icon }}</span>
-        <span>{{ tab.label }}</span>
+        <AppIcon :name="tab.icon" :size="22" :stroke-width="active(tab) ? 2 : 1.8" />
+        <span class="tab-label">{{ tab.label }}</span>
       </RouterLink>
     </nav>
   </div>
 </template>
 
 <style scoped>
-.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
-.app-main { flex: 1; padding-bottom: 64px; }
+.app-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-main {
+  flex: 1;
+}
+
 .tabbar {
-  position: fixed; bottom: 0; left: 0; right: 0; height: 60px;
-  display: flex; background: var(--card); border-top: 1px solid var(--border);
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  z-index: 40;
 }
+
 .tab {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-size: 12px; color: var(--muted-foreground); text-decoration: none; gap: 2px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted-foreground);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
 }
-.tab.active { color: var(--primary); }
-.tab-icon { font-size: 20px; }
+
+.tab.active {
+  color: var(--primary);
+}
+
+.tab-label {
+  font: 500 11px/14px var(--font-stack);
+}
 </style>

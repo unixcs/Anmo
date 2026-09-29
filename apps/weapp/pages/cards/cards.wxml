@@ -1,0 +1,81 @@
+<view class="page-body">
+  <view class="page-head">
+    <view class="page-title">我的会员卡</view>
+    <view class="page-sub">结算时出示核销码，由商家按卡扣次</view>
+  </view>
+
+  <view wx:if="{{!loggedIn}}" class="empty">
+    <view class="empty-icon"><app-icon name="lock" size="80" /></view>
+    <view class="empty-main">登录后可查看会员卡</view>
+    <view class="empty-sub">登录后可见卡片余额与使用明细</view>
+    <button class="btn primary sm" bindtap="goLogin">去登录</button>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{loading}}" class="card sk-card">
+      <view class="skeleton sk-line"></view>
+      <view class="skeleton sk-line short"></view>
+    </view>
+
+    <view wx:elif="{{!cards.length}}" class="empty">
+      <view class="empty-icon"><app-icon name="wallet" size="80" /></view>
+      <view class="empty-main">还没有会员卡</view>
+      <view class="empty-sub">到店咨询店主即可办理，办卡后出示核销码结算</view>
+      <button class="btn secondary sm" bindtap="goBooking">先看看服务项目</button>
+    </view>
+
+    <block wx:else>
+      <!-- 卡列表（黄铜金 accent，BRAND-GUIDELINES §2.1） -->
+      <view wx:for="{{cards}}" wx:key="id"
+            class="member-card pressable {{pickedId === item.id ? 'picked' : ''}} {{item.status !== 'ACTIVE' ? 'dim' : ''}}"
+            data-id="{{item.id}}" bindtap="pick">
+        <view class="mc-top">
+          <text class="mc-name">{{item.cardName}}</text>
+          <view class="badge {{item.badge}}">{{item.statusText}}</view>
+        </view>
+        <view class="mc-count num">
+          <text class="mc-remaining">{{item.remaining}}</text>
+          <text class="mc-total">/ {{item.total}} 次</text>
+        </view>
+        <view class="mc-bottom num">
+          <text>{{item.validity}}</text>
+          <text wx:if="{{index === 0 && item.status === 'ACTIVE'}}" class="mc-default">默认</text>
+        </view>
+      </view>
+
+      <!-- 选中卡详情：使用明细 -->
+      <view wx:if="{{picked}}" class="detail">
+        <view class="detail-head">
+          <text class="detail-title">使用明细</text>
+          <view class="badge {{picked.badge}}">{{picked.statusText}}</view>
+        </view>
+        <view class="detail-sub num">有效期 {{picked.validity}}</view>
+
+        <view wx:if="{{txLoading}}" class="card sk-card">
+          <view class="skeleton sk-line"></view>
+          <view class="skeleton sk-line"></view>
+          <view class="skeleton sk-line short"></view>
+        </view>
+
+        <view wx:elif="{{!txns.length}}" class="empty empty-sm">
+          <view class="empty-icon"><app-icon name="inbox" size="72" /></view>
+          <view class="empty-main">还没有使用记录</view>
+          <view class="empty-sub">开卡、核销、调整都会记在这里</view>
+        </view>
+
+        <view wx:else class="card plain tx-list">
+          <view wx:for="{{txns}}" wx:key="id" class="tx">
+            <view class="tx-icon {{item.cls}}">
+              <app-icon name="{{item.icon}}" size="28" />
+            </view>
+            <view class="tx-body">
+              <view class="tx-title">{{item.label}}<text wx:if="{{item.remark}}" class="tx-remark"> · {{item.remark}}</text></view>
+              <view class="tx-sub num">{{item.at}}</view>
+            </view>
+            <view class="tx-qty num {{item.cls}}">{{item.sign}}{{item.qty}} 次</view>
+          </view>
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

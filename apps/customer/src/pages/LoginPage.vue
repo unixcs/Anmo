@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../core/api/endpoints'
 import { signIn } from '../platform/auth/session'
 import { notify } from '../platform/notify/toast'
+import AppButton from '../components/ui/AppButton.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -63,28 +64,122 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page login">
-    <h1>登录</h1>
-    <p class="tip">手机号验证码登录，未注册将自动创建会员</p>
-    <input v-model="phone" type="tel" maxlength="11" inputmode="numeric" placeholder="手机号" />
-    <div class="code-row">
-      <input v-model="code" type="text" maxlength="6" inputmode="numeric" placeholder="验证码" />
-      <button class="send" :disabled="busy || countdown > 0" @click="sendCode">
-        {{ countdown > 0 ? `${countdown}s` : sent ? '重新发送' : '发送验证码' }}
-      </button>
+  <div class="login">
+    <div class="brand">
+      <span class="seal">安摩</span>
+      <h1>欢迎回来</h1>
+      <p>手机号验证码登录，未注册将自动创建会员</p>
     </div>
-    <button class="primary" :disabled="busy || !sent" @click="login">登 录</button>
+
+    <div class="form">
+      <div class="field">
+        <label for="phone">手机号</label>
+        <input
+          id="phone"
+          v-model="phone"
+          class="input num"
+          type="tel"
+          maxlength="11"
+          inputmode="numeric"
+          placeholder="11 位手机号"
+          autocomplete="tel"
+        />
+      </div>
+      <div class="field">
+        <label for="code">验证码</label>
+        <div class="code-row">
+          <input
+            id="code"
+            v-model="code"
+            class="input num"
+            type="text"
+            maxlength="6"
+            inputmode="numeric"
+            placeholder="6 位验证码"
+            @keyup.enter="login"
+          />
+          <AppButton variant="outline" :loading="busy" :disabled="countdown > 0" @click="sendCode">
+            {{ countdown > 0 ? `${countdown}s` : sent ? '重新发送' : '发送验证码' }}
+          </AppButton>
+        </div>
+      </div>
+
+      <AppButton variant="primary" size="lg" block :loading="busy" :disabled="!sent" @click="login">
+        登 录
+      </AppButton>
+      <p class="agree">登录即代表同意到店服务相关约定 · 演示环境验证码固定为 123456</p>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.login { max-width: 420px; margin: 0 auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
-.tip { color: var(--muted-foreground); font-size: 13px; }
-input { width: 100%; height: 44px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 16px; background: var(--card); }
-.code-row { display: flex; gap: 10px; }
-.code-row input { flex: 1; min-width: 0; }
-.send { flex-shrink: 0; min-width: 104px; height: 44px; padding: 0 14px; }
-button { border: none; border-radius: 8px; padding: 0 16px; font-size: 15px; background: var(--border); }
-button:disabled { opacity: .55; }
-.primary { background: var(--primary); color: var(--card); height: 46px; font-size: 17px; }
+.login {
+  min-height: 100dvh;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 64px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  animation: anmo-rise 0.2s var(--ease) both;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: 600 22px/1 var(--font-stack);
+  letter-spacing: 3px;
+  text-indent: 3px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 16px;
+}
+
+.brand h1 {
+  font: var(--font-display);
+  margin: 0 0 6px;
+}
+
+.brand p {
+  font: var(--font-sub);
+  color: var(--muted-foreground);
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.code-row {
+  display: flex;
+  gap: 10px;
+}
+
+.code-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.code-row .btn {
+  flex-shrink: 0;
+  min-width: 108px;
+}
+
+.agree {
+  font: var(--font-caption);
+  color: var(--muted-foreground);
+  text-align: center;
+  margin: 6px 0 0;
+}
 </style>

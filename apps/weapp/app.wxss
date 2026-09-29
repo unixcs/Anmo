@@ -1,0 +1,668 @@
+/* ============================================================
+   app.wxss — Anmo 小程序设计体系（唯一来源：docs/BRAND-GUIDELINES.md）
+   token + 组件类与顾客 H5 src/style.css 同名同值，两端视觉互为镜像。
+   ============================================================ */
+
+page {
+  /* 色彩（§2.1 暖宣纸 + 绛红印章 + 黄铜配件），Light 主题仅此一套 */
+  --background: #f6f4f0;
+  --card: #ffffff;
+  --foreground: #221e1b;
+  --muted: #efece6;
+  --muted-foreground: #8b857c;
+  --primary: #a94a43;
+  --primary-foreground: #ffffff;
+  --primary-soft: #f6e9e6;
+  --accent: #a87b2f;
+  --accent-soft: #f5ead3;
+  --success: #47795b;
+  --success-soft: #e4efe7;
+  --warning: #b4832a;
+  --warning-soft: #f6edda;
+  --destructive: #b03a2e;
+  --destructive-soft: #f7e5e1;
+  --border: #e7e2da;
+  --input: #ffffff;
+  --ring: rgba(169, 74, 67, 0.3);
+
+  /* 圆角 / 阴影 / 动效 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+  --shadow-card: 0 1px 2px rgba(34, 30, 27, 0.05), 0 6px 20px rgba(34, 30, 27, 0.06);
+  --shadow-float: 0 12px 40px rgba(34, 30, 27, 0.18);
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 22px;
+  font-family: -apple-system, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* ---------- 通用排版 ---------- */
+.page-body {
+  padding: 24px 16px 120px;
+  box-sizing: border-box;
+  animation: anmo-rise 0.2s var(--ease) both;
+}
+
+.page-head {
+  margin-bottom: 20px;
+}
+
+.page-head .page-title {
+  font-size: 26px;
+  line-height: 34px;
+  font-weight: 600;
+  display: block;
+}
+
+.page-head .page-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted-foreground);
+  margin-top: 4px;
+  display: block;
+}
+
+.section-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  margin: 24px 0 12px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ---------- 按压反馈（§2.4） ---------- */
+.pressable {
+  transition: transform 0.12s ease-out, opacity 0.12s ease-out;
+}
+
+.pressable.button-hover,
+.pressable:active {
+  transform: scale(0.97);
+  opacity: 0.92;
+}
+
+/* ---------- Button（§3） ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+  padding: 11px 18px;
+  box-sizing: border-box;
+  margin: 0;
+  transition: transform 0.12s ease-out, opacity 0.12s ease-out, background 0.15s var(--ease),
+    border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.btn::after {
+  border: none;
+}
+
+.btn:active {
+  transform: scale(0.97);
+  opacity: 0.92;
+}
+
+.btn[disabled],
+button.btn[disabled]:not([type]) {
+  opacity: 1;
+  background: var(--muted) !important;
+  border-color: transparent !important;
+  color: var(--muted-foreground) !important;
+}
+
+.btn.block {
+  display: flex;
+  width: 100%;
+}
+
+.btn.lg {
+  padding: 14px 18px;
+  font-size: 16px;
+  line-height: 24px;
+  border-radius: 14px;
+}
+
+.btn.sm {
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 18px;
+  border-radius: var(--radius-sm);
+}
+
+.btn.primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.btn.secondary {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.btn.outline {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.btn.destructive {
+  background: var(--card);
+  border-color: rgba(176, 58, 46, 0.35);
+  color: var(--destructive);
+}
+
+.btn .spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: anmo-spin 0.7s linear infinite;
+}
+
+/* ---------- Card ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+
+.card.plain {
+  box-shadow: none;
+}
+
+/* ---------- Cell（列表行） ---------- */
+.cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.cell .cell-icon {
+  color: var(--muted-foreground);
+  display: flex;
+}
+
+.cell .cell-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cell .cell-title {
+  display: block;
+  font-weight: 500;
+}
+
+.cell .cell-desc {
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+}
+
+.cell .cell-value {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.cell .chevron {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+  display: flex;
+}
+
+/* ---------- Chip ---------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  margin: 0;
+  box-sizing: border-box;
+  transition: all 0.15s var(--ease);
+}
+
+.chip::after {
+  border: none;
+}
+
+.chip:active {
+  transform: scale(0.97);
+}
+
+.chip.picked {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- Badge（§4 状态映射） ---------- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge.muted {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.badge.primary {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.badge.success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.badge.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.badge.destructive {
+  background: var(--destructive-soft);
+  color: var(--destructive);
+}
+
+.badge.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- Input / Textarea ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > .field-label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--foreground);
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* ---------- 弹层：遮罩 + 底部 Sheet + 居中 Dialog ---------- */
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(34, 30, 27, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 50;
+  animation: anmo-fade 0.22s var(--ease) both;
+}
+
+.mask.center {
+  align-items: center;
+  padding: 32px;
+}
+
+.sheet {
+  background: var(--card);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-height: 82vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  animation: anmo-slide-up 0.22s var(--ease) both;
+}
+
+.sheet-grab {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  margin: 0 auto 14px;
+}
+
+.sheet-title {
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.sheet-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted-foreground);
+  display: block;
+  margin-bottom: 14px;
+}
+
+.sheet-note {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--muted-foreground);
+  margin: 12px 0 14px;
+}
+
+/* 小标签（今天/明天/3 天后）与可点链接 */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.link {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.dialog {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px 16px;
+  width: 100%;
+  box-shadow: var(--shadow-float);
+  box-sizing: border-box;
+  animation: anmo-pop 0.22s var(--ease) both;
+}
+
+.dialog .dialog-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  text-align: center;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.dialog .dialog-body {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted-foreground);
+  text-align: center;
+  display: block;
+  margin-bottom: 20px;
+}
+
+.dialog .dialog-ops {
+  display: flex;
+  gap: 10px;
+}
+
+.dialog .dialog-ops .btn {
+  flex: 1;
+}
+
+/* ---------- Empty ---------- */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 56px 24px;
+  text-align: center;
+}
+
+.empty .empty-icon {
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  margin-bottom: 8px;
+}
+
+.empty .empty-main {
+  font-size: 15px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.empty .empty-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted-foreground);
+  margin-bottom: 10px;
+}
+
+/* ---------- Skeleton ---------- */
+.skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, #f7f4ef 45%, var(--muted) 65%);
+  background-size: 200% 100%;
+  animation: anmo-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton.text {
+  height: 14px;
+}
+
+.skeleton.card {
+  height: 96px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 10px;
+}
+
+/* ---------- SegmentedTabs ---------- */
+.seg {
+  display: flex;
+  gap: 4px;
+  background: var(--muted);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.seg .seg-item {
+  flex: 1;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted-foreground);
+  margin: 0;
+  transition: all 0.15s var(--ease);
+}
+
+.seg .seg-item::after {
+  border: none;
+}
+
+.seg .seg-item.picked {
+  background: var(--card);
+  color: var(--foreground);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(34, 30, 27, 0.08);
+}
+
+/* ---------- StatTile ---------- */
+.stat {
+  flex: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-sizing: border-box;
+}
+
+.stat .stat-label {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted-foreground);
+  display: block;
+}
+
+.stat .stat-value {
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+  display: block;
+}
+
+.stat .stat-hint {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+  display: block;
+}
+
+/* ---------- 动画 keyframes ---------- */
+@keyframes anmo-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes anmo-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes anmo-slide-up {
+  from {
+    transform: translateY(48px);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes anmo-pop {
+  from {
+    transform: scale(0.94);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes anmo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes anmo-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes anmo-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* v2 rebuild */

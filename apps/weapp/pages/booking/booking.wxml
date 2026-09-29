@@ -1,0 +1,117 @@
+<view class="page-body">
+  <!-- 预约成功页内态（§19：服务/日期/时间 + 单号 + 门店信息卡） -->
+  <block wx:if="{{success}}">
+    <view class="done">
+      <view class="done-icon">
+        <app-icon name="check" size="60" stroke-width="2.4" />
+      </view>
+      <view class="done-title">预约成功</view>
+
+      <view class="card done-card">
+        <view class="done-row">
+          <text class="done-k">服务项目</text>
+          <text class="done-v">{{success.name}}</text>
+        </view>
+        <view class="done-row">
+          <text class="done-k">日期</text>
+          <text class="done-v num">{{success.date}}</text>
+        </view>
+        <view class="done-row">
+          <text class="done-k">时间</text>
+          <text class="done-v num">{{success.time}}<text wx:if="{{success.fuzzy}}" class="done-fuzzy">（具体时间由店主安排）</text></text>
+        </view>
+        <view class="done-row" wx:if="{{success.no}}">
+          <text class="done-k">预约单号</text>
+          <text class="done-v num">{{success.no}}</text>
+        </view>
+      </view>
+
+      <view class="done-tip">到店后向商家出示「我的 → 核销码」即可开始服务</view>
+
+      <shop-card
+        address="{{shop.address}}"
+        phone="{{shop.phone}}"
+        latitude="{{shop.latitude}}"
+        longitude="{{shop.longitude}}" />
+
+      <view class="done-btns">
+        <button class="btn primary" bindtap="doneApts">查看我的预约</button>
+        <button class="btn outline" bindtap="doneHome">返回首页</button>
+      </view>
+    </view>
+  </block>
+
+  <!-- 预约表单 -->
+  <block wx:else>
+    <view class="page-head">
+      <view class="page-title">预约</view>
+      <view class="page-sub">只需三步：选项目、选时间、留个备注</view>
+    </view>
+
+    <view wx:if="{{!loggedIn}}" class="card plain login-tip pressable" bindtap="goLogin">
+      <app-icon name="lock" size="18" />
+      <text>预约需要先登录</text>
+      <text class="login-go">去登录</text>
+      <app-icon name="chevron-right" size="16" />
+    </view>
+
+    <!-- 1 选择服务 -->
+    <view class="block">
+      <view class="section-title"><text class="step-no">1</text>选择服务</view>
+      <view wx:if="{{svcErr}}" class="empty">
+        <view class="empty-icon"><app-icon name="alert" size="40" /></view>
+        <view class="empty-main">网络不可用</view>
+        <view class="empty-sub">服务列表没能加载，请稍后再试</view>
+        <button class="btn outline sm" bindtap="retryServices">重新加载</button>
+      </view>
+      <view wx:elif="{{!services.length}}" class="card plain empty-mini">暂未上架服务，请稍后再来看看</view>
+      <view wx:else class="svc-list">
+        <view wx:for="{{services}}" wx:key="id"
+              class="svc pressable {{svcIdx === index ? 'picked' : ''}}"
+              data-idx="{{index}}" bindtap="pickService">
+          <view class="svc-name">{{item.name}}</view>
+          <view class="svc-meta num">{{item.minutes}}分钟 · ¥{{item.price}}</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 2 选择日期 -->
+    <view class="block" wx:if="{{svcIdx >= 0}}">
+      <view class="section-title"><text class="step-no">2</text>选择日期</view>
+      <scroll-view scroll-x class="day-row" enhanced show-scrollbar="{{false}}">
+        <view wx:for="{{days}}" wx:key="value"
+              class="day pressable num {{dayIdx === index ? 'picked' : ''}}"
+              data-idx="{{index}}" bindtap="pickDay">
+          <text class="day-label">{{item.label}}</text>
+          <text class="day-sub num">{{item.sub}}</text>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 3 上午 / 下午 -->
+    <view class="block" wx:if="{{svcIdx >= 0}}">
+      <view class="section-title"><text class="step-no">3</text>上午 / 下午（必选）</view>
+      <!-- 状态提示由 slot-picker 分半天渲染：已闭店 / 时段已过 / 已约满 / 剩 N 个名额 -->
+      <slot-picker options="{{options}}" part="{{part}}" slot="{{slot}}" bind:change="onPick" />
+    </view>
+
+    <!-- 4 备注 -->
+    <view class="block" wx:if="{{svcIdx >= 0}}">
+      <view class="section-title"><text class="step-no">4</text>备注（可选）</view>
+      <view class="field">
+        <textarea class="textarea" value="{{note}}" bindinput="onNote" maxlength="200"
+                  auto-height placeholder="力度偏好、身体状况等" show-confirm-bar="{{false}}" />
+      </view>
+      <view class="counter muted num">{{note.length}}/200</view>
+    </view>
+
+    <button class="btn primary lg block submit" loading="{{busy}}" disabled="{{busy || !part}}" bindtap="submit">
+      {{busy
+        ? '提交中…'
+        : (part
+          ? '提交预约：' + services[svcIdx].name + ' · ' + days[dayIdx].label + ' ' + days[dayIdx].sub + ' ' + (slot || (part === 'AM' ? '上午' : '下午'))
+          : '请先选择上午 / 下午')}}
+    </button>
+    <view class="fuzzy-hint">只选上午/下午提交 = 模糊预约，具体时间由店主安排，可能需要等待。</view>
+  </block>
+</view>

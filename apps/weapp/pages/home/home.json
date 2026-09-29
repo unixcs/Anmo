@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "安摩 · 到店按摩",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "shop-card": "/components/shop-card/shop-card"
+  }
+}

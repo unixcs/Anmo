@@ -1,0 +1,62 @@
+/* about — 关于门店：品牌头 + 状态 + 门店卡 + 使用说明 */
+.brand { text-align: center; padding: 24px 0 20px; }
+
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 14px;
+}
+
+.brand-title { font-size: 21px; line-height: 30px; font-weight: 700; margin-bottom: 6px; }
+.brand-sub {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted-foreground);
+  margin: 0 auto;
+  max-width: 300px;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-bottom: 16px;
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+}
+.status-dot.success { background: var(--success); }
+.status-dot.primary { background: var(--primary); }
+.status-dot.warning { background: var(--warning); }
+
+.login-cell { margin-bottom: 16px; }
+
+.guide { padding: 6px 16px; }
+.guide-li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--foreground);
+}
+.guide-li + .guide-li { border-top: 1px solid var(--border); }
+.guide-li app-icon { flex-shrink: 0; margin-top: 2px; }
+
+.share-btn { margin-top: 24px; }

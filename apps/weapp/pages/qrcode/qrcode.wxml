@@ -1,0 +1,67 @@
+<view class="page-body">
+  <!-- 骨架 -->
+  <block wx:if="{{!ready}}">
+    <view class="skeleton card" />
+    <view class="skeleton card" />
+  </block>
+
+  <block wx:else>
+    <view class="page-head">
+      <text class="page-title">我的核销码</text>
+      <text class="page-sub">到店后出示给商家，扫码即完成服务登记</text>
+    </view>
+
+    <!-- 会员码块：仅持 ACTIVE 卡顾客可见（D21） -->
+    <view wx:if="{{hasActiveCard}}" class="card qr-block">
+      <view class="qr-top">
+        <view class="brand-seal">安摩</view>
+        <view class="live"><view class="live-dot" /><text>有效会员</text></view>
+      </view>
+      <canvas type="2d" id="qr-member" class="qr"></canvas>
+      <view class="who">
+        <view class="who-name">{{name}}</view>
+        <view class="who-no num">会员号 {{memberNo}}</view>
+      </view>
+      <view class="clock num">
+        <app-icon name="clock" size="26" />
+        <text>{{nowText}}</text>
+      </view>
+      <view class="hint">每次结算由商家确认后生效，请勿将二维码截图发给他人</view>
+    </view>
+
+    <!-- 无卡：锁定引导，不出任何码 -->
+    <view wx:else class="card">
+      <view class="empty">
+        <view class="empty-icon"><app-icon name="lock" size="76" stroke-width="1.4" /></view>
+        <view class="empty-main">暂无有效会员卡</view>
+        <view class="empty-sub">办卡后出示会员码即可按卡结算，可到店咨询店主办理</view>
+        <navigator url="/pages/booking/booking" open-type="switchTab" hover-class="none">
+          <button class="btn secondary sm pressable">先看看服务项目</button>
+        </navigator>
+      </view>
+    </view>
+
+    <!-- 今日预约：文字列表（不做预约单码） -->
+    <block wx:if="{{hasActiveCard}}">
+      <view class="today-head">
+        <text class="today-title">今日预约</text>
+        <text wx:if="{{todayApts.length}}" class="today-count">{{todayApts.length}} 个</text>
+      </view>
+      <view wx:if="{{todayApts.length}}" class="card plain today-list">
+        <view wx:for="{{todayApts}}" wx:key="id" class="today-row">
+          <text class="row-time num">{{item.time}}</text>
+          <text class="row-svc">{{item.service || '到店与商家确认服务'}}</text>
+          <text class="badge {{item.statusCls}}">{{item.statusText}}</text>
+        </view>
+      </view>
+      <view wx:else class="empty">
+        <view class="empty-icon"><app-icon name="calendar" size="76" stroke-width="1.4" /></view>
+        <view class="empty-main">今天没有预约</view>
+        <view class="empty-sub">需要的话可以现在约一个</view>
+        <navigator url="/pages/booking/booking" open-type="switchTab" hover-class="none">
+          <button class="btn secondary sm pressable">去预约</button>
+        </navigator>
+      </view>
+    </block>
+  </block>
+</view>

@@ -1,0 +1,77 @@
+/* cards — 会员卡（黄铜金 accent）+ 使用明细，与 H5 CardsPage 同构 */
+.sk-card { padding: 18px 16px; }
+.sk-line { height: 14px; border-radius: 6px; margin-bottom: 10px; }
+.sk-line.short { width: 55%; margin-bottom: 0; }
+
+.member-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--accent-soft), #fdf8ee 55%, var(--accent-soft));
+  padding: 16px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), opacity 0.15s;
+}
+.member-card.picked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(168, 123, 47, 0.15), var(--shadow-card);
+}
+.member-card.dim { opacity: 0.62; }
+
+.mc-top { display: flex; align-items: center; justify-content: space-between; }
+.mc-name { font-weight: 600; }
+
+.mc-count { margin: 10px 0 8px; display: flex; align-items: baseline; }
+.mc-remaining { font-size: 30px; line-height: 36px; font-weight: 600; color: var(--accent); }
+.mc-total { font-size: 12px; color: var(--muted-foreground); margin-left: 4px; }
+
+.mc-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  border-top: 1px dashed rgba(168, 123, 47, 0.3);
+  padding-top: 8px;
+}
+.mc-default {
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+}
+
+/* 明细区 */
+.detail { margin-top: 22px; }
+.detail-head { display: flex; align-items: center; gap: 8px; }
+.detail-title { font-size: 16px; line-height: 24px; font-weight: 700; }
+.detail-sub { font-size: 12px; color: var(--muted-foreground); margin: 2px 0 12px; }
+
+.empty-sm { padding: 32px 20px; }
+
+.tx-list { padding: 4px 16px; }
+.tx { display: flex; align-items: center; gap: 10px; padding: 12px 0; }
+.tx + .tx { border-top: 1px solid var(--border); }
+
+.tx-icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tx-icon.in { background: var(--success-soft); }
+.tx-icon.out { background: var(--destructive-soft); }
+.tx-icon.adj { background: var(--accent-soft); }
+
+.tx-body { flex: 1; min-width: 0; }
+.tx-title { font-size: 14px; line-height: 20px; font-weight: 600; }
+.tx-remark { font-weight: 400; color: var(--muted-foreground); font-size: 12px; }
+.tx-sub { font-size: 12px; color: var(--muted-foreground); margin-top: 1px; }
+
+.tx-qty { flex-shrink: 0; font-size: 14px; font-weight: 600; }
+.tx-qty.in { color: var(--success); }
+.tx-qty.out { color: var(--destructive); }
+.tx-qty.adj { color: var(--accent); }

@@ -368,11 +368,6 @@ export function listAppointments(query: { status?: string; date?: string; page: 
   return http.getPage<Appointment>(`/admin/appointments?${q}`)
 }
 
-/** 单查预约（含服务快照）——扫码 ANMO-APT 预约单码后解析用 */
-export function getAppointment(id: string) {
-  return http.get<Appointment & { service: AppointmentService | null }>(`/admin/appointments/${id}`)
-}
-
 export function getToday(date?: string) {
   const q = date ? `?date=${date}` : ''
   return http.get<{ summary: TodaySummary; appointments: TodayAppointment[] }>(`/admin/today${q}`)

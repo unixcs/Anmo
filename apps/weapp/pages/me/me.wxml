@@ -1,0 +1,75 @@
+<view class="page-body">
+  <!-- 未登录 -->
+  <view wx:if="{{!loggedIn}}" class="empty">
+    <view class="empty-icon"><app-icon name="user" size="80" /></view>
+    <view class="empty-main">你好，欢迎来安摩</view>
+    <view class="empty-sub">登录后可预约、查卡、出示核销码</view>
+    <button class="btn primary sm" bindtap="go" data-url="/pages/login/login">微信 / 手机号登录</button>
+  </view>
+
+  <!-- 已登录 -->
+  <block wx:else>
+    <!-- 个人头 -->
+    <view class="me-head">
+      <view class="me-avatar">{{avatar}}</view>
+      <view class="me-who">
+        <view class="me-name">{{member.name || '未设置昵称'}}</view>
+        <view class="me-no num">会员号 {{member.member_no}}</view>
+      </view>
+      <view class="btn sm outline pressable" bindtap="startEdit">编辑</view>
+    </view>
+
+    <!-- 统计瓦片 -->
+    <view class="me-stats">
+      <view class="stat"><text class="stat-label">会员卡</text><text class="stat-value num">{{stats.cards}}<text class="stat-hint">张</text></text></view>
+      <view class="stat"><text class="stat-label">剩余次数</text><text class="stat-value num">{{stats.remaining}}<text class="stat-hint">次</text></text></view>
+      <view class="stat"><text class="stat-label">即将到店</text><text class="stat-value num">{{stats.upcoming}}<text class="stat-hint">次</text></text></view>
+    </view>
+
+    <!-- 编辑资料（页内展开） -->
+    <view wx:if="{{editing}}" class="card edit-card">
+      <view class="field">
+        <text class="field-label">昵称</text>
+        <input class="input" value="{{name}}" bindinput="onName" maxlength="20" placeholder="怎么称呼你" />
+      </view>
+      <view class="field">
+        <text class="field-label">性别</text>
+        <view class="seg">
+          <view class="seg-item {{gender === '女' ? 'picked' : ''}}" data-g="女" bindtap="pickGender">女</view>
+          <view class="seg-item {{gender === '男' ? 'picked' : ''}}" data-g="男" bindtap="pickGender">男</view>
+          <view class="seg-item {{gender === '' ? 'picked' : ''}}" data-g="" bindtap="pickGender">保密</view>
+        </view>
+      </view>
+      <view class="edit-ops">
+        <button class="btn primary sm" bindtap="saveProfile">保存</button>
+        <button class="btn ghost sm" bindtap="cancelEdit">取消</button>
+      </view>
+    </view>
+
+    <!-- 菜单 -->
+    <view class="me-menu">
+      <view class="cell pressable" bindtap="go" data-url="/pages/qrcode/qrcode">
+        <view class="cell-icon"><app-icon name="qr" size="40" /></view>
+        <view class="cell-body"><text class="cell-title">我的核销码</text><text class="cell-desc">到店出示，扫码结算</text></view>
+        <view class="chevron"><app-icon name="chevron-right" size="32" /></view>
+      </view>
+      <view class="cell pressable" bindtap="go" data-url="/pages/appointments/appointments">
+        <view class="cell-icon"><app-icon name="calendar" size="40" /></view>
+        <view class="cell-body"><text class="cell-title">我的预约</text><text class="cell-desc">改期、取消都在这里</text></view>
+        <view class="chevron"><app-icon name="chevron-right" size="32" /></view>
+      </view>
+      <view class="cell pressable" bindtap="go" data-url="/pages/cards/cards">
+        <view class="cell-icon"><app-icon name="wallet" size="40" /></view>
+        <view class="cell-body"><text class="cell-title">我的会员卡</text><text class="cell-desc">余额与使用明细</text></view>
+        <view class="chevron"><app-icon name="chevron-right" size="32" /></view>
+      </view>
+      <view class="cell pressable" bindtap="go" data-url="/pages/about/about">
+        <view class="cell-icon"><app-icon name="info" size="40" /></view>
+        <view class="cell-body"><text class="cell-title">关于我们</text><text class="cell-desc">门店信息与联系方式</text></view>
+        <view class="chevron"><app-icon name="chevron-right" size="32" /></view>
+      </view>
+    </view>
+
+    <button class="btn outline block lg logout" bindtap="logout">退出登录</button>
+  </block>
+</view>

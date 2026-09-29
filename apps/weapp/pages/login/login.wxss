@@ -1,0 +1,59 @@
+/* login — 品牌印章 + 短信表单，与 H5 LoginPage 同构 */
+.brand { text-align: center; padding: 28px 0 26px; }
+
+.seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 14px;
+}
+
+.brand-title { font-size: 22px; line-height: 30px; font-weight: 700; margin-bottom: 6px; }
+.brand-sub {
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--muted-foreground);
+  margin: 0 auto;
+  max-width: 280px;
+}
+
+.wx-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--warning);
+  margin-bottom: 14px;
+}
+
+.form { display: flex; flex-direction: column; }
+
+.code-row { display: flex; gap: 10px; align-items: center; }
+.code-input { flex: 1; }
+.send { flex-shrink: 0; white-space: nowrap; }
+.send.off { opacity: 0.55; }
+
+.submit { margin-top: 24px; }
+.agree {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 14px;
+}
+.re-try {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-top: 10px;
+  text-decoration: underline;
+}

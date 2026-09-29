@@ -3,11 +3,13 @@ import { onMounted, ref } from 'vue'
 import { api } from '../core/api/endpoints'
 import type { Member } from '../core/models/models'
 import { notify } from '../platform/notify/toast'
+import AppButton from '../components/ui/AppButton.vue'
 
 const member = ref<Member | null>(null)
 const name = ref('')
 const gender = ref('')
 const birthday = ref('')
+const busy = ref(false)
 
 onMounted(async () => {
   try {
@@ -22,6 +24,7 @@ onMounted(async () => {
 })
 
 async function save(): Promise<void> {
+  busy.value = true
   try {
     const patch: Record<string, string> = {}
     if (name.value) patch.name = name.value
@@ -32,39 +35,58 @@ async function save(): Promise<void> {
     notify('已保存')
   } catch (e) {
     notify((e as Error).message)
+  } finally {
+    busy.value = false
   }
 }
 </script>
 
 <template>
   <div class="page profile">
-    <h1>个人资料</h1>
-    <div class="form">
-      <label>手机号</label>
-      <input :value="member?.phone" disabled />
-      <label>会员号</label>
-      <input :value="member?.member_no" disabled />
-      <label>称呼</label>
-      <input v-model="name" placeholder="怎么称呼您" />
-      <label>性别</label>
-      <select v-model="gender">
-        <option value="">不透露</option>
-        <option value="女">女</option>
-        <option value="男">男</option>
-      </select>
-      <label>生日</label>
-      <input v-model="birthday" type="date" />
-      <button class="primary" @click="save">保存</button>
+    <div class="page-head">
+      <h1>个人资料</h1>
+      <p class="sub">方便店主称呼您、为您安排偏好</p>
+    </div>
+
+    <div class="card form">
+      <div class="field">
+        <label>手机号</label>
+        <input class="input num" :value="member?.phone" disabled />
+      </div>
+      <div class="field">
+        <label>会员号</label>
+        <input class="input num" :value="member?.member_no" disabled />
+      </div>
+      <div class="field">
+        <label for="pname">称呼</label>
+        <input id="pname" v-model="name" class="input" placeholder="怎么称呼您" />
+      </div>
+      <div class="field">
+        <label for="pgender">性别</label>
+        <select id="pgender" v-model="gender" class="input">
+          <option value="">不透露</option>
+          <option value="女">女</option>
+          <option value="男">男</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pbday">生日</label>
+        <input id="pbday" v-model="birthday" class="input num" type="date" />
+      </div>
+      <AppButton block size="lg" :loading="busy" @click="save">保存</AppButton>
     </div>
   </div>
 </template>
 
 <style scoped>
-.profile { padding: 20px 16px; }
-h1 { font-size: 20px; }
-.form { display: flex; flex-direction: column; gap: 8px; background: var(--card); border-radius: 12px; padding: 16px; }
-label { color: var(--muted-foreground); font-size: 13px; }
-input, select { height: 42px; border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 15px; }
-input:disabled { background: #f7f7f7; color: var(--muted-foreground); }
-.primary { margin-top: 12px; height: 44px; background: var(--primary); color: var(--card); border: none; border-radius: 10px; font-size: 16px; }
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.input:disabled {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
 </style>

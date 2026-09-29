@@ -1,0 +1,5 @@
+/* 具体样式由 styleStr 内联注入（mask-image data-uri） */
+.app-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+}

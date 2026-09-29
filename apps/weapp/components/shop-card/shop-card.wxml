@@ -1,0 +1,17 @@
+<view class="shop-card card">
+  <view class="shop-title">门店信息</view>
+  <view wx:if="{{address}}" class="shop-row" bindtap="openMap" hover-class="pressed">
+    <view class="shop-label"><app-icon name="map-pin" size="32" /></view>
+    <text class="shop-value">{{address}}</text>
+    <text class="shop-go">导航</text>
+  </view>
+  <view wx:else class="shop-row">
+    <view class="shop-label"><app-icon name="map-pin" size="32" /></view>
+    <text class="shop-value muted">到店请提前电话联系</text>
+  </view>
+  <view wx:if="{{phone}}" class="shop-row" bindtap="callPhone" hover-class="pressed">
+    <view class="shop-label"><app-icon name="phone" size="32" /></view>
+    <text class="shop-value num">{{phone}}</text>
+    <text class="shop-go">拨打</text>
+  </view>
+</view>

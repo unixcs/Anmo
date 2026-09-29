@@ -1,0 +1,36 @@
+<view class="page-body">
+  <!-- 品牌头 -->
+  <view class="brand">
+    <view class="seal">安摩</view>
+    <view class="brand-title">{{bindTicket ? '绑定手机号' : '欢迎回来'}}</view>
+    <view class="brand-sub">{{bindTicket ? '首次使用，验证手机号后与你的微信绑定（H5 与小程序同一个会员）' : '手机号验证码登录，未注册将自动创建会员'}}</view>
+  </view>
+
+  <view wx:if="{{wxTried}}" class="wx-note">
+    <app-icon name="info" size="28" />
+    <text>微信登录不可用，已切换短信登录</text>
+  </view>
+
+  <!-- 表单 -->
+  <view class="form">
+    <view class="field">
+      <text class="field-label">手机号</text>
+      <input class="input num" type="number" maxlength="11" value="{{phone}}" bindinput="onPhone"
+             placeholder="11 位手机号" />
+    </view>
+    <view class="field">
+      <text class="field-label">验证码</text>
+      <view class="code-row">
+        <input class="input num code-input" type="number" maxlength="6" value="{{code}}" bindinput="onCode"
+               placeholder="6 位验证码" />
+        <button class="btn outline send {{counting > 0 ? 'off' : ''}}" disabled="{{counting > 0 || busy}}" bindtap="sendSms">
+          {{counting > 0 ? counting + 's' : '发送验证码'}}
+        </button>
+      </view>
+    </view>
+
+    <button class="btn primary lg block submit" loading="{{busy}}" disabled="{{busy}}" bindtap="submit">登 录</button>
+    <view class="agree">登录即代表同意到店服务相关约定</view>
+    <view class="re-try" bindtap="tryWx">重新尝试微信登录</view>
+  </view>
+</view>

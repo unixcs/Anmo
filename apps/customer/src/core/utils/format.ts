@@ -14,7 +14,7 @@ export function statusText(status: string): string {
     IN_SERVICE: '服务中',
     COMPLETED: '已完成',
     CANCELLED: '已取消',
-    NO_SHOW: '爽约',
+    NO_SHOW: '未到店',
     ACTIVE: '有效',
     USED_UP: '已用完',
     EXPIRED: '已过期',

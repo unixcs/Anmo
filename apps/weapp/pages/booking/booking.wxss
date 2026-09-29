@@ -1,0 +1,110 @@
+/* booking — 预约页（与顾客 H5 BookingPage 同构） */
+.block { margin: 20px 0; }
+.block .section-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+
+.step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 登录提示条 */
+.login-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 13px 16px;
+  color: var(--foreground);
+}
+.login-go { color: var(--primary); font-weight: 600; margin-left: 2px; }
+
+/* 服务两列网格 */
+.svc-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.svc {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.svc.picked { border-color: var(--primary); background: var(--primary-soft); }
+.svc-name { font-weight: 600; font-size: 14px; }
+.svc-meta { font-size: 12px; color: var(--muted-foreground); }
+.svc.picked .svc-meta { color: var(--primary); }
+
+.empty-mini {
+  padding: 16px;
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+/* 日期横滑 */
+.day-row { white-space: nowrap; }
+.day {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+.day.picked { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.day.picked .day-label { font-weight: 600; }
+
+/* 备注 */
+.counter { text-align: right; font-size: 12px; margin-top: 4px; }
+
+.submit { margin-top: 24px; }
+.fuzzy-hint {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* 成功页 */
+.done { text-align: center; padding-top: 8px; animation: anmo-rise 0.25s var(--ease) both; }
+.done-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-full);
+  background: var(--success-soft);
+  color: var(--success);
+  margin-bottom: 10px;
+}
+.done-title { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
+.done-card { text-align: left; margin-bottom: 12px; }
+.done-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.done-row:last-child { border-bottom: 0; }
+.done-k { color: var(--muted-foreground); flex-shrink: 0; }
+.done-v { text-align: right; font-weight: 600; }
+.done-fuzzy { font-weight: 400; color: var(--muted-foreground); font-size: 12px; }
+.done-tip { color: var(--muted-foreground); font-size: 13px; margin-bottom: 16px; }
+.done-btns { display: flex; gap: 10px; margin-top: 16px; }
+.done-btns .btn { flex: 1; }
