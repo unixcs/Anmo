@@ -17,7 +17,7 @@ type Provider struct {
 	db  shared.DB
 	cfg *config.Config
 	// store-status read-only deps (set via Wire, goal §17)
-	appts    interface {
+	appts interface {
 		ServingNow(ctx context.Context) (*appointment.ServingSlot, error)
 	}
 	services interface {

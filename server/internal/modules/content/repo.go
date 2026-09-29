@@ -354,8 +354,23 @@ func (p *Provider) PublicSettings(ctx context.Context) (map[string]string, error
 		// 首页文案（goal §31：后台可编辑，前端动态渲染）
 		"home_title": stored["home_title"],
 		"home_body":  stored["home_body"],
+		// 首页服务推荐（V2.1）：limit 存值非法时下发空串（客户端回落 6）；
+		// ids 原样下发（解析失败客户端回落全量）
+		"home_service_limit": homeLimitDownlink(stored["home_service_limit"]),
+		"home_service_ids":   stored["home_service_ids"],
 	}
 	return out, nil
+}
+
+// homeLimitDownlink sanitizes the stored home_service_limit for public
+// downlink: valid values pass through, anything else becomes "" so clients
+// fall back to the default 6.
+func homeLimitDownlink(v string) string {
+	switch v {
+	case "", "2", "4", "6", "8":
+		return v
+	}
+	return ""
 }
 
 // SaveSetting upserts one setting. business_* keys are validated server-side
@@ -407,6 +422,29 @@ func validateSetting(key, value string) error {
 	case "shop_phone":
 		if len(value) > 32 {
 			return bad("电话过长")
+		}
+	case "home_service_limit":
+		// 首页服务推荐数量（V2.1）：空 = 客户端默认 6；否则仅 2/4/6/8
+		if value != "" && value != "2" && value != "4" && value != "6" && value != "8" {
+			return bad("首页推荐数量仅支持 2 / 4 / 6 / 8")
+		}
+	case "home_service_ids":
+		// 首页推荐服务有序 ID 列表（V2.1）：空或 "[]" = 按服务排序自动取前 N；
+		// 否则须为 JSON 字符串数组，元素非空、≤50（客户端按列表顺序展示）
+		if value == "" {
+			return nil
+		}
+		var ids []string
+		if err := json.Unmarshal([]byte(value), &ids); err != nil {
+			return bad("推荐服务应为 JSON 字符串数组")
+		}
+		if len(ids) > 50 {
+			return bad("推荐服务最多 50 项")
+		}
+		for _, id := range ids {
+			if id == "" {
+				return bad("推荐服务 ID 不能为空")
+			}
 		}
 	}
 	return nil
