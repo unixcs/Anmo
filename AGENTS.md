@@ -71,13 +71,16 @@ apps/customer/     H5（Vue3 + Vite + TS）
 
 ## 数据库规则
 
-- MySQL 8，utf8mb4，时区 Asia/Shanghai，价格为整数分（禁 float）
-- ID 用 CHAR(26) ULID；业务编号单独生成（member_no / appointment_no，如 APT202609280001）
+- **SQLite**（2026-09-28 起，MySQL 已退役）：单文件库 + WAL，纯 Go 驱动 modernc.org/sqlite（无 CGO）
+- 时区 Asia/Shanghai：DATETIME 一律存 `YYYY-MM-DD HH:MM:SS` 墙上时间字符串（驱动 `_timezone=Asia/Shanghai` 读写），DATE 存 `YYYY-MM-DD`；价格为整数分（禁 float）
+- 并发模型：所有事务 `_txlock=immediate`（BEGIN IMMEDIATE）+ busy_timeout=10s；单写者天然串行化写事务（原 MySQL GET_LOCK/FOR UPDATE 已移除）
+- ID 用 CHAR(26) ULID；业务编号单独生成（member_no / appointment_no，如 APT202609280001，sys_sequence 原子计数器）
 - 所有 schema 变化必须走 `migrations/NNN_*.sql`，禁止改历史 migration
 - 核心历史数据禁止物理删除，用状态字段
 - 余额不是唯一真相：`member_card.remaining_count` 是缓存，`card_transaction` 是历史
 - appointment / payment / redemption / 撤销记录 全部分离
 - 服务名称/价格/时长必须 snapshot（appointment_service）
+- 备份：`-backup`（VACUUM INTO 快照 + integrity_check）+ `scripts/backup-sqlite.sh` 定时执行、备份到独立挂载卷
 
 ## 状态机（冻结）
 
@@ -103,7 +106,7 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 - `remaining_count >= 0` 恒成立
 - 一个预约最多一次有效核销：redemption.status ∈ {SUCCESS, REVERSED}，撤销只置 REVERSED 不删行；生成列 active_lock（SUCCESS 时=appointment_id，否则 NULL）+ UNIQUE(active_lock) 保证不变量并支持撤销后重新核销
 - idempotency_key 为请求级 UUID，UNIQUE 约束防重复提交
-- 一个时间段只能有一个有效预约（PENDING_CONFIRM/CONFIRMED/IN_SERVICE 参与冲突判定）
+- 一个时间段只能有一个有效预约（WAITING/IN_SERVICE 参与冲突判定，D8 口径）
 - 冲突判定：`existing.start < new.end AND existing.end > new.start`，排除自身（改期）
 - 顾客只能通过 token 确定自己的 member_id，禁止信任前端传参
 
@@ -115,7 +118,7 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D2 | RBAC：identity_user.role 枚举（OWNER/OPERATOR）实现角色；identity_role/identity_permission 建静态种子表；V1 OPERATOR 权限与 OWNER 相同 |
 | D3 | 数据库共 24 张业务表（§124 清单为权威）+ 技术表（schema_migrations、sys_sequence 原子计数器）；appointment.member_id NOT NULL，无代客下单 |
 | D4 | card_service_rule 挂 card_template_id（模板级）；核销经 member_card.card_template_id 解析 |
-| D5 | 并发预约：专用连接 NamedLock('anmo:appointment:calendar') 串行化冲突检查，事务 COMMIT 后才释放（锁必须覆盖提交） |
+| D5 | **(2026-09-28 修订，SQLite 迁移)** 并发预约：不再使用 NamedLock/GET_LOCK——所有写事务 `_txlock=immediate`（BEGIN IMMEDIATE）在 BEGIN 时排队获得唯一写锁，闭店/容量/冲突检查与 INSERT 同事务天然原子（busy_timeout=10s，超时返回 SQLITE_BUSY→LOCK_RETRY） |
 | D6 | 跨模块单事务：transaction 模块开事务，显式 Tx 执行器传入 card/appointment 的 api.go；模块内禁止自开嵌套事务（Phase 1 落地 shared.TxRunner） |
 | D7 | 操作日志由 HTTP middleware 写 ops_operation_log；业务模块不 import ops；ops 定时任务单向依赖业务模块 api.go |
 | D8 | **(2026-09-28 修订)** 状态机收紧为 WAITING→IN_SERVICE→COMPLETED（异常 WAITING→CANCELLED/NO_SHOW），migration 012；创建即 WAITING，无确认环节；状态迁移一律 `UPDATE ... WHERE status=期望` 校验影响行数；改期限 WAITING、沿用 2 小时限制、同 appointment 改时间、冲突排除自身；NO_SHOW 仅从 WAITING 迁出 |
@@ -128,11 +131,15 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D15 | 营业时间边界：scheduled_end ≤ 营业结束时间，否则拒绝 |
 | D16 | content_page_config 的 JSON block 引用 banner/announcement id，不复制正文 |
 | D17 | 顾客多时段待确认预约无上限限制，风险知情接受（"不做"原则） |
-| D18 | 撤销核销允许对 CANCELLED/EXPIRED 卡恢复次数（账目修正），但卡保持原状态不复活（对抗审查 W4/W5）；payment 表有生成列 valid_lock+UNIQUE 强制一预约一笔 VALID 收款（B1）及 idempotency_key 幂等（W2） |
+| D18 | 撤销核销允许对 CANCELLED/EXPIRED 卡恢复次数（账目修正），但卡保持原状态不复活（对抗审查 W4/W5）；payment 表有生成列 valid_lock+UNIQUE 强制一预约一笔 VALID 收款（B1）及 idempotency_key 幂等（W2）。SQLite 版生成列：redemption.active_lock STORED（建表）、payment.valid_lock VIRTUAL（ALTER ADD），UNIQUE 语义已逐项验证 |
 | D19 | 散客核销（V1.x）：redemption/payment.appointment_id 可空（NULL=无预约直接核销）；必须指定服务项（卡规则校验 + 金额=服务默认价）；payment 作废/回放定位一律按 idempotency_key（预约维度不变量只约束非空行）；有今日预约的会员不开放散客核销（防绕过 D9） |
 | D20 | 预约规则（V1.x）：营业时间/时段间隔(30|60|120)/每时段容量/上下午分界存 settings（business_* 键，缺失回落 cfg→硬编码 09:00/20:00/30/1/12:00）；appointment.slot_type ∈ {SPECIFIC, HALF_DAY}，HALF_DAY 落库窗口=半天边界；逐槽并发 ≤ capacity 仅约束 SPECIFIC，半日池（< 槽数×容量）对两者一体适用；SPECIFIC 保持 ≥2h 提前量，HALF_DAY 仅要求半天未结束；校验一律 NamedLock+事务内 |
 | D21 | 核销码门槛（V1.x）：顾客端仅对持有 ACTIVE member_card 的用户出示核销码；码内容协议不变（ANMO-MEMBER:<ulid>）；商家端后端校验兜底 |
 | D22 | 闭店日历（V1.x）：appointment_closure 按 (date, AM\|PM) 粒度，全天=两行；创建闭店在 calendar 锁内统计 conflict_count 返回给商家知情；不自动取消/改约；改营业配置不追溯已建预约 |
+| D23 | 微信身份（V2）：member.wx_openid VARCHAR(64) NULL + UNIQUE（NULL 可重复）；一个 openid 只绑一个 member，一 member 只一个 openid；不建独立绑定表 |
+| D24 | code2session 凭据 `wx.app_id`/`wx.secret`（env `ANMO_WX_APPID`/`ANMO_WX_SECRET`）；缺省时 dev 兜底 `openid = "dev:"+code`（启动日志警示），正式发布前必须配真实凭据 |
+| D25 | 未绑定 openid 时发 bind_ticket（JWT `act=WXBIND`，10 分钟），不直接落库；绑定 `POST /api/auth/wx/bind` 必须持顾客 Token（防 openid 探测换 member） |
+| D26 | 微信官方"服务卡片"能力（类目/资质/后台配置）不做；分享闭环 = 每页 onShareAppMessage + 首页/关于 onShareTimeline + showShareMenu |
 
 参考报告：`.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md`、`.../09-27-phase0-review/REVIEW.md`
 
@@ -152,6 +159,6 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 ## 环境
 
 - Go 1.27（`export PATH=$PATH:/usr/local/go/bin`）
-- MySQL 8.4：docker compose（本目录），端口 33306，库 `anmo`，用户 `anmo` / `anmo-dev-2026`，root / `anmo-root-2026`
+- 存储：SQLite 单文件（默认 `data/anmo.db`，env `ANMO_DB_PATH`）；2026-09-28 前的 MySQL 8.4 容器仅作历史数据源保留（端口 33306，数据迁移工具 `server/cmd/mysql2sqlite` 消费）
 - 后端默认监听 `:8080`；H5 dev 由 Vite 提供
-- 验证命令：`go build ./... && go vet ./... && go test ./...`
+- 验证命令：`go build ./... && go vet ./... && go test ./...`（SQLite 后测试零外部依赖、0 跳过）

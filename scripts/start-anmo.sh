@@ -6,24 +6,18 @@ cd "$(dirname "$0")/.."
 
 ROOT="$(pwd)"
 
-# 1) MySQL 容器
-if ! docker ps --format '{{.Names}}' | grep -q '^anmo-mysql$'; then
-  echo "[1/4] 启动 MySQL 容器..."
-  docker compose up -d
-  sleep 3
-else
-  echo "[1/4] MySQL 已在运行"
-fi
+# 1) SQLite 数据目录（存储层 2026-09-28 起，无外部数据库）
+mkdir -p "$ROOT/server/data"
 
 # 2) 后端二进制（无则现场编译）
 if [ ! -x /tmp/anmo-bin ] || [ "$ROOT/server/cmd/anmo/main.go" -nt /tmp/anmo-bin ]; then
-  echo "[2/4] 编译后端..."
+  echo "[1/4] 编译后端..."
   (cd "$ROOT/server" && go build -o /tmp/anmo-bin ./cmd/anmo)
 fi
 
 # 3) 后端（已监听则跳过）
 if ! curl -sf -o /dev/null http://127.0.0.1:8080/healthz; then
-  echo "[3/4] 启动后端 :8080 ..."
+  echo "[2/4] 启动后端 :8080（SQLite: server/data/anmo.db）..."
   nohup /tmp/anmo-bin -config "$ROOT/server/config.example.yaml" \
     >> /tmp/anmo-server.log 2>&1 &
   for i in $(seq 1 20); do

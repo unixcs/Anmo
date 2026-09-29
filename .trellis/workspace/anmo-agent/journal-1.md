@@ -588,3 +588,104 @@ Phase 11 E2E
 - 生产端点实测：管理员登录 ✓、GET /admin/tags 200、credentials 空参 400（路由活）、booking-options（capacity=2 配置生效回读）、顾客端 GET /api/store/status 返回 BUSY（07:26 早于开门 09:00，计算正确）、GET /api/settings 暴露 home_*/shop_*/slot_capacity、静态两端 200。
 - health-yun.sh yun1 ALL GREEN；Tencent git pull --rebase 至 c672f66，三方一致。
 - 用户验收路径：顾客端 18090（首页门店状态徽标+门店卡片导航/拨号、预约成功页、核销码页含预约单码 ANMO-APT、卡使用明细、深色模式）；商家端 18091/admin-ui/（扫码结算页分流、今日预约自动选、实际服务改选、结算选卡、账号设置改手机号/密码、内容页首页文案+门店信息+营业配置、会员标签管理+组合筛选、手机端无横向溢出）。
+
+# PHASE RESULT — V2（Phase C+D 收口，Phase E 经用户指示取消）
+- Completed：V2 主线（微信登录后端 + 原生顾客端小程序 `apps/weapp` 8 页 2 组件）打磨到"可交付"并补齐验证闭环。本轮改动集中在小程序：① 登录态启动链路收口（`app.js ready()` 读最新态 + 新增 `markAuth()`，login 成功/me 退出/`request` 401 三处同步全局态；login 页复用启动 `session` 不再抢跑二次 wx.login；bindTicket 经 globalData 透出）；② 核销码页 canvas 在 `wx:if` 内改为 setData 回调后再绘制（原实现整页二维码画不出）；③ 卡流水符号口径 `format.txQty`（REDEEM 存正数语义为扣次→显示 `-N`，ADJUSTMENT 保留符号，ISSUE/REVERSAL 为 `+N`），**H5 `CardsPage.vue` 同源同改**；④ `format.trimPastSlots` 前端裁掉今日已开始的槽 + slot-picker `ended/已闭店/已约满` 三态标签（后端不回溯，避免动 D20 共享口径）；⑤ qrcode/appointments 的服务名回填改按 id `findIndex`（原用闭包下标会打错位）；⑥ about 页分享落地降级（settings 缓存兜底 + 登录引导卡 + 补 `onPullDownRefresh`）；⑦ 核销码页 keepScreenOn 在 onHide/onUnload 释放；⑧ `format.homeBlocks` 按后端 `content_page_config` 编排首页内容块（D16，与 H5 同口径，banner 不渲染）。
+- Tests：
+  - 纯逻辑单测（新增 `apps/weapp/tools/unit.js`，零依赖）：**PASS=19 全绿**（slot-picker 门槛 6 例、trimPastSlots 4 例、txQty 3 例、homeBlocks 3 例、展示口径 3 例）。
+  - IDE 端到端（新增 `apps/weapp/tools/devtools-verify.js`，11 stage 逐 stage 重连重试）：**PASS=53 FAIL=0**（`.dev/verify3.log`）；修完 screenshot 路径后复跑 **PASS=50 FAIL=0**（`.dev/verify5.log`）；持卡会员 13990497037 专跑 login+qrcode+cards **PASS=13 FAIL=0**（`.dev/verify4.log`，覆盖 D21 正分支与真实流水 REDEEM/REVERSAL/ISSUE）。
+  - 实测覆盖：短信登录→token 落地、登录态首页（含 blocks 顺序=后端编排）、模糊预约 `{date,day_part}`→成功卡→我的预约可见→取消（→CANCELLED 且不可再取消）、具体槽 `{start_time}` 提交、今日预约 ANMO-APT 单码+服务名快照、D21 无卡不出会员码（DOM 断言 canvas 数）、今日已过槽不展示、关于页三字段=接口值对账、会员卡与明细展开。
+  - 后端：`go build ./... && go vet ./... && go test ./... -count=1`（带 `ANMO_TEST_MYSQL_DSN`）exit=0，**14 包 ok、0 SKIP、0 FAIL**（`.dev/go-test-final.log`）。
+  - H5：`vue-tsc --noEmit -p tsconfig.json` 过、`vite build` 过（`npm run build` 的 `vue-tsc -b` 报 HomePage/QRCodePage 既有类型错，与本次改动无关，未扩大范围去动）。
+- Database：无新 migration（013_member_wx_openid 由 Phase C 建立并已应用）。开发库残留本轮实测预约（APT…0015 已取消、0016/0017/0019/0020 等）未清理，生产库无。
+- Files Changed：`apps/weapp/`（app.js、utils/{request,api,format}.js、8 页、2 组件、新增 tools/{unit.js,devtools-verify.js,package.json}、README.md）；`apps/customer/src/pages/CardsPage.vue`（流水符号同口径）；`AGENTS.md`（决策表补 D23–D26）；`V2-HANDOFF.md`（进度表/环境/§4 打磨清单/§6 提效链路/§7 证据/§8 剩余与不做清单全面刷新）；`.gitignore`（+`.dev/`）。
+- 坑（务必沿用）：① 本机 `/tmp` 会被系统清空 → 二进制、node_modules、验证脚本一律落仓库（`.dev/` 已 gitignore、`apps/weapp/tools/`）；② `cli auto` 前必须 `quit` + sleep 15s，`√ auto` 后再等 ~50s，否则 automator 首条命令必 timeout / `initialize error: read ECONNRESET`；③ 该 devtools 版本自定义组件内部节点 automator 够不到 → 受控组件走 `page.callMethod('onPick'|'pickDay')`，组件门槛交给 unit.js；④ `automator.screenshot({path})` 是**本机 Node fs 写盘**（IDE 只回传 base64），传 Windows 路径会在 cwd 生成带反斜杠的垃圾文件 → 落 `.dev/shots/`；⑤ `callWxMethod('getStorageSync')` 返回裸字符串，token key 是 `anmo_customer_token`；⑥ 取消类用例必须按单号 `findIndex` 定位按钮下标。
+- Risk：门店地址/电话在开发库未配置（规范键 `shop_phone`/`shop_address`，库里只有历史 `store_phone`）→ 关于页走空态文案，实测改为"页面值=接口值"对账而非断言有值；banner 内容块小程序端不渲染（依赖外部图片域名+合法域名）；H5 的今日已过槽仍未裁剪（本轮只统一了账目符号口径）。
+- Next：等用户点头后走部署链（小步 commit → 推 GitHub main → yun1 二进制/migration 013 应用验证 → Tencent pull）；小程序发布前清单见 `apps/weapp/README.md`（真实 AppID、`ANMO_WX_APPID/SECRET`、HTTPS 备案合法域名）。
+
+# PHASE RESULT — P1 存储 MySQL→SQLite（2026-09-28）
+
+## 交付物
+1. migrations 001-013 全量 SQLite 方言（生成列 active_lock STORED / valid_lock VIRTUAL + UNIQUE、updated_at 触发器、闭店 ENUM→CHECK、JSON→TEXT+json_valid；005/006/011/012 按"全新库=终态"折叠 MySQL 专用 DDL，文件头有说明）
+2. 并发锁模型：`_txlock=immediate`（BEGIN IMMEDIATE）+ busy_timeout 10s + WAL + FK；NamedLock/GET_LOCK/FOR UPDATE 全移除（database/lock.go 删除、shared.NamedLocker 删除）
+3. 驱动：modernc.org/sqlite v1.59.0 纯 Go（CGO_ENABLED=0）；DSN `_timezone=Asia/Shanghai&_time_format=datetime` —— time.Time 绑定/扫描零改动，JSON 时间戳保持 +08:00 与 MySQL 版一致（实测）
+4. shared：IsDupKey（2067/1555）/IsBusy（5/6）方言谓词；sequence INSERT OR IGNORE
+5. 方言清理：NOW()→datetime('now','+8 hours')、CURDATE/INTERVAL→Go 侧算截止、ON DUPLICATE→ON CONFLICT DO UPDATE、INSERT IGNORE→OR IGNORE、DATE_FORMAT→strftime、CONCAT→||、mysql 1062/1213 检测→shared 谓词
+6. config：mysql.dsn → database.path（ANMO_DB_PATH）；config.example.yaml 更新
+7. testsupport：SQLite 临时文件库（t.TempDir），**测试零外部依赖**：14 包全绿 0 skip
+8. 对抗测试：A5 并发收款/A10 改期锁等待 按单写者模型重写（语义等价）；预约风暴 A13 / 并发核销 A6 / 并发收款 A5 全 PASS
+9. 迁移工具 server/cmd/mysql2sqlite（独立 go.mod，主模块无 go-sql-driver）：本地 26 表全量搬迁，行数/FK/integrity/不变量/序列延续/应用级冒烟全过（REPORT.md）
+10. 部署：server/Dockerfile（静态二进制+非 root+VOLUME data/backups）入仓；docker-compose.yml 去 MySQL 挂 ./data ./backups；scripts/backup-sqlite.sh（VACUUM INTO 快照+完整性校验+保留 14 份+恢复演练）；main.go 增 `-backup`/`-migrate`
+11. 文档：AGENTS.md（数据库规则/环境/D5/D18 修订标记）、HANDOFF.md、appointment/card AGENTS.md
+
+## 验证
+- `go build ./... && go vet ./...` 干净；`go test ./... -count=1` 14 包 ok 0 skip
+- 容器实测：镜像构建→启动自动 13 migration→API 冒烟→容器内 -backup 落宿主机卷
+- 服务器二进制 `go version -m` 无 mysql 依赖
+
+## 决策记录
+- SQLite 版 migration 保留文件编号与历史语义（012 在 SQLite 上为空操作+说明）
+- mysql2sqlite 独立嵌套 go.mod：工具一次性使用，主服务二进制零 MySQL
+- yun1 生产数据迁移在 P4 部署时执行（步骤见 cmd/mysql2sqlite/REPORT.md），旧 mysql-data 卷保留 ≥2 周作回退
+
+# PHASE RESULT — P2 双端 UI 重构（2026-09-28）
+
+## Completed
+1. 设计体系落地（docs/BRAND-GUIDELINES.md 为唯一来源）：H5 `src/style.css` 全量重写（token+类库 .btn/.card/.cell/.chip/.badge/.input/.empty/.skeleton/.seg/.stat），`apps/weapp/app.wxss` 同名同值镜像；两端 UI 图标统一为 AppIcon.vue / components/app-icon（SVG data-uri + mask，25 名同 PATHS）；H5 新增 src/components/ui/ 12 个薄组件
+2. 核心业务 bug 修复（多核销码）：两端核销码页改为单一会员码 ANMO-MEMBER:<member_id>（D21，有 ACTIVE 卡才出示）；今日预约降级为文字列表（服务名取列表内嵌 services 快照）；商家端 ANMO-MEMBER 扫码流程闭环（后端本就按会员+当日预约分流）
+3. 后端配套（附加式）：顾客预约列表内嵌 services 快照（AppointmentWithServices + ServicesOfMany 批量查询，两端删 N+1）；InternalNote 顾客端一律置空 + json omitempty（§107）
+4. H5 全部 10 页 + weapp 全部 8 页（home/booking/appointments/cards/qrcode/me/login/about）按新体系重构，业务逻辑保留（weapp 登录链路 app.js ready/markAuth/bindTicket 未动）；weapp 删除 tools/ E2E 脚手架与全部 console.log；品牌口径统一"安摩"，页面标题统一
+5. 预约模块交互强化（两端同构）：步骤编号 1-2-3-4、服务两列网格、日期横滑 chip、上午/下午大卡（余量三态：已闭店/时段已过/已约满/剩 N）、具体槽 4 列网格（满槽 badge 禁选）、提交按钮动态汇总文案、成功页（对勾+单号+门店卡+双按钮）
+6. 卡片页改"选卡→明细"模型（金卡视觉+badge+流水 ±符号三色），me 页加头像+统计瓦片（有效卡/剩余次数/即将到店，实时拉取），login/about 品牌印章头
+7. 禁用按钮态两端修复：微信内置 button[disabled]:not([type]) 特异性压制 → .btn[disabled] 用 !important + 高特异性选择器；H5 .btn.primary 在级联后段 → 补全 variant:disabled 选择器；统一 muted 灰底
+8. E2E/UI 验证脏数据清理：/tmp/p2-review/anmo-dev.db 全业务表清空（18 member/10 service/31 appointment/7 卡/15 流水/281 操作日志），保留 identity_user OWNER 与 content_system_setting/home page_config，integrity_check ok；建干净会员 13900000001
+
+## Tests
+- weapp devtools automation（miniprogram-automator + cli auto :9420）：8 页 reLaunch 截图全过（w4-*，持卡会员含 QR/今日预约/待到店 badge）、交互态 2 张（选卡出明细 w4-cards-detail、选服务出日期条 w4-booking-picked）、无卡会员锁定态（w4n-qrcode）、干净数据空态 7 张（w5-*）
+- H5 playwright 截图：全 10 页两轮（h5b/h5c），禁用态修复后 booking 复拍确认
+- `npm run build`（H5）通过；后端无新改动（P2-2 已验：列表内嵌 services、internal_note 不外泄）
+- automation 脚本留存 .dev/verify-weapp/（gitignored）
+
+## Database
+- 无新 migration；开发库（评审用）脏数据已清空如上；生产库未动
+
+## 坑（新增）
+- weapp devtools automation：connect 后首次 reLaunch 若 devtools 后台编译未完成必 timeout —— 逐页 try 3 次 + 先探 currentPage
+- app 实例 session 只在 onLaunch 跑一次：automation 换 storage token 后必须 evaluate getApp().markAuth(true)，否则 ready() 命中旧缓存全页按未登录渲染
+- /tmp 清空风险仍在：验证脚本已落 .dev/；cli.bat 位于 D:\Program\soft\wechattools\
+
+## Next
+- P3：10 轮强制迭代（剃刀规划 + 墨菲对抗子代理审查）+ ≥1 项自选高价值任务
+- P4：GitHub 推送 + yun1 生产数据迁移（REPORT.md runbook）+ 部署 + health-yun.sh 全绿
+
+# PHASE RESULT — P3 十轮强制迭代（2026-09-28/29）
+
+## Completed
+1. R1 weapp 预约主链路 E2E 16/16（automator :9420，真实后端建单）；墨菲对抗审查 12 项发现全部修复并回归（silent-login 挂起不阻塞、svcIdx 对齐 id、跨零点重算日期条等）
+2. R2 H5 预约主链路 13/13（playwright 冷加载 + addInitScript 种 token，绕开 hash 同文档导航的 automation 幻影重定向）
+3. R3 改期/取消异常路径 13/13（API 级）：他人预约 403、2h 窗口、闭店日、容量冲突、改期排除自身、HALF_DAY 半日已结束拒绝
+4. R4 结算闭环对抗 65/65：核销单事务、幂等键、撤销置 payment VOIDED（valid_lock 生成列）、散客核销 RDM_WALKIN_BLOCKED、撤销后重核销、一预约一笔 VALID 不变量
+5. R5 弱网/宕机/401 双端全绿：H5 http.ts 补 15s AbortController 超时 + NETWORK 归一（修复 Vite 代理下 fetch 永久挂起 → 页面永卡骨架）；weapp 宕机失败态 + 重试恢复全链路（booking svcErr 态为本次新增——加载失败不得伪装"暂未上架"）；401 双端清理 + 回跳；stale-response 竞态以响应篡改注入验证丢弃
+6. R6 视觉对照 BRAND-GUIDELINES：双端 16 张截图逐张过审全 on-brand；修 3 处（qrcode 页 tab 高亮、NO_SHOW 筛选口径、头像缺字回落'客'）
+7. R7 分享落地/登录回跳：weapp 8/8 页 onShareAppMessage（D26，home/about 另有 onShareTimeline）；无 token 落预约页出登录引导 → 点按 → 短信登录 → navigateBack 回预约页即登录态（8/8）；H5 守卫 redirect 参数 → 登录后回原目标页（7/7）
+8. R8 展示口径对账（双端逐项 diff）：NO_SHOW '爽约'→'未到店'（H5 badge+format）；AppStatusBadge 补历史态 PENDING_CONFIRM/CONFIRMED 徽标（旧数据曾会裸显英文码）；'店家'→'店主'统一；'即将到店'口径统一为"今天(北京)及以后的活跃预约"（weapp 补日期过滤 / H5 弃设备本地时区）；改期日历与核销码页"今天"改北京时间锚定（MyAppointmentsPage.buildDays / QRCodePage.todayStr）；R2 13/13 + R3 13/13 回归过
+9. R9 包体与首屏审计：H5 首屏 4 API 全并行无重复（~177ms）；产物 index 105KB(gzip 41KB)+路由懒加载 chunk（最大 QRCodePage 27KB 含 qrcode 库）；weapp 包 384K（限 2M），home 双请求并行 —— 均无需改动（剃刀）
+10. R10 自选高价值任务：生产迁移 runbook 本地全彩排（REPORT.md 逐条复现）——mysql2sqlite 重建 /tmp 库，26 表行数与 MySQL 全对齐，fk/integrity/不变量校验过，应用级冒烟（既有会员短信登录、19 条预约读取含 +08:00 JSON、新建 APT202609290001 落库格式正确）；彩排中顺带验证迁移后的闭店行在运行时真实生效（APT_CLOSED 拦截 9-30 上午）
+
+## Tests
+- 双端 E2E/对抗累计 130+ 断言全绿；`go build ./... && go vet ./... && go test ./...` 全绿（SQLite 后 0 跳过）
+- H5 `vite build` 过；脚本与 README 持久化 .dev/verify-weapp/（含运行前提、数据清理规则、wx.login mock 残留提醒）
+
+## Database
+- 无新 migration（P3 纯验证+双端展示层修复）；开发库预约数据按套件间清理规则管理
+
+## Files Changed（P3 全部）
+- apps/customer: core/api/http.ts（15s 超时+NETWORK）、components/ui/AppStatusBadge.vue、core/utils/format.ts、pages/{Booking,MyAppointments,Me,QRCode}Page.vue
+- apps/weapp: pages/booking/{booking.js,booking.wxml}（svcErr+重试+分享）、pages/me/me.js（upcoming 口径）、pages/qrcode/qrcode.js、pages/login/login.js、pages/appointments/appointments.js（NO_SHOW 筛选）、utils/format.js（状态词对齐）
+- 后端零改动（R4 曾修 Adjust 归零置 USED_UP + 单测，属 R4 内）
+
+## Remaining
+- 无（P3 目标 10 轮 + 自选高价值全部完成）
+
+## Next
+- P4：推送 GitHub → yun1 生产数据迁移（REPORT.md runbook，R10 已本地彩排）→ 部署 → health-yun.sh 全绿
