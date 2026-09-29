@@ -689,3 +689,27 @@ Phase 11 E2E
 
 ## Next
 - P4：推送 GitHub → yun1 生产数据迁移（REPORT.md runbook，R10 已本地彩排）→ 部署 → health-yun.sh 全绿
+
+# PHASE RESULT — P4 生产迁移与部署（2026-09-29）
+
+## Completed
+1. GitHub 推送：406e69e（server SQLite+微信地基+迁移工具）/ 0a2fa06（weapp+H5+P3）/ c350743（docs）/ 762dc3f（backup fix）
+2. yun1 生产迁移（REPORT.md runbook 逐步执行）：mysqldump 预备份（backup-pre-migration-20260929.sql, 88K）→ 停写 → mysql2sqlite（linux/amd64 交叉编译）→ 26 表全量复制，fk_check=0、integrity ok、不变量=0
+3. 栈切换：anmo-server:v2 镜像（Dockerfile SQLite 版，uid 10001, /data 卷）→ 新 compose（去 MySQL 化，secrets 原值承接）→ force-recreate → anmo-mysql 停用保留（回退：mysql-data 卷 + compose.mysql-bak + mysqldump，保留两周+）
+4. 前端原子换装：admin/customer dist 上传 staging 后 mv 换名，admin-ui 与顾客 H5 均 200
+5. 生产冒烟全绿：admin 登录+预约端点；顾客登录（18656864931）5 条预约（+08:00 JSON 格式正确）、12 次卡、profile member_no M202609270004 序号延续；/healthz 200；server 日志 0 error
+6. 备份体系：backup-sqlite.sh 部署 + cron 03:30（保留 14 份）；首份快照 464K 落 /opt/anmo/backups；--restore-test 启动级恢复演练通过（修两处：临时副本演练保持快照只读、chown 10001 对齐容器 uid；镜像 tag 对齐 v2）
+7. yun1 README 同步 SQLite 现状；health-yun.sh yun1 ALL GREEN
+
+## Tests
+- 生产端到端：登录/读/卡/profile/健康端点全过；容器状态 anmo-server Up、日志无 error
+
+## Database
+- 生产库 /opt/anmo/data/anmo.db（迁移自 MySQL 全量 26 表）；MySQL 容器停用保留
+
+## 坑（新增）
+- restore-test 原实现以 ro 挂载直测快照 → WAL 开库写失败；已改临时副本演练（快照本体不可变）
+- dev SMS 60s 频控：冒烟脚本内 send→verify 必须同会话一次完成，跨命令复用旧 code 会"验证码错误或已过期"
+
+## Next
+- 发布小程序前必须配置真实 wx.app_id/secret（D24）与正式短信通道；生产 compose 中 ANMO_SMS_MODE=dev 记得切换
