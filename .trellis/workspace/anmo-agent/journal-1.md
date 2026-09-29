@@ -779,3 +779,23 @@ migration 014 重建 member（phone 可空+password_hash）；H5 注册/登录�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 5: V2.2 第三批：服务记录与散客快速结算
+<!-- trellis-session: v=2 fp=2d05f16798eabfb4 -->
+
+**Date**: 2026-09-30
+**Task**: V2.2 第三批：服务记录与散客快速结算
+**Branch**: `main`
+
+### Summary
+
+migration 015（service_tag/service_record 建表 + payment 重建 member_id→NULL，006/010 约束索引触发器全保留，升级路径测试）；服务标签管理（两组/去重/停用/排序/仅未使用可删，停用仅历史筛选可见）；service_record 四结算入口同事务落记录+强制沟通确认 TX_NEED_CONFIRM；核销撤销联动置 REVERSED；散客快速结算 POST /admin/walkin/settle（手机号可选，不录仅记账 record_skipped；CARD 拒绝；幂等回放；EnsureByPhoneTx 建档）；会员详情服务追踪（倒序/筛选/关键词/汇总）+ 商家备注 + 散客记录独立撤销路由；service_note_presets 快捷短语 KV；admin 新页/弹窗/追踪区。AGENTS.md D28/D29。check 修复 4 处（缩进回退、既有 00:00-01:00 时钟 flake 守卫、GetItemTx 错误吞没、散客手机号前端正则）；主会话补散客撤销路由+UI 缺口；Murphy live 矩阵 44/44 PASS（前期 FAIL 均为脚本种子/断言伪影，逐一甄别）
+
+### Git Commits
+
+(No commits - planning session)
+
+### Status
+
+[OK] **Completed**

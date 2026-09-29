@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
-- **Last Active**: 2026-09-29
+- **Total Sessions**: 5
+- **Last Active**: 2026-09-30
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~781 | Active |
+| `journal-1.md` | ~801 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-09-30 | V2.2 第三批：服务记录与散客快速结算 | - | `main` |
 | 4 | 2026-09-29 | V2.2 第二批：H5 密码登录体系 | `b434c5f` | `main` |
 | 3 | 2026-09-29 | V2.2 第一批：预约页固定提交条/地图选点/H5地址兜底/资料完善 | `6b10091` | `main` |
 | 2 | 2026-09-29 | V2.1 首页可配置化与小程序体验修复 | `fd296f8` | `main` |
