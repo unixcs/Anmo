@@ -241,7 +241,7 @@ func TestGUARD_A1_CardConcurrentMixedOps(t *testing.T) {
 			barrier()
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			_, _, err := e.tx.SettleByCard(ctx, aptIDs[i], cardID, "", e.opID, fmt.Sprintf("adv-a1-%d", i))
+			_, _, err := e.tx.SettleByCard(ctx, aptIDs[i], cardID, "", e.opID, fmt.Sprintf("adv-a1-%d", i), transaction.RecordFields{Communicated: true})
 			results[i] = result{fmt.Sprintf("redeem#%d", i), err}
 		}(i)
 	}
@@ -318,7 +318,7 @@ func TestGUARD_A2_CancelledCardRejectsRedeem(t *testing.T) {
 	if err := e.cards.Cancel(ctx, cardID, e.opID); !shared.Is(err, "CARD_ALREADY_CANCELLED") {
 		t.Errorf("重复作废未拦截: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a2"); !shared.Is(err, "CARD_NOT_ACTIVE") {
+	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a2", transaction.RecordFields{Communicated: true}); !shared.Is(err, "CARD_NOT_ACTIVE") {
 		t.Errorf("作废卡核销未被拦截: %v", err)
 	}
 	if _, err := e.cards.Adjust(ctx, cardID, 5, "", e.opID); !shared.Is(err, "CARD_CANCELLED") {
@@ -343,7 +343,7 @@ func TestREVEAL_A3_ReplayFirstKeyAfterReverse(t *testing.T) {
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 10, 0)
 	ctx := e.ctx()
 
-	rd1, pay1, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1")
+	rd1, pay1, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("first settle: %v", err)
 	}
@@ -351,7 +351,7 @@ func TestREVEAL_A3_ReplayFirstKeyAfterReverse(t *testing.T) {
 		t.Fatalf("reverse: %v", err)
 	}
 	// FIXED（W1）：撤销后重放旧 key 必须显式报 RDM_REVERSED，而不是 200+REVERSED+错配 payment
-	_, _, err = e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1") // 重放旧 key
+	_, _, err = e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1", transaction.RecordFields{Communicated: true}) // 重放旧 key
 	if !shared.Is(err, "RDM_REVERSED") {
 		t.Fatalf("撤销后重放旧 key 应返回 RDM_REVERSED，实际: %v", err)
 	}
@@ -370,10 +370,10 @@ func TestREVEAL_A3_ReplayFirstKeyAfterReverse(t *testing.T) {
 		t.Errorf("重放改动了余额: %d", got)
 	}
 	// 再重新核销，第三次重放旧 key 仍必须 RDM_REVERSED（不存在错配可能）
-	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-2"); err != nil {
+	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-2", transaction.RecordFields{Communicated: true}); err != nil {
 		t.Fatalf("re-settle: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1"); !shared.Is(err, "RDM_REVERSED") {
+	if _, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-key-1", transaction.RecordFields{Communicated: true}); !shared.Is(err, "RDM_REVERSED") {
 		t.Fatalf("重新核销后重放旧 key 应仍返回 RDM_REVERSED，实际: %v", err)
 	}
 }
@@ -383,12 +383,12 @@ func TestREVEAL_A4_PayIgnoresIdempotencyKey(t *testing.T) {
 	e := newEnv(t)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 11, 0)
 	ctx := e.ctx()
-	p1, err := e.tx.SettleByPay(ctx, aptID, "CASH", 12800, "r1", "现金", e.opID, "adv-pay-key-1")
+	p1, err := e.tx.SettleByPay(ctx, aptID, "CASH", 12800, "r1", "现金", e.opID, "adv-pay-key-1", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("first pay: %v", err)
 	}
 	// FIXED（W2）：同 key 重放必须幂等回放原结果
-	p2, err := e.tx.SettleByPay(ctx, aptID, "CASH", 12800, "r1", "现金", e.opID, "adv-pay-key-1")
+	p2, err := e.tx.SettleByPay(ctx, aptID, "CASH", 12800, "r1", "现金", e.opID, "adv-pay-key-1", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("同 key 重放应幂等返回原结果，实际错误: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestREVEAL_A4_PayIgnoresIdempotencyKey(t *testing.T) {
 		t.Errorf("幂等回放返回了不同 payment: %s != %s", p2.ID, p1.ID)
 	}
 	// 另一种方式（异 key）仍必须被 D1 拦截
-	if _, err := e.tx.SettleByPay(ctx, aptID, "CASH", 12800, "r2", "", e.opID, "adv-pay-key-2"); !shared.Is(err, "PAY_EXISTS") {
+	if _, err := e.tx.SettleByPay(ctx, aptID, "CASH", 12800, "r2", "", e.opID, "adv-pay-key-2", transaction.RecordFields{Communicated: true}); !shared.Is(err, "PAY_EXISTS") {
 		t.Logf("异 key 二次收款: %v（应为 PAY_EXISTS）", err)
 	}
 }
@@ -479,7 +479,7 @@ func TestREVEAL_A5_ConcurrentCashDoubleInsert(t *testing.T) {
 				c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 				defer cancel()
 				_, err := e.tx.SettleByPay(c, a, [3]string{"CASH", "WECHAT_TRANSFER", "OTHER"}[i],
-					12800, "", "", e.opID, fmt.Sprintf("adv-a5-%d-%d", round, i))
+					12800, "", "", e.opID, fmt.Sprintf("adv-a5-%d-%d", round, i), transaction.RecordFields{Communicated: true})
 				statuses[i] = err
 			}(i)
 		}
@@ -515,7 +515,7 @@ func TestGUARD_A6_ConcurrentRedeemSameAppointment(t *testing.T) {
 			<-start
 			c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			_, _, err := e.tx.SettleByCard(c, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a6-%d", i))
+			_, _, err := e.tx.SettleByCard(c, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a6-%d", i), transaction.RecordFields{Communicated: true})
 			errs[i] = err
 		}(i)
 	}
@@ -545,7 +545,7 @@ func TestGUARD_A7_ConcurrentReverse(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 15, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a7")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a7", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -594,7 +594,7 @@ func TestGUARD_A8_ReverseVsResettleRace(t *testing.T) {
 		cardID := e.newCard(e.mbrA, 10)
 		aptID := e.bookInService(e.mbrA, e.svc60, 2+round/4, 10+(round%4), 0)
 		ctx := e.ctx()
-		rd1, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a8-%d-1", round))
+		rd1, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a8-%d-1", round), transaction.RecordFields{Communicated: true})
 		if err != nil {
 			t.Fatalf("round %d settle: %v", round, err)
 		}
@@ -615,7 +615,7 @@ func TestGUARD_A8_ReverseVsResettleRace(t *testing.T) {
 			<-start
 			c, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
-			_, _, reErr = e.tx.SettleByCard(c, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a8-%d-2", round))
+			_, _, reErr = e.tx.SettleByCard(c, aptID, cardID, "", e.opID, fmt.Sprintf("adv-a8-%d-2", round), transaction.RecordFields{Communicated: true})
 		}()
 		close(start)
 		wg.Wait()
@@ -844,7 +844,7 @@ func TestREVEAL_A14_CrossMemberCard(t *testing.T) {
 	aptA := e.bookInService(e.mbrA, e.svc60, 2, 10, 0)
 	ctx := e.ctx()
 	// FIXED（W3）：跨会员核销必须 403 CARD_NOT_YOURS
-	if _, _, err := e.tx.SettleByCard(ctx, aptA, cardB, "", e.opID, "adv-a14"); !shared.Is(err, "CARD_NOT_YOURS") {
+	if _, _, err := e.tx.SettleByCard(ctx, aptA, cardB, "", e.opID, "adv-a14", transaction.RecordFields{Communicated: true}); !shared.Is(err, "CARD_NOT_YOURS") {
 		t.Fatalf("跨会员核销应被拒绝（CARD_NOT_YOURS），实际: %v", err)
 	}
 	if got := e.cardOf(e.mbrB).RemainingCount; got != 10 {
@@ -858,7 +858,7 @@ func TestREVEAL_A15_ReverseBlockedByCancelledCard(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 11, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a15")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a15", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -883,7 +883,7 @@ func TestREVEAL_A16_ReverseRevivesExpiredCard(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 12, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a16")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a16", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -918,7 +918,7 @@ func TestREVEAL_A17_ReverseLongReasonMisdiagnosed(t *testing.T) {
 	cardID := e.newCard(e.mbrA, 10)
 	aptID := e.bookInService(e.mbrA, e.svc60, 2, 13, 0)
 	ctx := e.ctx()
-	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a17")
+	rd, _, err := e.tx.SettleByCard(ctx, aptID, cardID, "", e.opID, "adv-a17", transaction.RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -950,7 +950,7 @@ func TestREVEAL_A18_SettleWaitingOkCancelledRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, waiting.ID, cardID, "", e.opID, "adv-a18-1"); err != nil {
+	if _, _, err := e.tx.SettleByCard(ctx, waiting.ID, cardID, "", e.opID, "adv-a18-1", transaction.RecordFields{Communicated: true}); err != nil {
 		t.Errorf("WAITING 预约应可直接核销: %v", err)
 	}
 	st := e.strSQL(`SELECT status FROM appointment WHERE id = ?`, waiting.ID)
@@ -965,7 +965,7 @@ func TestREVEAL_A18_SettleWaitingOkCancelledRejected(t *testing.T) {
 	if _, err := e.apt.CancelByAdmin(ctx, cxl.ID, e.opID, "test"); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if _, _, err := e.tx.SettleByCard(ctx, cxl.ID, cardB, "", e.opID, "adv-a18-2"); err == nil {
+	if _, _, err := e.tx.SettleByCard(ctx, cxl.ID, cardB, "", e.opID, "adv-a18-2", transaction.RecordFields{Communicated: true}); err == nil {
 		t.Fatal("CANCELLED 预约被预约核销（应拒绝，走散客结算）")
 	}
 	if got := e.cardOf(e.mbrB).RemainingCount; got != 10 {

@@ -221,7 +221,7 @@ func TestFullLoop(t *testing.T) {
 
 	// ---- 核销（§120/§53；结算即完成，§8）----
 	redeem := admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
-		"card_id": cardID, "idempotency_key": "e2e-redeem-1",
+		"card_id": cardID, "communicated": true, "idempotency_key": "e2e-redeem-1",
 	})
 	rd := redeem["data"].(map[string]any)["redemption"].(map[string]any)
 	if str(rd, "status") != "SUCCESS" || num(rd, "after_count") != 9 {
@@ -239,7 +239,7 @@ func TestFullLoop(t *testing.T) {
 
 	// 重复核销（同 key 重放）不重复扣（Case 6）
 	replay := admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
-		"card_id": cardID, "idempotency_key": "e2e-redeem-1",
+		"card_id": cardID, "communicated": true, "idempotency_key": "e2e-redeem-1",
 	})
 	rd2 := replay["data"].(map[string]any)["redemption"].(map[string]any)
 	if str(rd2, "id") != str(rd, "id") {
@@ -265,7 +265,7 @@ func TestFullLoop(t *testing.T) {
 	}
 	// 撤销后重新核销（W-E：active_lock 释放）
 	redeemed := admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
-		"card_id": cardID, "idempotency_key": "e2e-redeem-2",
+		"card_id": cardID, "communicated": true, "idempotency_key": "e2e-redeem-2",
 	})
 	if str(redeemed["data"].(map[string]any)["redemption"].(map[string]any), "status") != "SUCCESS" {
 		t.Fatal("re-settle after reversal failed")
@@ -277,11 +277,11 @@ func TestFullLoop(t *testing.T) {
 	cashID := str(cashApt["data"].(map[string]any), "id")
 	// 现金结算：WAITING 直接收款即完成（§8 事务一致）
 	admin.ok("POST", "/admin/appointments/"+cashID+"/payments", map[string]any{
-		"method": "CASH", "amount": 12800, "idempotency_key": "e2e-cash-1",
+		"method": "CASH", "amount": 12800, "communicated": true, "idempotency_key": "e2e-cash-1",
 	})
 	// 第二笔 VALID 收款被拒（D1）
 	if status, _ := admin.do("POST", "/admin/appointments/"+cashID+"/payments", map[string]any{
-		"method": "WECHAT_TRANSFER", "amount": 12800, "idempotency_key": "e2e-cash-2",
+		"method": "WECHAT_TRANSFER", "amount": 12800, "communicated": true, "idempotency_key": "e2e-cash-2",
 	}); status != 409 {
 		t.Fatalf("second VALID payment status = %d, want 409", status)
 	}

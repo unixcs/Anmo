@@ -141,6 +141,8 @@ member_card: ACTIVE / USED_UP / EXPIRED / CANCELLED
 | D25 | **(2026-09-29 修订，V2.2 第二批)** bind_ticket 流程废除：微信首登 openid 未绑定时同事务直建号直发 Token（uk_member_wx_openid 唯一兜底）；手机号撞号走 `POST /api/auth/wx/claim`（顾客 Token + 该手机号的 H5 密码）转绑老账号并同事务删除无业务数据的空壳（HasBusinessData=false 才可删）；`/api/auth/wx/bind` 端点不复存在 |
 | D26 | 微信官方"服务卡片"能力（类目/资质/后台配置）不做；分享闭环 = 每页 onShareAppMessage + 首页/关于 onShareTimeline + showShareMenu |
 | D27 | **(2026-09-29 新增，V2.2 第二批)** 顾客密码体系：bcrypt（DefaultCost，6~64 位）；H5 `POST /api/auth/register`/`login`（手机号+密码）；小程序「我的」设/重置 H5 密码 `PUT /api/me/h5-password`（微信身份即凭证，需已绑手机号 MEMBER_PHONE_REQUIRED）+ 手机号一次性设置（MEMBER_PHONE_SET，撞号 MEMBER_PHONE_TAKEN 触发 claim）；admin `PUT /admin/members/{id}/password` 重置；member.phone 可空（仅纯微信会员）；SMS 端点仅 sms.mode=dev 可用（过渡期），生产必须 off（off 时 410 SMS_DISABLED） |
+| D28 | **(2026-09-29 新增，V2.2 第三批)** 服务标签/服务记录：service_tag 两组 BODY_PART/METHOD（uk(group,name)，被记录引用仅可停用不可删）；service_record 每笔 VALID payment 恰一条（body_parts/service_method 存标签名快照，不受标签后续增删/停用影响；merchant_note* 仅商家可见）；核销撤销事务联动置记录 REVERSED（ReverseByRedemptionTx），散客记录独立撤销 = 同事务记录 REVERSED + 原 payment 置 VOIDED（卡核销记录拒绝独立撤销，必须走核销撤销还次数）；payment 重建 member_id 放宽 NULL（migration 015，只增不改、升级路径测试覆盖） |
+| D29 | **(2026-09-29 新增，V2.2 第三批)** 散客快速结算 `POST /admin/walkin/settle`：无预约无卡，payment.member_id 可 NULL——不录手机号仅记账、不落 service_record（响应 record_skipped）；录手机号 → EnsureByPhoneTx 建档/匹配 + 记录 + last_visit；pay_method ∈ {CASH,WECHAT_TRANSFER,OTHER}（CARD → TX_WALKIN_NO_CARD），amount ≥ 0，idempotency_key 幂等回放（W2）；四个结算入口（预约卡核销/散客卡核销/现金微信收款/散客快速结算）一律强制 `communicated=true`（缺省 400 TX_NEED_CONFIRM）；D19 RDM_WALKIN_BLOCKED 不套用现金/微信散客结算（现金无卡无 D9 绕过问题） |
 
 参考报告：`.trellis/tasks/archive/2026-09/09-27-plan-subagent-review/SUBAGENT-REVIEW.md`、`.../09-27-phase0-review/REVIEW.md`
 

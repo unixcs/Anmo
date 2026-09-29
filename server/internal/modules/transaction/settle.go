@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"anmo/server/internal/modules/appointment"
+	"anmo/server/internal/modules/service"
 	"anmo/server/internal/shared"
 )
 
@@ -13,7 +14,7 @@ import (
 type Payment struct {
 	ID            string       `json:"id"`
 	AppointmentID *string      `json:"appointment_id"` // NULL = 散客核销（D19）
-	MemberID      string       `json:"member_id"`
+	MemberID      *string      `json:"member_id"`      // NULL = 未登记散客，仅记账（D29）
 	AmountCents   int64        `json:"amount"`
 	Method        string       `json:"method"`
 	Status        string       `json:"status"`
@@ -21,6 +22,15 @@ type Payment struct {
 	Remark        string       `json:"remark"`
 	IdemKey       string       `json:"idempotency_key,omitempty"`
 	RecordedAt    sql.NullTime `json:"-"`
+}
+
+// RecordFields — 结算时采集的服务记录字段（D28，§四.1-3/§四.6）。全部选填
+// （快照可空），但 Communicated 强制勾选（TX_NEED_CONFIRM）。
+type RecordFields struct {
+	BodyParts     []string
+	ServiceMethod string
+	TechNote      string
+	Communicated  bool
 }
 
 // Redemption — redemption row (§52).
@@ -95,15 +105,20 @@ func (p *Provider) findRedemptionByIdem(ctx context.Context, tx shared.Tx, key s
 
 // SettleByCard runs the core redemption transaction (§53):
 // lock card → validate → deduct → REDEEM txn → redemption → payment(CARD)
-// → appointment COMPLETED → status log. Any failure rolls everything back.
+// → appointment COMPLETED → status log → service_record（D28）. Any failure
+// rolls everything back.
 // serviceIDOpt 可指定实际服务（≠预约服务，§11）：金额取该服务当前售价；
 // 为空时取预约快照第一项。WAITING/IN_SERVICE 均可结算并置 COMPLETED
 // （V1.x 免确认，用户决策 2026-09-28）。
 // Idempotent on idemKey (replay returns the original result; replaying a key
 // whose redemption was reversed surfaces 409 instead of stale data — W1).
-func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, serviceIDOpt, operatorID, idemKey string) (*Redemption, *Payment, error) {
+// rec.Communicated 强制（§四.6）：未勾选 → TX_NEED_CONFIRM。
+func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, serviceIDOpt, operatorID, idemKey string, rec RecordFields) (*Redemption, *Payment, error) {
 	if idemKey == "" {
 		return nil, nil, shared.BadRequest("IDEM_KEY_REQUIRED", "缺少幂等键")
+	}
+	if !rec.Communicated {
+		return nil, nil, shared.BadRequest("TX_NEED_CONFIRM", "请先勾选「服务前已完成沟通」")
 	}
 	var redemption *Redemption
 	var payment *Payment
@@ -201,12 +216,23 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, serviceIDOpt
 		}
 
 		// payment CARD (D1)
+		memberRef := apt.MemberID
 		payment = &Payment{
-			ID: shared.NewID(), AppointmentID: &aptIDRef, MemberID: apt.MemberID,
+			ID: shared.NewID(), AppointmentID: &aptIDRef, MemberID: &memberRef,
 			AmountCents: amount, Method: "CARD",
 			Status: "VALID", Remark: "会员卡核销", IdemKey: idemKey,
 		}
 		if err := insertPayment(ctx, tx, payment, operatorID); err != nil {
+			return err
+		}
+
+		// service_record（D28）：快照与 redemption 同源
+		if err := p.services.InsertRecordTx(ctx, tx, service.RecordInput{
+			MemberID: apt.MemberID, AppointmentID: aptID, PaymentID: payment.ID,
+			RedemptionID: redemption.ID, ServiceID: svc.ServiceID, ServiceName: svc.NameSnapshot,
+			BodyParts: rec.BodyParts, Method: rec.ServiceMethod, TechNote: rec.TechNote,
+			Communicated: rec.Communicated, OperatorID: operatorID,
+		}); err != nil {
 			return err
 		}
 
@@ -230,10 +256,14 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, serviceIDOpt
 // RedeemWalkIn settles a walk-in service with a member card — no appointment
 // involved (D19): lock card → validate → deduct → REDEEM txn →
 // redemption(appointment NULL) → payment(CARD, amount = service list price)
-// → touch last_visit. Idempotent on idemKey; reversal reuses ReverseRedemption.
-func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operatorID, idemKey string) (*Redemption, *Payment, error) {
+// → service_record（D28）→ touch last_visit. Idempotent on idemKey; reversal
+// reuses ReverseRedemption. rec.Communicated 强制（§四.6）。
+func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operatorID, idemKey string, rec RecordFields) (*Redemption, *Payment, error) {
 	if idemKey == "" {
 		return nil, nil, shared.BadRequest("IDEM_KEY_REQUIRED", "缺少幂等键")
+	}
+	if !rec.Communicated {
+		return nil, nil, shared.BadRequest("TX_NEED_CONFIRM", "请先勾选「服务前已完成沟通」")
 	}
 	item, err := p.services.GetItem(ctx, serviceID)
 	if err != nil {
@@ -306,12 +336,23 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 			return wrapTxErr("RDM_INSERT", err)
 		}
 
+		memberRef := c.MemberID
 		payment = &Payment{
-			ID: shared.NewID(), AppointmentID: nil, MemberID: c.MemberID,
+			ID: shared.NewID(), AppointmentID: nil, MemberID: &memberRef,
 			AmountCents: item.PriceCents, Method: "CARD",
 			Status: "VALID", Remark: "散客核销", IdemKey: idemKey,
 		}
 		if err := insertPayment(ctx, tx, payment, operatorID); err != nil {
+			return err
+		}
+
+		// service_record（D28）
+		if err := p.services.InsertRecordTx(ctx, tx, service.RecordInput{
+			MemberID: c.MemberID, PaymentID: payment.ID,
+			RedemptionID: redemption.ID, ServiceID: serviceID, ServiceName: item.Name,
+			BodyParts: rec.BodyParts, Method: rec.ServiceMethod, TechNote: rec.TechNote,
+			Communicated: rec.Communicated, OperatorID: operatorID,
+		}); err != nil {
 			return err
 		}
 
@@ -331,9 +372,14 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 // 保证 Settlement+Payment+Appointment 一致；CANCELLED/NO_SHOW 拒绝（走散客结算）。
 // B1: the appointment row is locked BEFORE the VALID-count check, and the
 // uk_payment_valid_lock unique index backstops concurrent inserters.
-func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amountCents int64, refNo, remark, operatorID, idemKey string) (*Payment, error) {
+// rec.Communicated 强制（§四.6）；同事务落 service_record（D28，快照取预约
+// 第一项服务；预约缺快照服务时仅记账不落记录）。
+func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amountCents int64, refNo, remark, operatorID, idemKey string, rec RecordFields) (*Payment, error) {
 	if idemKey == "" {
 		return nil, shared.BadRequest("IDEM_KEY_REQUIRED", "缺少幂等键")
+	}
+	if !rec.Communicated {
+		return nil, shared.BadRequest("TX_NEED_CONFIRM", "请先勾选「服务前已完成沟通」")
 	}
 	switch method {
 	case "WECHAT_TRANSFER", "CASH", "OTHER":
@@ -373,13 +419,30 @@ func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amount
 		if apt.Status != appointment.StatusWaiting && apt.Status != appointment.StatusInService {
 			return shared.Conflict("APT_BAD_TRANSITION", "预约已取消或未到，请走散客结算")
 		}
+		memberRef := apt.MemberID
 		payment = &Payment{
-			ID: shared.NewID(), AppointmentID: &aptID, MemberID: apt.MemberID,
+			ID: shared.NewID(), AppointmentID: &aptID, MemberID: &memberRef,
 			AmountCents: amountCents, Method: method, Status: "VALID",
 			ReferenceNo: refNo, Remark: remark, IdemKey: idemKey,
 		}
 		if err := insertPayment(ctx, tx, payment, operatorID); err != nil {
 			return err
+		}
+		// service_record（D28）：快照与预约服务快照同源；缺快照服务时仅记账
+		svcs, serr := p.appointments.ServicesOfTx(ctx, tx, aptID)
+		if serr != nil {
+			return serr
+		}
+		if len(svcs) > 0 {
+			svc := svcs[0]
+			if err := p.services.InsertRecordTx(ctx, tx, service.RecordInput{
+				MemberID: apt.MemberID, AppointmentID: aptID, PaymentID: payment.ID,
+				ServiceID: svc.ServiceID, ServiceName: svc.NameSnapshot,
+				BodyParts: rec.BodyParts, Method: rec.ServiceMethod, TechNote: rec.TechNote,
+				Communicated: rec.Communicated, OperatorID: operatorID,
+			}); err != nil {
+				return err
+			}
 		}
 		// §8 事务一致：非卡结算同样完成预约
 		return p.appointments.MarkCompleted(ctx, tx, aptID, operatorID)
@@ -449,7 +512,8 @@ func (p *Provider) ReverseRedemption(ctx context.Context, redemptionID, reason, 
 			 WHERE idempotency_key = ? AND method = 'CARD' AND status = 'VALID'`, rd.IdemKey); err != nil {
 			return wrapTxErr("PAY_VOID", err)
 		}
-		return nil
+		// 服务记录同步作废（D28 §四.5）：同事务 REVERSED，不计入汇总
+		return p.services.ReverseByRedemptionTx(ctx, tx, redemptionID)
 	})
 }
 
@@ -494,12 +558,16 @@ func insertPayment(ctx context.Context, tx shared.Tx, py *Payment, operatorID st
 
 func scanPayment(row interface{ Scan(...any) error }) (*Payment, error) {
 	py := &Payment{}
-	var aptID sql.NullString
-	err := row.Scan(&py.ID, &aptID, &py.MemberID, &py.AmountCents, &py.Method,
+	var aptID, memberID sql.NullString
+	err := row.Scan(&py.ID, &aptID, &memberID, &py.AmountCents, &py.Method,
 		&py.Status, &py.ReferenceNo, &py.Remark, &py.IdemKey, &py.RecordedAt)
 	if aptID.Valid {
 		v := aptID.String
 		py.AppointmentID = &v
+	}
+	if memberID.Valid {
+		v := memberID.String
+		py.MemberID = &v
 	}
 	return py, err
 }

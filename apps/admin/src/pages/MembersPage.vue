@@ -144,6 +144,75 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 服务追踪（D28 §3.4）：仅商家可见；REVERSED 不展示 -->
+      <div class="sec-head track-head">
+        <h4 class="sec">服务追踪</h4>
+        <el-button size="small" @click="loadTrack">刷新</el-button>
+      </div>
+      <div class="track-summary" v-if="track.summary">
+        <span>累计 <b>{{ track.summary.total_all }}</b> 次 · 近3个月 <b>{{ track.summary.total_3m }}</b> 次</span>
+        <span v-if="track.summary.parts.length" class="track-sum-line">
+          部位：{{ track.summary.parts.map((p) => `${p.name}×${p.count}`).join('、') }}
+        </span>
+        <span v-if="track.summary.methods.length" class="track-sum-line">
+          方式：{{ track.summary.methods.map((m) => `${m.name}×${m.count}`).join('、') }}
+        </span>
+      </div>
+      <div class="track-filters">
+        <el-select v-model="trackFilter.part" size="small" clearable placeholder="部位" style="width: 110px"
+          @change="loadTrack">
+          <el-option v-for="p in track.filters?.parts ?? []" :key="p" :label="p" :value="p" />
+        </el-select>
+        <el-select v-model="trackFilter.method" size="small" clearable placeholder="方式" style="width: 110px"
+          @change="loadTrack">
+          <el-option v-for="m in track.filters?.methods ?? []" :key="m" :label="m" :value="m" />
+        </el-select>
+        <el-radio-group v-model="trackFilter.range" size="small" @change="loadTrack">
+          <el-radio-button value="1m">近1月</el-radio-button>
+          <el-radio-button value="3m">近3月</el-radio-button>
+          <el-radio-button value="">全部</el-radio-button>
+        </el-radio-group>
+        <el-input v-model="trackFilter.q" size="small" clearable placeholder="搜备注/服务名" style="width: 140px"
+          @keyup.enter="loadTrack" @clear="loadTrack" />
+        <el-button size="small" @click="loadTrack">筛选</el-button>
+      </div>
+      <el-empty v-if="track.items.length === 0 && !track.loading" description="暂无服务记录" :image-size="60" />
+      <div v-for="rec in track.items" :key="rec.id" class="track-card">
+        <div class="track-top">
+          <b>{{ rec.service_name }}</b>
+          <span class="track-time">{{ fmtTime(rec.created_at) }}</span>
+        </div>
+        <div class="track-line">
+          <span v-if="rec.payment_method">￥{{ yuan(rec.payment_amount ?? 0) }} ·
+            {{ PAY_METHOD_TEXT[rec.payment_method] ?? rec.payment_method }}</span>
+          <span v-else class="track-dim">—</span>
+          <span v-if="rec.body_parts.length" class="track-dim">部位：{{ rec.body_parts.join('、') }}</span>
+          <span v-if="rec.service_method" class="track-dim">方式：{{ rec.service_method }}</span>
+        </div>
+        <div v-if="rec.tech_note" class="track-line tech">技师备注：{{ rec.tech_note }}</div>
+        <div class="track-line note-line">
+          <span v-if="rec.merchant_note" class="track-note">
+            商家备注：{{ rec.merchant_note }}
+            <span v-if="rec.merchant_note_by_name" class="track-dim">
+              （{{ rec.merchant_note_by_name }} {{ fmtTime(rec.merchant_note_at ?? rec.created_at) }}）
+            </span>
+          </span>
+          <el-button size="small" link type="primary" @click="openMerchantNote(rec)">
+            {{ rec.merchant_note ? '编辑商家备注' : '+ 商家备注' }}
+          </el-button>
+          <el-button
+            v-if="rec.status === 'ACTIVE' && !rec.redemption_id"
+            size="small"
+            link
+            type="danger"
+            :disabled="saving"
+            @click="doRevokeRecord(rec)"
+          >
+            撤销
+          </el-button>
+        </div>
+      </div>
     </template>
   </el-drawer>
 
@@ -197,6 +266,16 @@
   </el-dialog>
   <AdjustCountDialog v-model="adjustVisible" :card="adjustCardRow" :on-done="refreshCards" />
 
+  <!-- 商家备注（D28 §3.4：仅商家可见，记录操作人+时间） -->
+  <el-dialog v-model="noteVisible" title="商家备注" width="min(440px, 94vw)">
+    <el-input v-model="noteDraft" type="textarea" :rows="4" maxlength="500" show-word-limit
+      placeholder="仅商家可见（≤500 字）" />
+    <template #footer>
+      <el-button @click="noteVisible = false">取消</el-button>
+      <el-button type="primary" :loading="saving" @click="doSaveNote">保存</el-button>
+    </template>
+  </el-dialog>
+
   <!-- 重置 H5 密码（V2.2 D27："忘记密码联系商家"闭环最后一段） -->
   <el-dialog v-model="resetPwdVisible" title="重置 H5 密码" width="min(440px, 94vw)">
     <el-form label-width="90px">
@@ -219,7 +298,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import AdjustCountDialog from '../components/AdjustCountDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -232,19 +311,25 @@ import {
   listCardTransactions,
   listCardTemplates,
   listMemberCards,
+  listMemberRecords,
   listMembers,
   listTags,
   renameTag,
   resetMemberPassword,
   setMemberTags,
   updateMember,
+  updateMerchantNote,
+  revokeServiceRecord,
   type Member,
   type MemberCard,
   type CardTransaction,
   type CardTemplate,
+  type ServiceRecord,
   type Tag,
+  type TrackFilters,
+  type TrackSummary,
 } from '../core/api/admin'
-import { CARD_STATUS_TEXT, CARD_TX_TYPE_TEXT, CARD_TYPE_TEXT, fmtTime, yuan } from '../core/format'
+import { CARD_STATUS_TEXT, CARD_TX_TYPE_TEXT, CARD_TYPE_TEXT, PAY_METHOD_TEXT, fmtTime, yuan } from '../core/format'
 import { useIsMobile } from '../core/useMedia'
 
 const keyword = ref('')
@@ -405,6 +490,11 @@ async function openDetail(row: Member) {
     }
     cards.value = (await listMemberCards(row.id)) ?? []
     detailVisible.value = true
+    trackFilter.part = ''
+    trackFilter.method = ''
+    trackFilter.range = ''
+    trackFilter.q = ''
+    void loadTrack()
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载详情失败')
   }
@@ -489,6 +579,82 @@ async function showTx(card: MemberCard) {
     txVisible.value = true
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '加载流水失败')
+  }
+}
+
+// ---------- 服务追踪（D28 §3.4） ----------
+const track = reactive<{
+  items: ServiceRecord[]
+  summary: TrackSummary | null
+  filters: TrackFilters | null
+  loading: boolean
+}>({ items: [], summary: null, filters: null, loading: false })
+const trackFilter = reactive({ part: '', method: '', range: '', q: '' })
+const noteVisible = ref(false)
+const noteDraft = ref('')
+const noteTarget = ref<ServiceRecord | null>(null)
+
+async function loadTrack(): Promise<void> {
+  if (!detail.value) return
+  track.loading = true
+  try {
+    const res = await listMemberRecords(detail.value.member.id, {
+      part: trackFilter.part || undefined,
+      method: trackFilter.method || undefined,
+      range: trackFilter.range || undefined,
+      q: trackFilter.q.trim() || undefined,
+    })
+    track.items = res.items ?? []
+    track.summary = res.summary
+    track.filters = res.filters
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '加载服务记录失败')
+  } finally {
+    track.loading = false
+  }
+}
+
+function openMerchantNote(rec: ServiceRecord): void {
+  noteTarget.value = rec
+  noteDraft.value = rec.merchant_note
+  noteVisible.value = true
+}
+
+async function doSaveNote(): Promise<void> {
+  if (!noteTarget.value) return
+  saving.value = true
+  try {
+    await updateMerchantNote(noteTarget.value.id, noteDraft.value.trim())
+    ElMessage.success('已保存')
+    noteVisible.value = false
+    await loadTrack()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 散客记录独立撤销（D29）：仅无核销关联的记录可撤；卡核销记录须走核销撤销还次数。
+async function doRevokeRecord(rec: ServiceRecord): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      '撤销后该记录不再计入服务档案，对应收款同时作废且不可恢复。确认撤销？',
+      '撤销服务记录',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  saving.value = true
+  try {
+    await revokeServiceRecord(rec.id)
+    ElMessage.success('已撤销')
+    await loadTrack()
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '撤销失败')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -610,6 +776,68 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.track-head {
+  margin-top: 14px;
+}
+.track-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: #606266;
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.track-sum-line {
+  font-size: 12px;
+  color: #909399;
+}
+.track-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.track-card {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.track-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.track-time {
+  color: #909399;
+  font-size: 12px;
+}
+.track-line {
+  font-size: 12px;
+  color: #606266;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.track-line.tech {
+  color: #909399;
+}
+.track-dim {
+  color: #909399;
+}
+.note-line {
+  justify-content: space-between;
+  align-items: baseline;
+}
+.track-note {
+  flex: 1;
+  color: #606266;
 }
 :deep(.el-drawer__body) {
   padding-top: 6px;

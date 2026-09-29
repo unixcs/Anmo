@@ -8,8 +8,9 @@ import (
 )
 
 // TestMigrateIdempotentAndComplete runs the runner twice against a temp SQLite
-// file and asserts idempotency plus the 27-table completeness baseline
-// (AGENTS.md D3: 24 业务表 + sys_sequence；+ schema_migrations、新 checklist 对齐).
+// file and asserts idempotency plus the 29-table completeness baseline
+// (AGENTS.md D3: 24 业务表 + sys_sequence；015 增 service_tag/service_record；
+// + schema_migrations、新 checklist 对齐).
 func TestMigrateIdempotentAndComplete(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migrate_test.db")
 	db, err := Open(dbPath)
@@ -48,6 +49,7 @@ func TestMigrateIdempotentAndComplete(t *testing.T) {
 		"payment": true, "redemption": true, "redemption_reversal": true,
 		"content_page_config": true, "content_banner": true, "content_announcement": true, "content_system_setting": true,
 		"ops_operation_log": true, "ops_insight_snapshot": true,
+		"service_tag": true, "service_record": true, // 015: 服务标签/服务记录（D28）
 		"sys_sequence": true, // 009: technical counter table
 	}
 	rows, err := db.QueryContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)

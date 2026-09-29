@@ -20,7 +20,7 @@
           </el-table-column>
           <el-table-column label="操作" width="90">
             <template #default="{ row }">
-              <el-button size="small" type="primary" :disabled="row.remaining_count < 1"
+              <el-button size="small" type="primary" :disabled="row.remaining_count < 1 || !record.communicated"
                 @click="doRedeem(row)">核销</el-button>
             </template>
           </el-table-column>
@@ -46,11 +46,13 @@
             <el-input v-model="payRemark" placeholder="选填" />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" :loading="paying" @click="doPay">确认收款</el-button>
+            <el-button type="primary" :loading="paying" :disabled="!record.communicated" @click="doPay">确认收款</el-button>
           </el-form-item>
         </el-form>
       </el-tab-pane>
     </el-tabs>
+
+    <ServiceRecordFields v-model="record" />
   </el-dialog>
 </template>
 
@@ -65,8 +67,10 @@ import {
   type Appointment,
   type AppointmentService,
   type MemberCard,
+  type RecordPayload,
 } from '../core/api/admin'
 import { toFen, yuan } from '../core/format'
+import ServiceRecordFields from './ServiceRecordFields.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -88,6 +92,12 @@ const payMethod = ref<'WECHAT_TRANSFER' | 'CASH' | 'OTHER'>('WECHAT_TRANSFER')
 const payAmountYuan = ref<number>(0)
 const payRef = ref('')
 const payRemark = ref('')
+const record = ref<RecordPayload>({
+  body_parts: [],
+  service_method: '',
+  tech_note: '',
+  communicated: false,
+})
 
 function templateName(id: string): string {
   return templates.value[id] ?? id.slice(0, 8)
@@ -100,6 +110,7 @@ async function onOpen() {
   payAmountYuan.value = props.service ? props.service.price_snapshot / 100 : 0
   payRef.value = ''
   payRemark.value = ''
+  record.value = { body_parts: [], service_method: '', tech_note: '', communicated: false }
   loading.value = true
   try {
     const [c, t] = await Promise.all([listMemberCards(apt.member_id), listCardTemplates()])
@@ -122,8 +133,12 @@ watch(
 async function doRedeem(row: MemberCard) {
   const apt = props.appointment
   if (!apt) return
+  if (!record.value.communicated) {
+    ElMessage.warning('请先勾选「服务前已完成沟通」')
+    return
+  }
   try {
-    await redeemCard(apt.id, row.id)
+    await redeemCard(apt.id, row.id, undefined, record.value)
     ElMessage.success('核销成功')
     emit('update:modelValue', false)
     emit('settled')
@@ -135,6 +150,10 @@ async function doRedeem(row: MemberCard) {
 async function doPay() {
   const apt = props.appointment
   if (!apt) return
+  if (!record.value.communicated) {
+    ElMessage.warning('请先勾选「服务前已完成沟通」')
+    return
+  }
   paying.value = true
   try {
     await settlePayment(apt.id, {
@@ -142,7 +161,7 @@ async function doPay() {
       amount: toFen(String(payAmountYuan.value)),
       reference_no: payRef.value,
       remark: payRemark.value,
-    })
+    }, record.value)
     ElMessage.success(`收款成功 ${yuan(toFen(String(payAmountYuan.value)))}`)
     emit('update:modelValue', false)
     emit('settled')

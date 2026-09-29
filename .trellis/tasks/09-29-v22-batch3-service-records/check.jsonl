@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "检查错误码/事务/测试覆盖是否符合后端约定"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "检查 015（含 payment 重建）是否符合只增不改与 SQLite 重建规范"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端质检门槛"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "错误码/字段命名跨端一致性检查"}
+{"file": "docs/2026929plan.md", "reason": "对照 §四/§五/§六 验收标准核查"}
+{"file": ".trellis/tasks/09-29-v22-batch3-service-records/design.md", "reason": "对照设计核查（schema/API/约束保留）"}

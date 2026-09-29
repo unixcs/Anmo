@@ -93,6 +93,8 @@
         该会员没有可用会员卡，请改用现金/微信，或先在「会员」页发卡。
       </p>
 
+      <ServiceRecordFields v-model="record" />
+
       <div class="actions">
         <el-button type="primary" size="large" :loading="resolving" :disabled="!canSubmit" class="go"
           @click="doSettle">完成并结算</el-button>
@@ -127,9 +129,11 @@ import {
   settlePayment,
   type Member,
   type MemberCard,
+  type RecordPayload,
   type TodayAppointment,
 } from '../core/api/admin'
 import { APT_STATUS_TEXT, fmtTime, todayStr } from '../core/format'
+import ServiceRecordFields from './ServiceRecordFields.vue'
 
 const MEMBER_PREFIX = 'ANMO-MEMBER:'
 
@@ -167,6 +171,12 @@ const mode = ref<'card' | 'CASH' | 'WECHAT_TRANSFER'>('card')
 const cardId = ref('')
 const serviceId = ref('')
 const cashAmount = ref('')
+const record = ref<RecordPayload>({
+  body_parts: [],
+  service_method: '',
+  tech_note: '',
+  communicated: false,
+})
 
 let stream: MediaStream | null = null
 let raf = 0
@@ -205,6 +215,7 @@ const settleServices = computed(() => {
 })
 
 const canSubmit = computed(() => {
+  if (!record.value.communicated) return false // 沟通确认必勾（D28）
   if (mode.value === 'card') {
     // 卡结算：选卡 + 选服务；预约模式还需定位到预约（散客不需要）
     return !!cardId.value && !!serviceId.value && (walkIn.value || !!selectedAptId.value)
@@ -397,6 +408,7 @@ async function assemble(memberId: string): Promise<void> {
     : (activeApts.value.length > 0 ? 'CASH' : 'card')
   serviceId.value = ''
   cashAmount.value = ''
+  record.value = { body_parts: [], service_method: '', tech_note: '', communicated: false }
   // 默认实际服务 = 预约快照服务；散客默认第一项
   applyServiceDefault()
   if (walkIn.value && activeCards.value.length === 0) {
@@ -444,14 +456,14 @@ async function doSettle(): Promise<void> {
       }
       if (walkIn.value) {
         // 散客核销（D19）：无预约按卡扣次
-        const res = await redeemWalkIn(cardId.value, serviceId.value)
+        const res = await redeemWalkIn(cardId.value, serviceId.value, record.value)
         resultText.value = `卡余额 ${res.redemption.before_count} → ${res.redemption.after_count} 次；已记散客核销收款。`
       } else {
         if (!selectedAptId.value) {
           ElMessage.warning('请选择要结算的预约')
           return
         }
-        const res = await redeemCard(selectedAptId.value, cardId.value, serviceId.value)
+        const res = await redeemCard(selectedAptId.value, cardId.value, serviceId.value, record.value)
         resultText.value = `卡余额 ${res.redemption.before_count} → ${res.redemption.after_count} 次；预约已完成并记 CARD 收款。`
       }
     } else {
@@ -463,7 +475,7 @@ async function doSettle(): Promise<void> {
       await settlePayment(selectedAptId.value, {
         method: mode.value,
         amount: Math.round(Number(cashAmount.value) * 100),
-      })
+      }, record.value)
       resultText.value = `已记 ${mode.value === 'CASH' ? '现金' : '微信'}收款，预约已完成。`
     }
     step.value = 'result'
@@ -484,6 +496,7 @@ function resetToScan(): void {
   cardId.value = ''
   serviceId.value = ''
   cashAmount.value = ''
+  record.value = { body_parts: [], service_method: '', tech_note: '', communicated: false }
   phoneMatches.value = []
   if (canUseCamera) void startCamera()
 }

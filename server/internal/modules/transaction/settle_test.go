@@ -108,7 +108,7 @@ func TestFullRedeemFlow(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 10, 0)
 
-	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-1")
+	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-1", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle by card: %v", err)
 	}
@@ -144,12 +144,12 @@ func TestIdempotentReplay(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 11, 0)
 
-	rd1, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-replay")
+	rd1, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-replay", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	// same idem key → same redemption, no double deduction
-	rd2, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-replay")
+	rd2, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-replay", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -167,11 +167,11 @@ func TestDifferentKeyOnSameAppointmentBlocked(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 12, 0)
 
-	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "key-a"); err != nil {
+	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "key-a", RecordFields{Communicated: true}); err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	// second redeem with different key → active_lock unique blocks
-	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "key-b"); err == nil {
+	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "key-b", RecordFields{Communicated: true}); err == nil {
 		t.Fatal("second redemption allowed on same appointment")
 	}
 	cards, _ := e.cards.ListByMember(ctx, e.mbrID)
@@ -185,7 +185,7 @@ func TestReverseRestoresAndSecondReverseFails(t *testing.T) {
 	ctx := context.Background()
 	aptID := e.bookInService(t, 1, 14, 0)
 
-	rd, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-rev")
+	rd, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-rev", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestReverseRestoresAndSecondReverseFails(t *testing.T) {
 		t.Fatalf("want RDM_ALREADY_REVERSED, got %v", err)
 	}
 	// can redeem again after reversal (re-settle; appointment stays COMPLETED, D18)
-	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-rev2"); err != nil {
+	if _, _, err := e.p.SettleByCard(ctx, aptID, e.card, "", "op-1", "idem-rev2", RecordFields{Communicated: true}); err != nil {
 		t.Fatalf("re-settle after reversal: %v", err)
 	}
 }
@@ -225,7 +225,7 @@ func TestSettleByPayCompletesAndSingleValid(t *testing.T) {
 	aptID := e.bookInService(t, 1, 16, 0)
 
 	// V1.x (2026-09-28 §8): 现金/微信结算与完成预约同事务
-	pay, err := e.p.SettleByPay(ctx, aptID, "CASH", 12800, "ref-1", "现金", "op-1", "idem-p1")
+	pay, err := e.p.SettleByPay(ctx, aptID, "CASH", 12800, "ref-1", "现金", "op-1", "idem-p1", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("pay: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestSettleByPayCompletesAndSingleValid(t *testing.T) {
 		t.Fatalf("cash payment should complete appointment, got %s", a.Status)
 	}
 	// second VALID payment blocked (D1)
-	if _, err := e.p.SettleByPay(ctx, aptID, "WECHAT_TRANSFER", 12800, "", "", "op-1", "idem-p2"); !shared.Is(err, "PAY_EXISTS") {
+	if _, err := e.p.SettleByPay(ctx, aptID, "WECHAT_TRANSFER", 12800, "", "", "op-1", "idem-p2", RecordFields{Communicated: true}); !shared.Is(err, "PAY_EXISTS") {
 		t.Fatalf("want PAY_EXISTS, got %v", err)
 	}
 }
@@ -247,7 +247,7 @@ func TestSettleByPayFromWaitingAndCancelledRejected(t *testing.T) {
 	ctx := context.Background()
 	// WAITING 直接收款即完成（§8：完成服务 → 统一结算）
 	waiting := e.bookWaiting(t, 2, 10, 0)
-	if _, err := e.p.SettleByPay(ctx, waiting, "WECHAT_TRANSFER", 12800, "", "", "op-1", "idem-w1"); err != nil {
+	if _, err := e.p.SettleByPay(ctx, waiting, "WECHAT_TRANSFER", 12800, "", "", "op-1", "idem-w1", RecordFields{Communicated: true}); err != nil {
 		t.Fatalf("settle from WAITING: %v", err)
 	}
 	if a, _ := e.apt.Get(ctx, waiting); a.Status != appointment.StatusCompleted {
@@ -258,7 +258,7 @@ func TestSettleByPayFromWaitingAndCancelledRejected(t *testing.T) {
 	if _, err := e.apt.CancelByCustomer(ctx, e.mbrID, cancelled); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
-	if _, err := e.p.SettleByPay(ctx, cancelled, "CASH", 12800, "", "", "op-1", "idem-c1"); !shared.Is(err, "APT_BAD_TRANSITION") {
+	if _, err := e.p.SettleByPay(ctx, cancelled, "CASH", 12800, "", "", "op-1", "idem-c1", RecordFields{Communicated: true}); !shared.Is(err, "APT_BAD_TRANSITION") {
 		t.Fatalf("want APT_BAD_TRANSITION, got %v", err)
 	}
 }
@@ -269,7 +269,7 @@ func TestConcurrentRedeemOneBalance(t *testing.T) {
 	// drain 9 of 10 via sequential settles (day2 4 slots, day3 4 slots, day4 1 slot)
 	for i := 0; i < 9; i++ {
 		other := e.bookInService(t, 2+i/4, 13+(i%4), 0)
-		if _, _, err := e.p.SettleByCard(ctx, other, e.card, "", "op-1", fmt.Sprintf("drain-%d", i)); err != nil {
+		if _, _, err := e.p.SettleByCard(ctx, other, e.card, "", "op-1", fmt.Sprintf("drain-%d", i), RecordFields{Communicated: true}); err != nil {
 			t.Fatalf("drain %d: %v", i, err)
 		}
 	}
@@ -282,7 +282,7 @@ func TestConcurrentRedeemOneBalance(t *testing.T) {
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
-			_, _, err := e.p.SettleByCard(ctx, id, e.card, "", "op-1", fmt.Sprintf("race-%d", i))
+			_, _, err := e.p.SettleByCard(ctx, id, e.card, "", "op-1", fmt.Sprintf("race-%d", i), RecordFields{Communicated: true})
 			results[i] = err
 		}(i, id)
 	}
@@ -306,7 +306,7 @@ func TestWorkbenchSummaryAndCards(t *testing.T) {
 	ctx := context.Background()
 	a1 := e.bookInService(t, 9, 10, 0)
 	e.bookInService(t, 9, 11, 0)
-	if _, _, err := e.p.SettleByCard(ctx, a1, e.card, "", "op-1", "wb-1"); err != nil {
+	if _, _, err := e.p.SettleByCard(ctx, a1, e.card, "", "op-1", "wb-1", RecordFields{Communicated: true}); err != nil {
 		t.Fatalf("settle: %v", err)
 	}
 
@@ -354,7 +354,7 @@ func TestSettleByCardWithActualServiceOverride(t *testing.T) {
 	}
 	aptID := e.bookInService(t, 1, 9, 0)
 
-	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, it2.ID, "op-1", "idem-svc2")
+	rd, pay, err := e.p.SettleByCard(ctx, aptID, e.card, it2.ID, "op-1", "idem-svc2", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("settle with actual service: %v", err)
 	}

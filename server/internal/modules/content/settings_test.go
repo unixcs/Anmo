@@ -145,6 +145,63 @@ func TestValidateAmapJsKeys(t *testing.T) {
 	}
 }
 
+func TestValidateServiceNotePresets(t *testing.T) {
+	e := newContentEnv(t)
+	ctx := context.Background()
+
+	// 合法：空（=清空）/ "[]"（合法空数组）/ 单项 / 恰好 20 项 / 带空白项（trim 后合法）
+	twenty := make([]string, 20)
+	for i := range twenty {
+		twenty[i] = fmt.Sprintf("短语%02d", i)
+	}
+	twentyJSON, _ := json.Marshal(twenty)
+	for _, v := range []string{"", "[]", `["力度适中"]`, string(twentyJSON), `[" 力度适中 "]`} {
+		if err := e.p.SaveSetting(ctx, "service_note_presets", v, "op"); err != nil {
+			t.Fatalf("presets %q should pass: %v", v, err)
+		}
+	}
+	// 非法：非 JSON / 非字符串元素 / 21 项 / 空项 / 超 50 字项
+	twentyOne := make([]string, 21)
+	for i := range twentyOne {
+		twentyOne[i] = "短语"
+	}
+	twentyOneJSON, _ := json.Marshal(twentyOne)
+	long := strings.Repeat("长", 51)
+	for _, v := range []string{"abc", `["a",1]`, string(twentyOneJSON), `["", "a"]`, `["` + long + `"]`, `{"a":1}`} {
+		if err := e.p.SaveSetting(ctx, "service_note_presets", v, "op"); err == nil {
+			t.Fatalf("invalid presets %q accepted", v)
+		}
+	}
+
+	// 落库规范化：逐项 trim + 紧凑 JSON（normalize at rest）
+	if err := e.p.SaveSetting(ctx, "service_note_presets", `[ " 力度适中 " , "多沟通" ]`, "op"); err != nil {
+		t.Fatalf("save padded presets: %v", err)
+	}
+	stored, err := e.p.Settings(ctx)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if got := stored["service_note_presets"]; got != `["力度适中","多沟通"]` {
+		t.Fatalf("stored presets = %q", got)
+	}
+
+	// 历史脏数据（绕过校验直写 DB）：下发空串（脏值不下发）
+	if err := e.p.SaveSetting(ctx, "service_note_presets", `["正常"]`, "op"); err != nil {
+		t.Fatalf("save presets: %v", err)
+	}
+	if _, err := e.p.db.ExecContext(ctx,
+		`UPDATE content_system_setting SET setting_value='not-json' WHERE setting_key='service_note_presets'`); err != nil {
+		t.Fatalf("corrupt presets: %v", err)
+	}
+	stored, err = e.p.Settings(ctx)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if got := stored["service_note_presets"]; got != "" {
+		t.Fatalf("corrupt presets should downlink empty, got %q", got)
+	}
+}
+
 func TestValidateProfilePromptFlag(t *testing.T) {
 	e := newContentEnv(t)
 	ctx := context.Background()

@@ -323,6 +323,10 @@ func (p *Provider) Settings(ctx context.Context) (map[string]string, error) {
 		if err := rows.Scan(&k, &v); err != nil {
 			return nil, shared.Server("SETTING_SCAN", err)
 		}
+		if k == "service_note_presets" {
+			// D28：脏值不下发（直连 DB 写入的垃圾值清洗为空串）
+			v = notePresetsDownlink(v)
+		}
 		out[k] = v
 	}
 	return out, nil
@@ -399,6 +403,15 @@ func (p *Provider) SaveSetting(ctx context.Context, key, value, operatorID strin
 	if key == "amap_js_key" || key == "amap_js_code" {
 		value = strings.TrimSpace(value)
 	}
+	// 快捷短语（D28）落库前规范化：逐项 trim + 紧凑 JSON（normalize at rest），
+	// 直连 API 写入的带空白项不会污染下发
+	if key == "service_note_presets" && value != "" {
+		if items, err := parseNotePresets(value); err == nil {
+			if b, err := json.Marshal(items); err == nil {
+				value = string(b)
+			}
+		}
+	}
 	_, err := p.db.ExecContext(ctx,
 		`INSERT INTO content_system_setting (id, setting_key, setting_value, updated_by)
 		 VALUES (?, ?, ?, ?)
@@ -474,8 +487,56 @@ func validateSetting(key, value string) error {
 		if value != "" && value != "0" && value != "1" {
 			return bad("开关取值仅支持 0 / 1")
 		}
+	case "service_note_presets":
+		// 技师备注快捷短语（V2.2 D28）：空 = 清空；否则须为 JSON 字符串数组，
+		// ≤20 项，每项 trim 后 1..50 字符
+		if value == "" {
+			return nil
+		}
+		if _, err := parseNotePresets(value); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// parseNotePresets — 解析并校验快捷短语数组；返回 trim 后的合法项。
+func parseNotePresets(value string) ([]string, error) {
+	bad := func(msg string) error { return shared.BadRequest("SETTING_BAD_VALUE", msg) }
+	var items []string
+	if err := json.Unmarshal([]byte(value), &items); err != nil {
+		return nil, bad("快捷短语应为 JSON 字符串数组")
+	}
+	if len(items) > 20 {
+		return nil, bad("快捷短语最多 20 条")
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		it = strings.TrimSpace(it)
+		n := len([]rune(it))
+		if n < 1 || n > 50 {
+			return nil, bad("每条快捷短语需 1~50 个字")
+		}
+		out = append(out, it)
+	}
+	return out, nil
+}
+
+// notePresetsDownlink — 下发清洗（D28）：仅合法数组下发（trim 后紧凑 JSON），
+// 脏值一律下发空串（= 无快捷短语，前端按空数组兜底）。空数组合法（=清空）。
+func notePresetsDownlink(v string) string {
+	if v == "" {
+		return ""
+	}
+	items, err := parseNotePresets(v)
+	if err != nil {
+		return ""
+	}
+	b, err := json.Marshal(items)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 func allDigits(s string) bool {

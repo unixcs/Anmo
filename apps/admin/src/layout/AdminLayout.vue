@@ -61,6 +61,7 @@ const navItems = [
   { path: '/members', label: '会员管理' },
   { path: '/card-templates', label: '会员卡' },
   { path: '/services', label: '服务管理' },
+  { path: '/service-tags', label: '服务标签管理' },
   { path: '/content', label: '内容管理' },
   { path: '/records', label: '收款与核销' },
   { path: '/insights', label: '运营洞察' },

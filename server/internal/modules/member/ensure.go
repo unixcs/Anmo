@@ -40,6 +40,17 @@ func (p *Provider) EnsureByPhone(ctx context.Context, tx shared.Tx, phone, name 
 	return id, true, nil
 }
 
+// EnsureByPhoneTx — 散客快速结算的会员归档入口（D29，plan §四.4）：按手机号匹配
+// 会员，未命中创建最小档案（member_no 原子计数、无密码无 openid）。与 EnsureByPhone
+// 的差异：手机号校验走 validatePhone 完整口径（^1\d{10}$）。运行在调用方事务内（D6），
+// 复用 EnsureByPhone 的查询/插入逻辑，不复制 SQL。
+func (p *Provider) EnsureByPhoneTx(ctx context.Context, tx shared.Tx, phone, name string) (id string, created bool, err error) {
+	if _, err := validatePhone(phone); err != nil {
+		return "", false, err
+	}
+	return p.EnsureByPhone(ctx, tx, phone, name)
+}
+
 // CreateByOpenID — 微信首登直建号（V2.2：bind_ticket 流程废除，D25 修订）：
 // 纯微信会员（phone NULL、name ''），openid 由 uk_member_wx_openid 兜底唯一。
 // 运行在调用方事务内（D6）。同 openid 并发首登时 BEGIN IMMEDIATE 串行化，

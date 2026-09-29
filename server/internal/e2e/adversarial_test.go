@@ -170,8 +170,8 @@ func TestGUARD_H1_AdminRouteMatrixAndAnonymous(t *testing.T) {
 		{"POST", "/admin/ops/daily"},
 	}
 	bodies := map[string]any{
-		"POST /admin/appointments/" + f.aptB + "/redeem":    map[string]any{"card_id": f.cardB, "idempotency_key": "adv-h1"},
-		"POST /admin/appointments/" + f.aptB + "/payments":  map[string]any{"method": "CASH", "amount": 100},
+		"POST /admin/appointments/" + f.aptB + "/redeem":    map[string]any{"card_id": f.cardB, "communicated": true, "idempotency_key": "adv-h1"},
+		"POST /admin/appointments/" + f.aptB + "/payments":  map[string]any{"method": "CASH", "amount": 100, "communicated": true},
 		"PUT /admin/redemptions/xxxxxxxx/reverse":           map[string]string{"reason": "x"},
 		"POST /admin/cards":                                 map[string]any{"member_id": f.memberB, "card_template_id": f.tplID},
 		"PUT /admin/cards/" + f.cardB + "/adjust":           map[string]any{"delta": 1},
@@ -388,7 +388,7 @@ func TestREVEAL_H4_ConcurrentCashPayments(t *testing.T) {
 				method := [3]string{"CASH", "WECHAT_TRANSFER", "OTHER"}[i]
 				status, _, err := rawDo(f.base, "POST", "/admin/appointments/"+aptID+"/payments", f.admin.token,
 					map[string]any{"method": method, "amount": 12800,
-						"idempotency_key": fmt.Sprintf("adv-h4-%d-%d", round, i)})
+						"communicated": true, "idempotency_key": fmt.Sprintf("adv-h4-%d-%d", round, i)})
 				if err != nil {
 					return
 				}
@@ -419,14 +419,14 @@ func TestREVEAL_H5_ReplayFirstKeyAfterReverse(t *testing.T) {
 	f.admin.ok("PUT", "/admin/appointments/"+aptID+"/start", nil)
 
 	rd1 := f.admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
-		"card_id": f.cardA, "idempotency_key": "adv-h5-key-1",
+		"card_id": f.cardA, "communicated": true, "idempotency_key": "adv-h5-key-1",
 	})["data"].(map[string]any)
 	rdID := str(rd1["redemption"].(map[string]any), "id")
 	f.admin.ok("PUT", "/admin/redemptions/"+rdID+"/reverse", map[string]string{"reason": "误核销"})
 
 	// FIXED（W1）：撤销后重放旧 key 必须 409 RDM_REVERSED（不再 200+错配）
 	status, out, _ := rawDo(f.base, "POST", "/admin/appointments/"+aptID+"/redeem", f.admin.token,
-		map[string]any{"card_id": f.cardA, "idempotency_key": "adv-h5-key-1"})
+		map[string]any{"card_id": f.cardA, "communicated": true, "idempotency_key": "adv-h5-key-1"})
 	t.Logf("撤销后重放旧 key: HTTP %d body=%v", status, out)
 	if status != 409 {
 		t.Fatalf("撤销后重放旧 key 应 409，实际: %d %v", status, out)
@@ -452,10 +452,10 @@ func TestREVEAL_H5_ReplayFirstKeyAfterReverse(t *testing.T) {
 
 	// 重新核销后第三次重放旧 key 仍必须 409
 	f.admin.ok("POST", "/admin/appointments/"+aptID+"/redeem", map[string]any{
-		"card_id": f.cardA, "idempotency_key": "adv-h5-key-2",
+		"card_id": f.cardA, "communicated": true, "idempotency_key": "adv-h5-key-2",
 	})
 	status, out, _ = rawDo(f.base, "POST", "/admin/appointments/"+aptID+"/redeem", f.admin.token,
-		map[string]any{"card_id": f.cardA, "idempotency_key": "adv-h5-key-1"})
+		map[string]any{"card_id": f.cardA, "communicated": true, "idempotency_key": "adv-h5-key-1"})
 	if status != 409 {
 		t.Fatalf("重新核销后重放旧 key 应仍 409，实际: %d %v", status, out)
 	}
@@ -472,7 +472,7 @@ func TestREVEAL_H6_CrossMemberCardRedeem(t *testing.T) {
 
 	// FIXED（W3）：跨会员核销必须 403
 	status, out, _ := rawDo(f.base, "POST", "/admin/appointments/"+aptID+"/redeem", f.admin.token,
-		map[string]any{"card_id": f.cardB, "idempotency_key": "adv-h6"})
+		map[string]any{"card_id": f.cardB, "communicated": true, "idempotency_key": "adv-h6"})
 	if status != 403 {
 		t.Fatalf("跨会员核销应 403，实际: %d %v", status, out["code"])
 	}

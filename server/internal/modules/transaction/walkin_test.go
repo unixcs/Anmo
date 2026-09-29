@@ -12,7 +12,7 @@ func TestWalkInRedeemAndReverse(t *testing.T) {
 	ctx := context.Background()
 	cardID := e.card
 
-	rd, py, err := e.p.RedeemWalkIn(ctx, cardID, e.svcID, "op-1", "walkin-key-1")
+	rd, py, err := e.p.RedeemWalkIn(ctx, cardID, e.svcID, "op-1", "walkin-key-1", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("walk-in redeem: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestWalkInRedeemAndReverse(t *testing.T) {
 	}
 
 	// idempotent replay returns the original rows
-	rd2, py2, err := e.p.RedeemWalkIn(ctx, cardID, e.svcID, "op-1", "walkin-key-1")
+	rd2, py2, err := e.p.RedeemWalkIn(ctx, cardID, e.svcID, "op-1", "walkin-key-1", RecordFields{Communicated: true})
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestWalkInRedeemAndReverse(t *testing.T) {
 		}
 	}
 	// re-redeem after reversal works (active_lock freed)
-	if _, _, err := e.p.RedeemWalkIn(ctx, cardID, e.svcID, "op-1", "walkin-key-2"); err != nil {
+	if _, _, err := e.p.RedeemWalkIn(ctx, cardID, e.svcID, "op-1", "walkin-key-2", RecordFields{Communicated: true}); err != nil {
 		t.Fatalf("re-redeem after reversal: %v", err)
 	}
 }
@@ -63,13 +63,13 @@ func TestWalkInRuleEnforcement(t *testing.T) {
 	cardID := e.card
 
 	// unknown service id → rule check fails
-	_, _, err := e.p.RedeemWalkIn(ctx, cardID, "01ARZ3NDEKTSV4RRFFQ69G5FAV", "op-1", "walkin-bad-1")
+	_, _, err := e.p.RedeemWalkIn(ctx, cardID, "01ARZ3NDEKTSV4RRFFQ69G5FAV", "op-1", "walkin-bad-1", RecordFields{Communicated: true})
 	if err == nil {
 		t.Fatalf("walk-in with unknown service must fail")
 	}
 
 	// foreign card id → not found / no permission
-	_, _, err = e.p.RedeemWalkIn(ctx, "01ARZ3NDEKTSV4RRFFQ69G5FAV", e.svcID, "op-1", "walkin-bad-2")
+	_, _, err = e.p.RedeemWalkIn(ctx, "01ARZ3NDEKTSV4RRFFQ69G5FAV", e.svcID, "op-1", "walkin-bad-2", RecordFields{Communicated: true})
 	if err == nil {
 		t.Fatalf("walk-in with unknown card must fail")
 	}

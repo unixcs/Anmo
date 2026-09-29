@@ -139,8 +139,8 @@ export interface TodayAppointment extends Appointment {
 
 export interface Payment {
   id: string
-  appointment_id: string | null // null = 散客核销（D19）
-  member_id: string
+  appointment_id: string | null // null = 散客核销（D19）/ 散客快速结算（D29）
+  member_id: string | null // null = 未登记散客（D29：不录手机号仅记账）
   amount: number
   method: 'CARD' | 'WECHAT_TRANSFER' | 'CASH' | 'OTHER'
   status: 'VALID' | 'VOIDED'
@@ -208,6 +208,75 @@ export interface LoggedOperation {
   target_id: string
   detail: string
   ip: string
+}
+
+/** 服务标签（D28）：BODY_PART=调理部位 / METHOD=服务方式 */
+export interface ServiceTag {
+  id: string
+  tag_group: 'BODY_PART' | 'METHOD'
+  name: string
+  sort: number
+  status: 'ACTIVE' | 'DISABLED'
+  used: boolean
+  created_at: string
+}
+
+/** 服务记录（D28）：历史快照，body_parts/service_method 为标签名快照 */
+export interface ServiceRecord {
+  id: string
+  appointment_id: string | null
+  payment_id: string
+  redemption_id: string | null
+  service_id: string
+  service_name: string
+  body_parts: string[]
+  service_method: string
+  tech_note: string
+  merchant_note: string
+  communicated: boolean
+  status: 'ACTIVE' | 'REVERSED'
+  created_at: string
+  reversed_at: string | null
+  merchant_note_by_name?: string
+  merchant_note_at?: string | null
+  member_id?: string | null
+  payment_method?: string
+  payment_amount?: number
+  payment_status?: string
+}
+
+export interface TrackNameCount {
+  name: string
+  count: number
+}
+
+export interface TrackSummary {
+  total_all: number
+  total_3m: number
+  parts: TrackNameCount[]
+  methods: TrackNameCount[]
+}
+
+/** 追踪筛选器数据源（含停用标签，§五） */
+export interface TrackFilters {
+  parts: string[]
+  methods: string[]
+}
+
+/** 结算时的服务记录字段（D28/D29，字段名与后端 json tag 逐字一致） */
+export interface RecordFields {
+  body_parts?: string[]
+  service_method?: string
+  tech_note?: string
+  communicated?: boolean
+}
+
+/** 散客快速结算（D29）响应 */
+export interface WalkInSettleResult {
+  payment: Payment
+  record: ServiceRecord | null // null = 未录手机号仅记账
+  member_created: boolean
+  record_skipped: boolean
 }
 
 // ---------- 认证 ----------
@@ -460,19 +529,33 @@ export function deleteClosure(id: string) {
 
 // ---------- 结算 / 收款 / 撤销 ----------
 
-/** 预约卡结算：serviceId 可指定实际服务（≠预约服务，goal §11） */
-export function redeemCard(appointmentId: string, cardId: string, serviceId?: string) {
+/** 服务记录字段包（D28）：communicated 不勾后端 400 TX_NEED_CONFIRM */
+export interface RecordPayload extends RecordFields {
+  communicated: boolean
+}
+
+/** 预约卡结算：serviceId 可指定实际服务（≠预约服务，goal §11）；rec 为服务记录字段（D28） */
+export function redeemCard(appointmentId: string, cardId: string, serviceId?: string, rec?: RecordPayload) {
   return http.post<{ redemption: Redemption; payment: Payment }>(
     `/admin/appointments/${appointmentId}/redeem`,
-    { card_id: cardId, service_id: serviceId || undefined, idempotency_key: idemKey() },
+    {
+      card_id: cardId,
+      service_id: serviceId || undefined,
+      idempotency_key: idemKey(),
+      ...(rec ?? { communicated: true }),
+    },
   )
 }
 
 /** 散客核销（D19）：无预约，按卡直接扣次，需指定服务（规则校验+金额）。 */
-export function redeemWalkIn(cardId: string, serviceId: string) {
+export function redeemWalkIn(cardId: string, serviceId: string, rec?: RecordPayload) {
   return http.post<{ redemption: Redemption; payment: Payment }>(
     `/admin/cards/${cardId}/redeem`,
-    { service_id: serviceId, idempotency_key: idemKey() },
+    {
+      service_id: serviceId,
+      idempotency_key: idemKey(),
+      ...(rec ?? { communicated: true }),
+    },
   )
 }
 
@@ -484,8 +567,30 @@ export function settlePayment(
     reference_no?: string
     remark?: string
   },
+  rec?: RecordPayload,
 ) {
   return http.post<Payment>(`/admin/appointments/${appointmentId}/payments`, {
+    ...body,
+    idempotency_key: idemKey(),
+    ...(rec ?? { communicated: true }),
+  })
+}
+
+/** 散客快速结算（D29）：无预约无卡，手机号选填（不录 = 仅记账无记录）。 */
+export function walkinSettle(body: {
+  phone?: string
+  name?: string
+  service_id: string
+  pay_method: 'CASH' | 'WECHAT_TRANSFER' | 'OTHER'
+  amount: number
+  reference_no?: string
+  remark?: string
+  body_parts?: string[]
+  service_method?: string
+  tech_note?: string
+  communicated: boolean
+}) {
+  return http.post<WalkInSettleResult>('/admin/walkin/settle', {
     ...body,
     idempotency_key: idemKey(),
   })
@@ -508,6 +613,52 @@ export function listPayments(status?: string) {
 export function listRedemptions(status?: string) {
   const q = status ? `?status=${status}` : ''
   return http.get<Redemption[]>(`/admin/redemptions${q}`)
+}
+
+// ---------- 服务标签 / 服务记录（D28） ----------
+
+export function listServiceTags(group?: 'BODY_PART' | 'METHOD') {
+  return http.get<ServiceTag[]>(`/admin/service-tags${group ? `?group=${group}` : ''}`)
+}
+
+export function createServiceTag(group: 'BODY_PART' | 'METHOD', name: string) {
+  return http.post<ServiceTag>('/admin/service-tags', { group, name })
+}
+
+export function updateServiceTag(
+  id: string,
+  body: { name?: string; sort?: number; status?: 'ACTIVE' | 'DISABLED' },
+) {
+  return http.put<ServiceTag>(`/admin/service-tags/${id}`, body)
+}
+
+export function deleteServiceTag(id: string) {
+  return http.delete<{ deleted: boolean }>(`/admin/service-tags/${id}`)
+}
+
+/** 服务追踪（§六）：REVERSED 不返回；range ∈ '' | '1m' | '3m' */
+export function listMemberRecords(
+  memberId: string,
+  filters?: { part?: string; method?: string; range?: string; q?: string },
+) {
+  const q = new URLSearchParams()
+  if (filters?.part) q.set('part', filters.part)
+  if (filters?.method) q.set('method', filters.method)
+  if (filters?.range) q.set('range', filters.range)
+  if (filters?.q) q.set('q', filters.q)
+  const qs = q.toString()
+  return http.get<{ items: ServiceRecord[]; summary: TrackSummary; filters: TrackFilters }>(
+    `/admin/members/${memberId}/service-records${qs ? `?${qs}` : ''}`,
+  )
+}
+
+export function updateMerchantNote(recordId: string, note: string) {
+  return http.put<ServiceRecord>(`/admin/service-records/${recordId}/merchant-note`, { note })
+}
+
+// 散客记录独立撤销（D28/D29）：记录作废 + 原收款作废；卡核销记录后端拒绝并指引走核销撤销。
+export function revokeServiceRecord(recordId: string) {
+  return http.post<ServiceRecord>(`/admin/service-records/${recordId}/revoke`, {})
 }
 
 // ---------- 内容 / 设置 ----------

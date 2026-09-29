@@ -132,7 +132,8 @@ const redemptions = ref<Redemption[]>([])
 const loading = ref(false)
 const memberMap = ref<Record<string, string>>({})
 
-function memberName(id: string): string {
+function memberName(id: string | null): string {
+  if (!id) return '未登记' // D29：散客快速结算未录手机号，payment.member_id 为 NULL
   return memberMap.value[id] ?? id.slice(0, 8)
 }
 

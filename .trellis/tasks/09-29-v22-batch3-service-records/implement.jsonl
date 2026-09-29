@@ -1,0 +1,21 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "后端层入口与 Pre-Development Checklist"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "migration 只增不改/SQLite 重建表（014 defer_foreign_keys 先例）/触发器索引重建约定"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "错误码风格/settings 校验/事务与测试门槛；含 normalize-at-rest 规则"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "admin 组件惯例"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "前端构建/type-check 门槛"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "跨层一致性：错误码→UI 文案、请求字段命名（pay_method/service_method）"}
+{"file": "docs/2026929plan.md", "reason": "源计划 §四/§五/§六 需求原文"}
+{"file": ".trellis/tasks/09-29-v22-batch3-service-records/design.md", "reason": "本批技术设计（schema/API/错误码/验收）"}
+{"file": "server/migrations/006_transaction.sql", "reason": "payment/redemption 现有形态——015 重建 payment 的基准"}
+{"file": "server/migrations/010_payment_idem.sql", "reason": "valid_lock/idempotency 生成列与唯一索引——重建必须保留"}
+{"file": "server/migrations/014_member_password.sql", "reason": "defer_foreign_keys 重建表先例"}
+{"file": "server/internal/modules/transaction/settle.go", "reason": "SettleByCard/RedeemWalkIn/SettleByPay/ReverseRedemption——记录接入点"}
+{"file": "server/internal/modules/transaction/handler.go", "reason": "结算路由与请求解码——新增字段与 walkin/settle 路由"}
+{"file": "server/internal/modules/transaction/module.go", "reason": "路由挂载"}
+{"file": "server/internal/modules/service/api.go", "reason": "模块边界——新导出方法落点"}
+{"file": "server/internal/modules/member/password.go", "reason": "validatePhone/CreateWithPhone——EnsureByPhoneTx 复用来源"}
+{"file": "server/internal/modules/content/repo.go", "reason": "validateSetting/SaveSetting/下发清洗先例"}
+{"file": "server/internal/app/app.go", "reason": "模块布线（transaction 已注入 member/service）"}
+{"file": "apps/admin/src/pages/AppointmentsPage.vue", "reason": "结算弹窗宿主 + 散客结算入口"}
+{"file": "apps/admin/src/pages/MembersPage.vue", "reason": "卡核销弹窗 + 服务追踪区宿主"}
+{"file": "apps/admin/src/pages/RecordsPage.vue", "reason": "收款列表未登记兜底"}

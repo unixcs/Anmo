@@ -88,13 +88,17 @@ func TestStoreStatusThreeStates(t *testing.T) {
 		t.Fatalf("status: %v", err)
 	}
 	now := shared.NowShanghai()
-	closeMin := now.Hour()*60 + now.Minute() + 150
-	if closeMin <= 24*60 && closeMin-(now.Hour()*60+now.Minute()) >= 90 {
+	cur := now.Hour()*60 + now.Minute()
+	closeMin := cur + 150
+	// open = now-60 在 00:00~01:00（上海墙钟）会回跨到前一日（如 23:16），
+	// 生成"跨零点窗口"——预约引擎明确不支持该配置（APT_BAD_WINDOW：开门<分界<关门
+	// 须同日），此时 FREE 断言无意义，跳过（与下方打烊边界跳过同口径）。
+	if closeMin <= 24*60 && cur >= 60 && closeMin-cur >= 90 {
 		if st.Status != "FREE" {
 			t.Fatalf("want FREE with no serving, got %s (%+v)", st.Status, st)
 		}
 	} else {
-		t.Skip("接近打烊边界，FREE 断言跳过")
+		t.Skip("接近打烊/跨零点边界，FREE 断言跳过")
 	}
 
 	// ---- 服务中：创建一个未来预约并开始（Start 不校验时间）→ SERVING + free_at ----

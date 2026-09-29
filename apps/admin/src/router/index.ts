@@ -16,6 +16,7 @@ const router = createRouter({
         { path: 'members', component: () => import('../pages/MembersPage.vue') },
         { path: 'card-templates', component: () => import('../pages/CardTemplatesPage.vue') },
         { path: 'services', component: () => import('../pages/ServicesPage.vue') },
+        { path: 'service-tags', component: () => import('../pages/ServiceTagsPage.vue') },
         { path: 'content', component: () => import('../pages/ContentPage.vue') },
         { path: 'records', component: () => import('../pages/RecordsPage.vue') },
         { path: 'insights', component: () => import('../pages/InsightsPage.vue') },

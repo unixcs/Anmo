@@ -7,6 +7,7 @@
         <el-option v-for="key in APT_FILTER_STATUSES" :key="key" :label="APT_STATUS_TEXT[key]" :value="key" />
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
+      <el-button type="success" plain @click="walkinVisible = true">散客结算</el-button>
       <el-button type="warning" plain @click="closureVisible = true">闭店设置</el-button>
       <span class="spacer" />
       <span class="total">共 {{ total }} 条</span>
@@ -67,6 +68,7 @@
 
   <SettleDialog v-model="settleVisible" :appointment="settleApt" :service="null"
     :member-name="settleApt ? memberName(settleApt.member_id) : ''" @settled="load" />
+  <WalkInSettleDialog v-model="walkinVisible" />
   <RescheduleDialog v-model="rescheduleVisible" :apt-id="rescheduleId" :on-done="load" />
   <ClosureDialog v-model="closureVisible" />
 </template>
@@ -82,6 +84,7 @@ import { APT_FILTER_STATUSES, APT_STATUS_TAG, APT_STATUS_TEXT, fmtTime } from '.
 import { useIsMobile } from '../core/useMedia'
 import AptActionButtons from '../components/AptActionButtons.vue'
 import SettleDialog from '../components/SettleDialog.vue'
+import WalkInSettleDialog from '../components/WalkInSettleDialog.vue'
 import RescheduleDialog from '../components/RescheduleDialog.vue'
 import ClosureDialog from '../components/ClosureDialog.vue'
 
@@ -100,6 +103,7 @@ const settleApt = ref<Appointment | null>(null)
 const rescheduleVisible = ref(false)
 const rescheduleId = ref('')
 const closureVisible = ref(false)
+const walkinVisible = ref(false)
 
 function timeLabel(a: Appointment): string {
   return a.slot_type === 'HALF_DAY'

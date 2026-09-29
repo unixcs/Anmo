@@ -173,6 +173,20 @@ func (p *Provider) GetItem(ctx context.Context, id string) (*Item, error) {
 	return it, nil
 }
 
+// GetItemTx — 事务内读取服务项目（D6：散客快速结算在 immediate 事务内校验
+// 服务项存在且在架后快照名称与默认价）。仅读取，无副作用。
+func (p *Provider) GetItemTx(ctx context.Context, tx shared.Tx, id string) (*Item, error) {
+	it, err := scanItem(tx.QueryRowContext(ctx,
+		`SELECT `+itemColumns+` FROM service WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, shared.NotFound("SERVICE_NOT_FOUND", "服务项目不存在")
+	}
+	if err != nil {
+		return nil, shared.Server("SERVICE_QUERY", err)
+	}
+	return it, nil
+}
+
 // MinActiveDuration returns the shortest ACTIVE service duration in minutes
 // (0 when no active service exists) — store-status "can fit one more service"
 // check (goal §17). Read-only, exported for cross-module use.
