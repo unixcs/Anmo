@@ -32,28 +32,33 @@
       <view class="stat"><text class="stat-label">即将到店</text><text class="stat-value num">{{stats.upcoming}}<text class="stat-hint">次</text></text></view>
     </view>
 
-    <!-- 编辑资料（页内展开） -->
-    <view wx:if="{{editing}}" class="card edit-card">
-      <view class="field">
-        <text class="field-label">昵称</text>
-        <input class="input" value="{{name}}" bindinput="onName" maxlength="20" placeholder="怎么称呼你" />
-      </view>
-      <view wx:if="{{member && !member.phone}}" class="field">
-        <text class="field-label">手机号</text>
-        <input class="input num" type="number" maxlength="11" value="{{phoneInput}}" bindinput="onPhoneInput"
-               placeholder="11 位手机号（设置后不可修改）" />
-      </view>
-      <view class="field">
-        <text class="field-label">性别</text>
-        <view class="seg">
-          <view class="seg-item {{gender === '女' ? 'picked' : ''}}" data-g="女" bindtap="pickGender">女</view>
-          <view class="seg-item {{gender === '男' ? 'picked' : ''}}" data-g="男" bindtap="pickGender">男</view>
-          <view class="seg-item {{gender === '' ? 'picked' : ''}}" data-g="" bindtap="pickGender">保密</view>
+    <!-- 编辑资料弹层（V2.2 第八批）：页内卡片观感太弱 → 半屏 Sheet（遮罩+标题+大按钮），与认领/H5 密码弹层同构 -->
+    <view wx:if="{{editing}}" class="mask" bindtap="cancelEdit">
+      <view class="sheet" catchtap="noop">
+        <view class="sheet-grab"></view>
+        <view class="sheet-title">完善个人资料</view>
+        <view class="sheet-sub">称呼方便店家接待，手机号用于到店联系。</view>
+        <view class="field">
+          <text class="field-label">昵称</text>
+          <input class="input" value="{{name}}" bindinput="onName" maxlength="20" placeholder="怎么称呼你" />
         </view>
-      </view>
-      <view class="edit-ops">
-        <button class="btn primary sm" bindtap="saveProfile">保存</button>
-        <button class="btn ghost sm" bindtap="cancelEdit">取消</button>
+        <view wx:if="{{member && !member.phone}}" class="field">
+          <text class="field-label">手机号</text>
+          <input class="input num" type="number" maxlength="11" value="{{phoneInput}}" bindinput="onPhoneInput"
+                 placeholder="11 位手机号（设置后不可修改）" />
+        </view>
+        <view class="field">
+          <text class="field-label">性别</text>
+          <view class="seg">
+            <view class="seg-item {{gender === '女' ? 'picked' : ''}}" data-g="女" bindtap="pickGender">女</view>
+            <view class="seg-item {{gender === '男' ? 'picked' : ''}}" data-g="男" bindtap="pickGender">男</view>
+            <view class="seg-item {{gender === '' ? 'picked' : ''}}" data-g="" bindtap="pickGender">保密</view>
+          </view>
+        </view>
+        <view class="edit-ops">
+          <button class="btn primary sm" bindtap="saveProfile">保存</button>
+          <button class="btn ghost sm" bindtap="cancelEdit">取消</button>
+        </view>
       </view>
     </view>
 

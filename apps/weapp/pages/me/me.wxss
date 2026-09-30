@@ -37,8 +37,7 @@
 .tip-text { flex: 1; font-size: 11px; line-height: 16px; color: var(--foreground); }
 .tip-go { flex-shrink: 0; color: var(--primary); font-size: 12px; line-height: 16px; font-weight: 600; }
 
-/* 编辑资料 */
-.edit-card { padding: 16px; margin-bottom: 16px; animation: anmo-rise 0.2s var(--ease) both; }
+/* 编辑资料弹层（V2.2 第八批）：结构复用 app.wxss 的 .mask/.sheet，页内不再插卡片 */
 .edit-ops { display: flex; gap: 10px; margin-top: 16px; }
 .edit-ops .btn { flex: 1; }
 

@@ -63,13 +63,14 @@ await mp.disconnect()
 | 7 | **测试单遗留生产**：E2E 创建的 WAITING 单不会自己消失 | 剧本收尾 T8b：mock showModal 后遍历 `list` 中 `canCancel` 全部取消 |
 | 8 | cmd.exe 从 WSL 路径启动报 UNC 不支持 | 正常现象，自动落到 Windows 目录，不影响 `cli.bat` 绝对路径调用 |
 | 9 | node 侧 fetch 生产偶发 `fetch failed` | 一切外呼包一层 3 次重试（剧本 `fetchRetry`） |
-| 10 | 改仓库代码后副本未同步 | 只 `cp` 变更文件到副本；**别整目录 rsync**，会覆盖副本专属 config.js |
+| 10 | 改仓库代码后副本未同步 | 只 `cp` 变更文件到副本；**别整目录 rsync**，会覆盖副本专属 config.js。**批 8 实锤后果**：`rsync --delete` 覆盖后 LOOPBACK 回落 `127.0.0.1:8080`，15/16 断言全绿但打在本地 dev 库（假绿）——识别指纹：`prod` 与 `wx` 服务名完全不同、新单号序号比历史倒退（APT…0009 < 批 7 的 0011）。批量同步必须 `rsync --exclude config.js`（§4 命令已改） |
+| 11 | **`.page-body` 入场动画 `fill-mode: both` 让 fixed 弹层整体错锚**：动画终态 transform 残留 → page-body 持续充当 fixed 子元素包含块，`.mask` 量得 856px（>视口 671），弹层底部（保存按钮）沉到屏幕外 | 动画去 `both`（无 delay 无需保终态）即可，keyframes `to` 保持 `transform: none`。同类隐患：booking submit-bar / R4 弹层 / 改期抽屉，一改全修 |
 
 ## 4. 重建/重跑（3 条命令）
 
 ```bash
-# 1) 同步仓库 → 副本（列变更文件，排除 config.js）
-cp apps/weapp/pages/home/home.js apps/weapp/pages/home/home.wxml /mnt/c/Users/fengx/anmo-weapp/pages/home/
+# 1) 同步仓库 → 副本（排除 config.js——副本专属指向生产，见坑 #10）
+rsync -a --exclude config.js /mnt/Projects/Anmo/apps/weapp/ /mnt/c/Users/fengx/anmo-weapp/
 
 # 2) 起/重启自动化会话（若 IDE 已开着同一项目，先 /v2/quit 再起）
 cmd.exe /c "D:\Program\soft\wechattools\cli.bat auto --project C:\Users\fengx\anmo-weapp --auto-port 9420" &

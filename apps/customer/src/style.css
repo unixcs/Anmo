@@ -44,7 +44,7 @@
   --font-stack: -apple-system, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', sans-serif;
   --font-display: 600 26px/34px var(--font-stack);
   --font-title: 600 20px/28px var(--font-stack);
-  --font-body: 400 15px/22px var(--font-stack);
+  --font-body: 500 15px/22px var(--font-stack); /* 适老化（V2.2 第八批，与小程序镜像） */
   --font-sub: 400 13px/18px var(--font-stack);
   --font-caption: 500 11px/16px var(--font-stack);
 }
@@ -536,6 +536,7 @@ textarea {
   background: transparent;
   border-radius: var(--radius-sm);
   padding: 8px 0;
+  text-align: center; /* V2.2 第八批：与小程序镜像同步居中 */
   font: 500 14px/20px var(--font-stack);
   color: var(--muted-foreground);
   cursor: pointer;

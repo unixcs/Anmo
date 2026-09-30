@@ -38,6 +38,8 @@ page {
   color: var(--foreground);
   font-size: 15px;
   line-height: 22px;
+  /* 适老化（V2.2 第八批）：正文基础字重 400→500，PingFang 下 400 观感偏细 */
+  font-weight: 500;
   font-family: -apple-system, 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', sans-serif;
 }
 
@@ -45,7 +47,10 @@ page {
 .page-body {
   padding: 24px 16px 120px;
   box-sizing: border-box;
-  animation: anmo-rise 0.2s var(--ease) both;
+  /* V2.2 第八批：不能加 fill-mode both——动画终态 transform 残留会让 .page-body 持续充当
+     fixed 弹层(.mask/.sheet/submit-bar)的包含块，弹层锚到页面底部而非视口（实测 mask 856>视口 671）。
+     无 delay 无需 both；动画结束后 transform 回到 none，包含块消失。 */
+  animation: anmo-rise 0.2s var(--ease);
 }
 
 .page-head {
@@ -343,9 +348,9 @@ button.btn[disabled]:not([type]) {
 }
 
 .field > .field-label {
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
   color: var(--foreground);
 }
 
@@ -369,7 +374,8 @@ button.btn[disabled]:not([type]) {
 
 .textarea {
   padding: 12px 14px;
-  min-height: 0;
+  /* 适老化 + 修复空内容塌缩（V2.2 第八批）：auto-height 从 5 行起长，占位不再被裁半 */
+  min-height: 122px;
 }
 
 .input:focus,
@@ -558,6 +564,7 @@ button.btn[disabled]:not([type]) {
   line-height: 20px;
   color: var(--muted-foreground);
   margin: 0;
+  text-align: center; /* V2.2 第八批：选项文字水平居中（此前默认靠左） */
   transition: all 0.15s var(--ease);
 }
 

@@ -18,6 +18,7 @@
 /* 服务两列网格 */
 .svc-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .svc {
+  position: relative;
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: var(--radius-md);
@@ -28,6 +29,22 @@
   gap: 3px;
 }
 .svc.picked { border-color: var(--primary); background: var(--primary-soft); }
+/* 选中角标（V2.2 第八批）：带预选进入时用户要能一眼看出列表可切换 */
+.svc.picked::after {
+  content: '✓';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  font-weight: 700;
+}
 .svc-name { font-weight: 600; font-size: 14px; }
 .svc-meta { font-size: 12px; color: var(--muted-foreground); }
 .svc.picked .svc-meta { color: var(--primary); }
