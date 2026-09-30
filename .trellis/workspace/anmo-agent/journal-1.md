@@ -905,3 +905,43 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 ### Next Steps
 
 - 用户在 DevTools 点击 zcode 授权弹窗后，补官方 skill 实操段到手册 §6；发布前 SMS 切 off；owner 清理生产测试服务与 E2E 测试会员
+
+## Session 10: V2.2 第八批：用户实测 UX 反馈修复（适老化 + 弹窗化 + 服务切换）+ 全局弹层包含块大坑
+<!-- trellis-session: v=2 fp=c9dd9f43307227d5 -->
+
+**Date**: 2026-09-30
+**Task**: 09-30-09-30-v22-batch8-profile-ux-booking-fixes
+**Branch**: `main`
+
+### Summary
+
+用户真机试用反馈三问题，逐一修复并实证：① 我的页编辑卡观感弱/性别不居中/字重过细 → 编辑改半屏弹窗（与 claim/pwd 同构）、seg 居中、--font-body 400→500（H5 镜像同值）、field-label 提级；② 备注框只显示一半 → .textarea min-height 122px + 连带根因 submit-bar 未钉底；③ 服务切换"被束缚" → automator 实证切换机制本可用（svcIdx 0→1 针灸），补 ✓ 角标视觉反馈。排查弹窗底部沉屏时抓到全局大坑：.page-body 入场动画 fill-mode both 终态 transform 残留 → page-body 持续充当 fixed 子元素包含块（.mask 实测 856px > 视口 671px），me 三弹层/booking R4/改期抽屉/submit-bar 全部错锚，动画去 both 一改全修。批 8 还踩实了坑 #10：rsync --delete 覆盖副本 config.js 致 15/16 假绿打在本地 dev 库（识别指纹：wx 与 prod 服务名完全不同 + 单号序号倒退 0009<0011），§4 同步命令改 --exclude config.js。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d09e1f4` | fix(weapp): 第八批 UX 适老化与弹层体系修复——真机可感三问题 + 全局包含块大坑 |
+
+### Testing
+
+- [OK] 16/16 PASS（rsync 修复后真生产：APT…0013 接续批 7 序列、T1b prod==wx 实时一致）
+- [OK] 弹窗遮罩 390x671 精确视口、submit-bar bottom=671 钉底、五菜单项 tap 巡检 + console errors: none
+- [OK] H5 vite build ✓；「我的预约」「设置H5密码」cell 慢节奏复测 PASS（首轮异常为脚本导航竞态，非产品 bug）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 发布前 SMS 切 off（SMS_DISABLED）；owner 清理生产测试服务（打人 ¥0 / 云端冒烟推拿60分钟）
+- 弹窗几何验证基于 DevTools WebView；真机微信客户端如仍有视觉偏差，下批用预览版复核
+
+# PHASE RESULT
+
+**Phase**: V2.2 第八批（用户实测反馈修复）
+**Result**: 完成
+**验证**: automator 16/16 真生产全绿 + 几何复核（mask=视口、submit-bar 钉底）+ 巡检零 console error + H5 build
+**提交**: d09e1f4
+**遗留**: 无代码遗留；发布运维项同 Next Steps
