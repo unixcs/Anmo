@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 7
+- **Total Sessions**: 8
 - **Last Active**: 2026-09-30
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~851 | Active |
+| `journal-1.md` | ~877 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 8 | 2026-09-30 | V2.2 第五批收尾：CF Tunnel anmo.oiob.cn 接入（生产入口切换） | `e06ad0b` | `main` |
 | 7 | 2026-09-30 | V2.2 第四批：H5 预约弹层翻转 + 资料保存返回 + 小程序联调修复 | `b6c5f89` | `main` |
 | 6 | 2026-09-30 | V2.2.0 版本收口与 yun1 生产部署 | - | `main` |
 | 5 | 2026-09-30 | V2.2 第三批：服务记录与散客快速结算 | - | `main` |

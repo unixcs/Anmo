@@ -849,3 +849,29 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 ### Next Steps
 
 - 小程序真机 checklist 由用户按新 README 联调章节自测；正式发布前配真实 ANMO_WX_APPID/ANMO_WX_SECRET；生产店名电话等由商家在 admin 维护
+
+
+## Session 8: V2.2 第五批收尾：CF Tunnel anmo.oiob.cn 接入（生产入口切换）
+<!-- trellis-session: v=2 fp=0a2ea468180b3143 -->
+
+**Date**: 2026-09-30
+**Task**: V2.2 第五批收尾：CF Tunnel anmo.oiob.cn 接入（生产入口切换）
+**Branch**: `main`
+
+### Summary
+
+根因：yun1 出网到 login.cloudflareaccess.org 被墙（Failed to fetch resource），浏览器兜底下载的证书也未见落地——授权本身每次都成功。解法：本地 WSL ~/.cloudflared 已有 2026-05 的 origin 证书（同一账号、zone 授权 oiob.cn），直接 scp 上服务器复用，零新增点击。隧道 anmo(08368ffb) systemd 常驻：anmo.oiob.cn→18090（API+H5 同源，微信合法域名）、admin.oiob.cn→18091(noTLSVerify)。已记录直连 18090/18091 不通属安全组预期。剩余用户动作：发布前配 ANMO_WX_APPID/ANMO_WX_SECRET
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e06ad0b` | fix(weapp): 生产域名切换 api.oiob.cn → anmo.oiob.cn（对齐微信后台已绑定的 request 合法域名），单测 7/7 |
+
+### Testing
+
+- [OK] 公网验证：https://anmo.oiob.cn/healthz ok；匿名 GET /api/services 返回目录 JSON（游客模式线上生效）；未登录 POST /api/appointments 401；https://admin.oiob.cn/admin-ui/ 200；systemd cloudflared active（quic sjc 注册）
+
+### Status
+
+[OK] **Completed**
