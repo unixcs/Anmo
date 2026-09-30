@@ -8,6 +8,8 @@ const PROD_URL = 'https://anmo.oiob.cn'
 const LAN_URL = 'http://192.168.2.224:8080'
 const LOOPBACK_URL = 'http://127.0.0.1:8080'
 const STORAGE_KEY = 'anmo.base_url'
+// 版本标识（第六批加）：about 页页脚展示，肉眼确认新包已加载（开发者工具/真机缓存旧包时对号）
+const VERSION = 'V2.2.6'
 
 function resolveBaseUrl() {
   try {
@@ -24,4 +26,4 @@ function resolveBaseUrl() {
   }
 }
 
-module.exports = { BASE_URL: resolveBaseUrl(), PROD_URL, LAN_URL, LOOPBACK_URL, STORAGE_KEY }
+module.exports = { BASE_URL: resolveBaseUrl(), PROD_URL, LAN_URL, LOOPBACK_URL, STORAGE_KEY, VERSION }

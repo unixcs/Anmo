@@ -37,4 +37,6 @@
   </view>
 
   <button class="btn outline block share-btn" open-type="share">把门店分享给朋友</button>
+
+  <view class="version">安摩顾客端 {{version}}</view>
 </view>

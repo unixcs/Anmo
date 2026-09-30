@@ -25,6 +25,7 @@ type Provider struct {
 	sms     *smsStore
 	sender  smsSender
 	wxHTTP  *http.Client
+	log     *slog.Logger
 }
 
 // New builds the module Provider. Dependencies are injected by main.
@@ -37,6 +38,7 @@ func New(db shared.DB, cfg *config.Config, members *member.Provider, log *slog.L
 		sms:     newSMSStore(),
 		sender:  devSender{log: log},
 		wxHTTP:  &http.Client{Timeout: 10 * time.Second},
+		log:     log,
 	}
 }
 

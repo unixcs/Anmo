@@ -71,3 +71,8 @@ test('⑤ global.wx 未定义 → PROD_URL（try/catch 兜底）', () => {
   const cfg = loadConfig(undefined)
   assert.strictEqual(cfg.BASE_URL, PROD_URL)
 })
+
+test('⑥ 导出 VERSION（V2.2 第六批：about 页版本标识防呆）', () => {
+  const cfg = loadConfig(storageStub({}))
+  assert.match(cfg.VERSION, /^V\d+\.\d+\.\d+$/)
+})

@@ -1,6 +1,7 @@
 // about — 关于门店：门店信息（地址导航/电话拨号）+ 门店介绍文案，支持分享。
 // 门店内容接口是顾客 JWT 资源（V1 口径），匿名从分享进来时只给静态说明 + 登录引导。
 const { api } = require('../../utils/api')
+const { VERSION } = require('../../config')
 
 const STATUS_TEXT = { FREE: '空闲中', SERVING: '服务中', BUSY: '忙碌中' }
 // 状态点配色（BRAND-GUIDELINES §4）：空闲=success 服务中=primary 忙碌=warning
@@ -15,6 +16,7 @@ Page({
     status: '',
     statusClass: '',
     loggedIn: false,
+    version: VERSION,
   },
 
   onLoad() {

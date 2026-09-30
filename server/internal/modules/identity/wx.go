@@ -24,6 +24,24 @@ type wxSession struct {
 	ErrMsg  string `json:"errmsg"`
 }
 
+// wxErrMsg maps a WeChat errcode to an actionable Chinese message; the errcode
+// stays in brackets for support, while the raw English errmsg/rid only goes to
+// server logs (V2.2 第六批 review).
+func wxErrMsg(errcode int) string {
+	switch errcode {
+	case 40029, 40163: // code 无效 / 已被使用：wx.login 重新取码即可恢复
+		return "登录状态已过期，请重试"
+	case 45011: // API 频率限制
+		return "操作太频繁，请稍后再试"
+	case -1: // 微信系统繁忙，官方口径为可重试
+		return "微信服务繁忙，请稍后再试"
+	case 40013, 40125, 41002: // appid/secret 配置错误：用户重试无解
+		return "微信登录暂不可用，请联系店主"
+	default:
+		return "微信登录失败，请稍后再试"
+	}
+}
+
 // code2session calls the WeChat API. cfg.Wx.APIBase is overridable so tests
 // stub the endpoint with an httptest server.
 func (p *Provider) code2session(ctx context.Context, code string) (string, error) {
@@ -52,7 +70,10 @@ func (p *Provider) code2session(ctx context.Context, code string) (string, error
 		return "", shared.Server("WX_DECODE", err)
 	}
 	if s.ErrCode != 0 {
-		return "", shared.Unauthorized("微信登录失败：" + s.ErrMsg)
+		if p.log != nil {
+			p.log.Warn("wx code2session rejected", "errcode", s.ErrCode, "errmsg", s.ErrMsg)
+		}
+		return "", shared.Unauthorized(fmt.Sprintf("%s[%d]", wxErrMsg(s.ErrCode), s.ErrCode))
 	}
 	if s.OpenID == "" {
 		return "", shared.Server("WX_NO_OPENID", fmt.Errorf("code2session returned empty openid"))

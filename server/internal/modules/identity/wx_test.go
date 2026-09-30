@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -92,9 +93,52 @@ func TestWxLoginCode2SessionStub(t *testing.T) {
 		t.Fatalf("code2session params: %+v", gotReq)
 	}
 
-	// 微信侧错误码 → 未授权错误
+	// 微信侧错误码 → 中文可行动文案 + [errcode] 后缀；英文 errmsg/rid 不出服务器
 	_, _, err = p.WxLogin(ctx, "bad-code")
-	if err == nil || !strings.Contains(err.Error(), "invalid appid") {
-		t.Fatalf("want wechat error surfaced, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "40013") ||
+		strings.Contains(err.Error(), "invalid appid") {
+		t.Fatalf("want mapped 40013 message without raw errmsg, got %v", err)
+	}
+}
+
+func TestWxErrMsgMapping(t *testing.T) {
+	cases := []struct {
+		errcode int
+		want    string
+	}{
+		{40029, "登录状态已过期"},
+		{40163, "登录状态已过期"},
+		{45011, "操作太频繁"},
+		{-1, "微信服务繁忙"},
+		{40125, "微信登录暂不可用"},
+		{99999, "微信登录失败"},
+	}
+	for _, c := range cases {
+		got := wxErrMsg(c.errcode)
+		if !strings.Contains(got, c.want) {
+			t.Errorf("wxErrMsg(%d) = %q, want contains %q", c.errcode, got, c.want)
+		}
+	}
+}
+
+func TestWxLoginCode2SessionErrcodeMatrix(t *testing.T) {
+	cases := []int{40029, 45011, -1, 40125, 50000}
+	for _, errcode := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"errcode":%d,"errmsg":"stub"}`, errcode)))
+		}))
+		p, _ := newWxEnv(t, func(c *config.Config) {
+			c.Wx.AppID = "wx-app"
+			c.Wx.Secret = "wx-secret"
+			c.Wx.APIBase = srv.URL
+		})
+		_, _, err := p.WxLogin(context.Background(), "any-code")
+		srv.Close()
+		if err == nil || !shared.Is(err, "UNAUTHORIZED") {
+			t.Fatalf("errcode %d: want unauthorized, got %v", errcode, err)
+		}
+		if !strings.Contains(err.Error(), fmt.Sprintf("[%d]", errcode)) {
+			t.Fatalf("errcode %d: message missing bracket code: %v", errcode, err)
+		}
 	}
 }

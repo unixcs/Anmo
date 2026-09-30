@@ -29,7 +29,7 @@ export class ApiError extends Error {
 
 // 请求超时：与小程序 request.js 同口径（15s）。没有超时的话，网关挂起/宕机
 // 场景下 fetch 永不 settle，页面会永远停在骨架屏（R5 宕机演练实测复现）。
-const REQUEST_TIMEOUT_MS = 15000
+const REQUEST_TIMEOUT_MS = 25000
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
