@@ -21,7 +21,7 @@
     </button>
   </view>
 
-  <!-- 未登录：内容接口都是顾客 JWT 资源（与 H5 同口径），先引导登录 -->
+  <!-- 未登录：保留登录引导（预约/会员卡/核销码等顾客能力需登录）；服务目录已对游客开放（V2.2 第五批） -->
   <view wx:if="{{!loggedIn}}" class="card">
     <view class="empty">
       <view class="empty-icon"><app-icon name="user" size="76" stroke-width="1.4" /></view>
@@ -31,12 +31,12 @@
     </view>
   </view>
 
-  <block wx:else>
-    <!-- 骨架 -->
-    <block wx:if="{{loading && !services.length}}">
-      <view class="skeleton card" />
-      <view class="skeleton card" />
-    </block>
+  <!-- 内容区：游客与登录态共用（服务推荐来自公开 catalog，V2.2 第七批修复） -->
+  <!-- 骨架 -->
+  <block wx:if="{{loading && !services.length}}">
+    <view class="skeleton card" />
+    <view class="skeleton card" />
+  </block>
 
     <block wx:for="{{blocks}}" wx:for-item="blk" wx:key="*this">
       <!-- 公告 -->
@@ -77,6 +77,8 @@
       </view>
     </block>
 
+  <!-- 登录态专属：门店卡 / 快捷入口 / 门店介绍 -->
+  <block wx:if="{{loggedIn}}">
     <shop-card address="{{shop.address}}" phone="{{shop.phone}}" latitude="{{shop.latitude}}" longitude="{{shop.longitude}}" />
 
     <!-- 快捷入口 -->

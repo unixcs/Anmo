@@ -36,7 +36,15 @@ Page({
   },
 
   onShow() {
-    getApp().ready(() => this.load())
+    getApp().ready((loggedIn) => {
+      // 游客分支（V2.2 第七批）：明确登录引导，不冒充「网络不可用」
+      if (!loggedIn) {
+        this.setData({ loading: false, failed: false, list: [], guest: true })
+        return
+      }
+      this.setData({ guest: false })
+      this.load()
+    })
   },
 
   onPullDownRefresh() {
@@ -65,6 +73,10 @@ Page({
 
   retry() {
     this.load()
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: '/pages/login/login?back=appointments' })
   },
 
   load(done) {
@@ -96,8 +108,13 @@ Page({
         this.setData({ list, loading: false })
         if (done) done()
       })
-      .catch(() => {
-        this.setData({ list: [], loading: false, failed: true })
+      .catch((e) => {
+        // 401（未登录/凭证过期，V2.2 第七批）：落游客引导，不冒充网络错误
+        if (e && e.needLogin) {
+          this.setData({ list: [], loading: false, failed: false, guest: true })
+        } else {
+          this.setData({ list: [], loading: false, failed: true })
+        }
         if (done) done()
       })
   },

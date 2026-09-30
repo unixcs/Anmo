@@ -4,7 +4,7 @@
     <view class="page-sub">待到店的预约可改期或取消</view>
   </view>
 
-  <scroll-view scroll-x class="chip-row filters" enhanced show-scrollbar="{{false}}">
+  <scroll-view scroll-x class="chip-row filters" enhanced show-scrollbar="{{false}}" wx:if="{{!guest}}">
     <view wx:for="{{filters}}" wx:key="key"
           class="chip {{filter === item.key ? 'picked' : ''}}"
           data-key="{{item.key}}" bindtap="setFilter">{{item.label}}</view>
@@ -21,6 +21,15 @@
     <view class="empty-main">网络不可用</view>
     <view class="empty-sub">没能取到预约记录，请稍后再试</view>
     <button class="btn outline sm" bindtap="retry">重新加载</button>
+  </view>
+
+  <view wx:if="{{guest}}" class="card">
+    <view class="empty">
+      <view class="empty-icon"><app-icon name="user" size="76" stroke-width="1.4" /></view>
+      <view class="empty-main">登录后开始使用</view>
+      <view class="empty-sub">登录后可预约、查会员卡、出示核销码</view>
+      <button class="btn secondary sm pressable" bindtap="goLogin">立即登录</button>
+    </view>
   </view>
 
   <block wx:for="{{list}}" wx:key="id">
@@ -50,7 +59,7 @@
     </view>
   </block>
 
-  <view wx:if="{{!loading && !failed && !list.length}}" class="empty">
+  <view wx:if="{{!guest && !loading && !failed && !list.length}}" class="empty">
     <view class="empty-icon"><app-icon name="inbox" size="40" /></view>
     <view class="empty-main">{{filter ? '这个状态下还没有预约' : '还没有预约'}}</view>
     <view class="empty-sub" wx:if="{{!filter}}">选好项目和时间，几分钟就能约好</view>

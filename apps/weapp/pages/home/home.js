@@ -31,7 +31,10 @@ Page({
           this.statusTimer = setInterval(() => this.loadStatus(), 60 * 1000)
         }
       } else {
-        this.setData({ loading: false, services: [], announcements: [] })
+        // 游客分支（V2.2 第七批修复）：服务目录已对游客开放（第五批口径，与 services 页/H5 一致），
+        // 首页服务推荐照常展示；公告/门店卡/快捷入口等顾客资源仍等登录（保留登录引导卡）
+        this.setData({ loading: false })
+        this.loadGuestCatalog()
       }
     })
   },
@@ -152,20 +155,33 @@ Page({
         const announcements = (home.announcements || []).map((a) =>
           a.content ? a.title + ' · ' + a.content : a.title,
         )
-        this.catalogServices = (catalog.services || [])
-          .filter((s) => s.status === 'ACTIVE')
-          .map((s) => ({
-            id: s.id,
-            name: s.name,
-            desc: s.description,
-            minutes: s.duration_minutes,
-            price: fmt.yuan(s.default_price),
-          }))
+        this.applyCatalog(catalog)
         this.setData({ announcements, blocks: fmt.homeBlocks(home.blocks) })
-        this.applyServices()
       })
       .catch(() => {})
       .then(() => done && done())
+  },
+
+  // 目录 → 首页服务卡片映射（登录/游客两条链路共用）
+  applyCatalog(catalog) {
+    this.catalogServices = (catalog.services || [])
+      .filter((s) => s.status === 'ACTIVE')
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        desc: s.description,
+        minutes: s.duration_minutes,
+        price: fmt.yuan(s.default_price),
+      }))
+    this.applyServices()
+  },
+
+  // 游客首页服务推荐（V2.2 第七批）：/api/services 是公开资源，游客也看到在售项目
+  loadGuestCatalog() {
+    api
+      .catalog()
+      .then((catalog) => this.applyCatalog(catalog))
+      .catch(() => {})
   },
 
   // 服务推荐展示列表（V2.1）：目录与 settings 都就绪后按 pickHomeServices 口径筛选；
