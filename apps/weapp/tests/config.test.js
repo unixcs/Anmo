@@ -6,7 +6,7 @@ const assert = require('node:assert')
 const path = require('node:path')
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.js')
-const PROD_URL = 'https://api.oiob.cn'
+const PROD_URL = 'https://anmo.oiob.cn'
 const LAN_URL = 'http://192.168.2.224:8080'
 const LOOPBACK_URL = 'http://127.0.0.1:8080'
 
