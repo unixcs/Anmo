@@ -875,3 +875,33 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 ### Status
 
 [OK] **Completed**
+
+
+## Session 9: V2.2 第七批：真实 DevTools 全流程自动化（生产链路）+ 游客态两处真 bug 修复 + 官方 wechatide skill 评估
+<!-- trellis-session: v=2 fp=c9dd9f43307227d5 -->
+
+**Date**: 2026-09-30
+**Task**: V2.2 第七批：真实 DevTools 全流程自动化（生产链路）+ 游客态两处真 bug 修复 + 官方 wechatide skill 评估
+**Branch**: `main`
+
+### Summary
+
+用 Windows 微信开发者工具（cli.bat auto 9420 + miniprogram-automator）对生产 https://anmo.oiob.cn 跑通 16 断言全流程：游客浏览→微信 code2session 真登录→预选保留→提交真实预约号→列表→mock 弹窗取消→遗留清零→核销码门槛，console 零错误。关键工程结论：storage 不跨 cli auto 冷重启→改用副本 config.js LOOPBACK_URL 指生产；clearStorageSync 不清 app 内存登录态→正好当凭证过期模拟。对抗审查修复两处真 bug：游客首页服务列表为空（home 漏改第五批口径）、我的预约 401 冒充网络错误。官方 wechatide skill（v0.3.11）已随构建内置并验证门禁调用链，授权弹窗待用户点击。沉淀 docs/guides/wechat-devtools-automation.md。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9260d5b` | docs(guides): 微信开发者工具自动化运维手册——两层自动化、踩坑实录、官方 wechatide skill 评估；第七批任务档案 |
+
+### Testing
+
+- [OK] 16/16 PASS（生产真实链路）+ T10 游客引导回归 2/2 + console errors: none + node --check 全过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 用户在 DevTools 点击 zcode 授权弹窗后，补官方 skill 实操段到手册 §6；发布前 SMS 切 off；owner 清理生产测试服务与 E2E 测试会员
