@@ -98,9 +98,13 @@ T0 about 版本=V2.2.6 → T1/T1b 游客首页数据与生产 catalog 实时一�
   - 交互式开发/排障（看编译错、截模拟器、读 console）：**官方 Skill 更高效**，免写脚本。
   - 可重复的 16 断言回归套件：**剧本脚本仍更合适**（确定性、可进 CI/批处理），Skill 的 automator scene 也能做但无套件概念。
   - 推荐：日常排障/改动验证用官方 Skill；批次验收跑剧本；两者共用同一 IDE 实例。
-- 已验证的调用链：`wechatide.cmd -c zcode check_wechatide_status --skill-version 0.3.11` → 返回 auth 任务 `taskId` + IDE 弹授权窗（**每次新 client 需在 IDE 里点一次授权**，此后免确认；`-c` clientName 会话内固定）。
-- 安全边界：危险操作（上传体验版、云函数部署）二次确认；代码/日志全程本地。
-- 待办：授权弹窗确认后，可用 `wechatide -c zcode simulator_screenshot` 等工具跑一轮，把体验补进本节。
+- 已验证的调用链（2026-09-30 实测全通）：
+  1. 门禁：`wechatide.cmd -c zcode check_wechatide_status --skill-version 0.3.11` → 首次触发 IDE 授权弹窗（返回 `taskId` + pending，用 `polling_task_result` 轮询；用户在 IDE 点一次允许后 `versionRelation: "equal"`、`loginExpired: false`、CLI 模式 `tokenRequired: false`）
+  2. 开窗：`wechatide.cmd -c zcode open_project_window --project "D:\anmo-weapp-build"` → `{winId: "s1"}`
+  3. 截图：`wechatide.cmd -c zcode simulator_screenshot --project ... --path ...` → 289×625 JPEG 落盘，导航/tab/内容区完整可见
+- **路径坑**：skill 工具只认「IDE 项目注册表里已登记的路径」（`project_list` 可查）。`C:\Users\fengx\anmo-weapp` 磁盘存在但未登记 → 一律 `PROJECT_PATH_NOT_FOUND`（连 project_import 也拒）；登记过的 `D:\anmo-weapp-build` 直接可用。新目录先经 IDE/cli 正常打开一次（进入注册表）再用 skill 工具。
+- `mcpTokenRequired: true` 仅 MCP 模式需要（设置→安全复制 MCP 配置）；`-c` CLI 模式免 token。
+- 效率结论（实测后确认）：交互式排障/取证**一条命令替代一个脚本**（开窗→截图→读 console→轮询异步任务，全部标准化），比手写 automator 脚本快；回归套件仍用 §4 剧本。
 
 ## 7. 相关
 
