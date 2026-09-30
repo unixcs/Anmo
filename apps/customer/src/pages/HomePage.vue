@@ -79,6 +79,19 @@ function onFirstPromptConfirm(): void {
 }
 
 onMounted(async () => {
+  // 游客浏览（V2.2 第五批）：home/settings/store-status 仍是顾客 JWT 资源，未登录只拉公开
+  // 服务目录渲染默认首页，避免 401 触发全局跳登录打断游客浏览
+  if (!currentToken()) {
+    try {
+      const catalog = await api.catalog()
+      services.value = pickHomeServices(catalog.services, {})
+      blocks.value = DEFAULT_BLOCKS
+    } catch {
+      services.value = []
+      blocks.value = DEFAULT_BLOCKS
+    }
+    return
+  }
   void loadStatus()
   statusTimer = window.setInterval(loadStatus, 60000)
   try {

@@ -22,5 +22,7 @@ func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	admin.HandleFunc("PUT /admin/service-records/{id}/merchant-note", p.handleMerchantNote)
 	admin.HandleFunc("POST /admin/service-records/{id}/revoke", p.handleRevokeRecord)
 
-	api.HandleFunc("GET /api/services", p.handleCustomerCatalog)
+	// 游客可浏览（V2.2 第五批）：注册在 root 组（精确路径），Go 1.22 ServeMux
+	// 最长模式优先于 router.go 的 /api/ 前缀守卫，匿名可达；只读无身份依赖。
+	root.HandleFunc("GET /api/services", p.handleCustomerCatalog)
 }

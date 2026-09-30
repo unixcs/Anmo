@@ -16,17 +16,12 @@ function toCard(s) {
 Page({
   data: {
     groups: [], // { id, name, items }；无分类的服务归"其他"组（id 为空串）
-    loggedIn: false,
     loading: true,
   },
 
   onShow() {
-    getApp().ready((loggedIn) => {
-      this.setData({ loggedIn })
-      // catalog 是顾客 JWT 资源（与首页同口径）：未登录只展示登录引导
-      if (loggedIn) this.load()
-      else this.setData({ loading: false, groups: [] })
-    })
+    // catalog 已对游客开放（V2.2 第五批）：恒加载，无需等登录态
+    this.load()
   },
 
   load(done) {
@@ -56,15 +51,7 @@ Page({
     wx.switchTab({ url: '/pages/booking/booking' })
   },
 
-  goLogin() {
-    wx.navigateTo({ url: '/pages/login/login' })
-  },
-
   onPullDownRefresh() {
-    if (!this.data.loggedIn) {
-      wx.stopPullDownRefresh()
-      return
-    }
     this.load(() => wx.stopPullDownRefresh())
   },
 

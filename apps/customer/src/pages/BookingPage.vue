@@ -7,6 +7,7 @@ import { candidateDays, partOpen, partMeta, todayStr, trimPastSlots, type DayOpt
 import { yuan } from '../core/utils/format'
 import { profileProgress } from '../core/utils/profile'
 import { notify } from '../platform/notify/toast'
+import { currentToken } from '../platform/auth/session'
 import ShopCard from '../components/ShopCard.vue'
 import AppSheet from '../components/ui/AppSheet.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
@@ -125,10 +126,14 @@ onMounted(() => {
     note.value = draft.note || ''
   }
   void loadServices()
-  api
-    .myProfile()
-    .then((r) => (member.value = r.member))
-    .catch(() => {})
+  // 游客浏览（V2.2 第五批）：myProfile 是登录资源，游客请求会 401 并触发全局跳登录；
+  // 未登录时直接不拉（资料完善提醒本来只对已登录用户有意义）
+  if (currentToken()) {
+    api
+      .myProfile()
+      .then((r) => (member.value = r.member))
+      .catch(() => {})
+  }
 })
 
 async function refreshOptions(): Promise<void> {
@@ -163,10 +168,9 @@ function pickPart(p: 'AM' | 'PM'): void {
   slotTime.value = ''
 }
 
-// ---- 资料完善半屏提示（V2.2 R4）----
-// 去完善资料：已选存 sessionStorage，返回后恢复；不置跳过标记，完善前再次提交仍会提醒
-function goProfileSheet(): void {
-  profileSheet.value = false
+// ---- 已选保留（V2.2 R4/第五批）：路由离开会重建页面实例，草稿存 sessionStorage ----
+// 使用场景：去完善资料往返、游客点提交跳登录往返（登录后回到预约页预选不丢）
+function saveDraft(): void {
   try {
     sessionStorage.setItem(
       'anmo.booking.draft',
@@ -181,6 +185,13 @@ function goProfileSheet(): void {
   } catch {
     /* 存储不可用仅损失"已选保留"体验 */
   }
+}
+
+// ---- 资料完善半屏提示（V2.2 R4）----
+// 去完善资料：已选存 sessionStorage，返回后恢复；不置跳过标记，完善前再次提交仍会提醒
+function goProfileSheet(): void {
+  profileSheet.value = false
+  saveDraft()
   router.push('/me/profile')
 }
 
@@ -192,6 +203,14 @@ function bookNow(): void {
 }
 
 async function submit(): Promise<void> {
+  // 游客浏览（V2.2 第五批）：/booking 路由已公开，提交动作才要求登录；
+  // 已选存草稿，登录回跳后恢复预选
+  if (!currentToken()) {
+    notify('登录后即可提交预约')
+    saveDraft()
+    router.push({ name: 'login', query: { redirect: '/booking' } })
+    return
+  }
   if (!selectedService.value || !part.value) {
     notify('请先选择服务、日期和上午/下午')
     return

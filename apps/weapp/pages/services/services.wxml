@@ -1,43 +1,32 @@
 <view class="page-body">
-  <!-- catalog 是顾客 JWT 资源（与首页同口径）：未登录先引导登录 -->
-  <view wx:if="{{!loggedIn}}" class="card">
-    <view class="empty">
-      <view class="empty-icon"><app-icon name="user" size="76" stroke-width="1.4" /></view>
-      <view class="empty-main">登录后开始使用</view>
-      <view class="empty-sub">登录后可预约、查会员卡、出示核销码</view>
-      <button class="btn secondary sm pressable" bindtap="goLogin">立即登录</button>
-    </view>
+  <!-- 服务目录已对游客开放（V2.2 第五批）：未登录也可浏览 -->
+  <!-- 骨架 -->
+  <block wx:if="{{loading && !groups.length}}">
+    <view class="skeleton card" />
+    <view class="skeleton card" />
+  </block>
+
+  <view wx:elif="{{!groups.length}}" class="empty">
+    <view class="empty-icon"><app-icon name="inbox" size="76" stroke-width="1.4" /></view>
+    <view class="empty-main">暂无服务项目</view>
+    <view class="empty-sub">商家上架后会显示在这里</view>
   </view>
 
   <block wx:else>
-    <!-- 骨架 -->
-    <block wx:if="{{loading && !groups.length}}">
-      <view class="skeleton card" />
-      <view class="skeleton card" />
-    </block>
-
-    <view wx:elif="{{!groups.length}}" class="empty">
-      <view class="empty-icon"><app-icon name="inbox" size="76" stroke-width="1.4" /></view>
-      <view class="empty-main">暂无服务项目</view>
-      <view class="empty-sub">商家上架后会显示在这里</view>
-    </view>
-
-    <block wx:else>
-      <view wx:for="{{groups}}" wx:for-item="grp" wx:key="id" class="group">
-        <view class="group-title">{{grp.name}}</view>
-        <view wx:for="{{grp.items}}" wx:for-item="svc" wx:key="id" class="card svc">
-          <view class="svc-body">
-            <view class="svc-name">{{svc.name}}</view>
-            <view class="svc-desc" wx:if="{{svc.desc}}">{{svc.desc}}</view>
-            <view class="svc-meta">
-              <text class="num">{{svc.minutes}} 分钟</text>
-              <text class="dot-sep">·</text>
-              <text class="svc-price money">{{svc.price}}</text>
-            </view>
+    <view wx:for="{{groups}}" wx:for-item="grp" wx:key="id" class="group">
+      <view class="group-title">{{grp.name}}</view>
+      <view wx:for="{{grp.items}}" wx:for-item="svc" wx:key="id" class="card svc">
+        <view class="svc-body">
+          <view class="svc-name">{{svc.name}}</view>
+          <view class="svc-desc" wx:if="{{svc.desc}}">{{svc.desc}}</view>
+          <view class="svc-meta">
+            <text class="num">{{svc.minutes}} 分钟</text>
+            <text class="dot-sep">·</text>
+            <text class="svc-price money">{{svc.price}}</text>
           </view>
-          <button class="btn secondary sm pressable" data-id="{{svc.id}}" bindtap="goBooking">预约</button>
         </view>
+        <button class="btn secondary sm pressable" data-id="{{svc.id}}" bindtap="goBooking">预约</button>
       </view>
-    </block>
+    </view>
   </block>
 </view>

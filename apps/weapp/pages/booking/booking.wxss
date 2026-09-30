@@ -15,16 +15,6 @@
   font-weight: 600;
 }
 
-/* 登录提示条 */
-.login-tip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 13px 16px;
-  color: var(--foreground);
-}
-.login-go { color: var(--primary); font-weight: 600; margin-left: 2px; }
-
 /* 服务两列网格 */
 .svc-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .svc {

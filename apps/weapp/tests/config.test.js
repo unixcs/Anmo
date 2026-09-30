@@ -6,6 +6,7 @@ const assert = require('node:assert')
 const path = require('node:path')
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.js')
+const PROD_URL = 'https://api.oiob.cn'
 const LAN_URL = 'http://192.168.2.224:8080'
 const LOOPBACK_URL = 'http://127.0.0.1:8080'
 
@@ -50,15 +51,23 @@ test('③ 无覆盖 + platform=devtools → LOOPBACK_URL', () => {
   assert.strictEqual(cfg.BASE_URL, LOOPBACK_URL)
 })
 
-test('④ 无覆盖 + platform=ios → LAN_URL（仅 getDeviceInfo，缺省 getSystemInfoSync）', () => {
+test('④ 无覆盖 + platform=ios → PROD_URL（仅 getDeviceInfo，缺省 getSystemInfoSync）', () => {
   const cfg = loadConfig({
     getStorageSync: () => '',
+    getDeviceInfo: () => ({ platform: 'ios' }),
+  })
+  assert.strictEqual(cfg.BASE_URL, PROD_URL)
+})
+
+test('④b 真机 + storage 覆盖 LAN_URL → 覆盖生效（本地真机联调路径）', () => {
+  const cfg = loadConfig({
+    getStorageSync: (key) => (key === 'anmo.base_url' ? LAN_URL : ''),
     getDeviceInfo: () => ({ platform: 'ios' }),
   })
   assert.strictEqual(cfg.BASE_URL, LAN_URL)
 })
 
-test('⑤ global.wx 未定义 → LAN_URL（try/catch 兜底）', () => {
+test('⑤ global.wx 未定义 → PROD_URL（try/catch 兜底）', () => {
   const cfg = loadConfig(undefined)
-  assert.strictEqual(cfg.BASE_URL, LAN_URL)
+  assert.strictEqual(cfg.BASE_URL, PROD_URL)
 })

@@ -20,9 +20,9 @@
 
 1. 微信开发者工具 → 导入本目录（`project.config.json` 就绪，appid 默认 `touristappid`，正式使用时替换为你的 AppID）。
 2. 详情 → 本地设置 → 勾选"不校验合法域名"（开发期）。
-3. `config.js` 会按运行环境自动选后端地址，不用手改：模拟器 → `http://127.0.0.1:8080`；真机 → `http://192.168.2.224:8080`（电脑 WLAN IP，DHCP 变了要同步改 `LAN_URL`）。
-   - **真机必须走电脑局域网 IP**：手机上的 `127.0.0.1` 是手机自己，直连必报 `request:fail`。
-   - WSL2 **Mirrored** 网络下，Windows 侧只有 loopback 默认能进 WSL；给手机用需放行 Hyper-V 防火墙入站（不是 Windows 防火墙）：`scripts/allow-wsl-lan.ps1`（管理员，默认只放行 TCP 8080 且限本机子网，`-Remove` 撤销）。
+3. `config.js` 会按运行环境自动选后端地址，不用手改：模拟器 → `http://127.0.0.1:8080`；真机 → `https://api.oiob.cn`（Cloudflare Tunnel 生产域名，V2.2 第五批起默认）。
+   - **真机本地联调**（连电脑后端调试）用 storage 覆盖：Console 执行 `wx.setStorageSync('anmo.base_url', 'http://<电脑IP>:8080')` 后重启小程序（`LAN_URL` 常量需与电脑当前 WLAN IP 一致，DHCP 变了要同步改）。
+   - 真机走电脑局域网 IP 时：手机上的 `127.0.0.1` 是手机自己，直连必报 `request:fail`；WSL2 **Mirrored** 网络下需放行 Hyper-V 防火墙入站（不是 Windows 防火墙）：`scripts/allow-wsl-lan.ps1`（管理员，默认只放行 TCP 8080 且限本机子网，`-Remove` 撤销）。
    - 自测不要用 Windows 本机去连自己的 LAN IP（mirrored 下会 hairpin 超时，属假阴性）；用另一个 netns 验证：`docker exec anmo-mysql curl -s -o /dev/null -w '%{http_code}\n' http://<PC_IP>:8080/healthz` → 200 才算通。
    - 真机优先用「真机调试」；「预览」在部分版本会强制 request 合法域名校验。
 
@@ -35,7 +35,7 @@
 3. **放行请求域名**：详情 → 本地设置 → 勾选「不校验合法域名」。devtools 里 config.js 默认打 `http://127.0.0.1:8080`。
 4. **起后端**：WSL 里执行 `bash scripts/start-anmo.sh`，一条命令拉起后端 :8080 + 顾客 H5 :5173 + 商家端 :5174/5175。
 5. **登录为什么直接就成功（D24 dev 兜底）**：后端未配置 `wx.app_id` 时，登录走 dev 兜底，`openid = "dev:" + code`，首次登录同事务直建会员号并直发 Token（后端启动日志有警示）。**正式发布前必须在生产配置 `ANMO_WX_APPID` / `ANMO_WX_SECRET`**，dev 兜底禁止用于发布。
-6. **真机预览/真机调试**：走 `LAN_URL`（`config.js` 常量，需与电脑当前局域网 IP 一致，DHCP 变了要同步改），且 Windows 侧需放行 LAN→WSL 入站：`scripts/allow-wsl-lan.ps1`（管理员执行，`-Remove` 撤销）。
+6. **真机预览/真机调试**：默认走 `https://api.oiob.cn`（生产域名）。要连**电脑本机后端**联调，用 storage 覆盖（下条）指向 `LAN_URL`，且 Windows 侧需放行 LAN→WSL 入站：`scripts/allow-wsl-lan.ps1`（管理员执行，`-Remove` 撤销）。
 7. **可选：不改代码覆盖后端地址**（含指向生产/其他机器）：开发者工具 Console 执行后重启小程序：
 
    ```js
@@ -52,7 +52,7 @@
 node --test "apps/weapp/tests/*.test.js"
 ```
 
-覆盖 `config.js` 的 BASE_URL 解析：storage 覆盖（`anmo.base_url`）优先、非法值（非 http(s)、含空白）忽略、devtools→LOOPBACK / 真机→LAN / 无 `wx` 环境兜底。
+覆盖 `config.js` 的 BASE_URL 解析：storage 覆盖（`anmo.base_url`）优先、非法值（非 http(s)、含空白）忽略、devtools→LOOPBACK / 真机→PROD（`https://api.oiob.cn`）/ 无 `wx` 环境兜底；真机 + storage 覆盖 LAN_URL 的本地联调路径有专门用例。
 注意：部分 Node 版本（如 WSL 下 v24）`node --test <目录>` 的目录形式会报 `MODULE_NOT_FOUND`，请用上面的 glob 形式。
 
 端到端实测（模拟器/真机）按上文「开发者工具联调」章节在微信开发者工具里人工操作。
@@ -61,7 +61,7 @@ node --test "apps/weapp/tests/*.test.js"
 
 - [ ] `project.config.json` 换成真实 AppID
 - [ ] 后端配置 `wx.app_id` / `wx.secret`（env `ANMO_WX_APPID`/`ANMO_WX_SECRET`），否则登录走 dev 兜底（D24，**禁止用于发布**）
-- [ ] 小程序后台配置 request 合法域名（必须 HTTPS + 备案域名，自签 IP 不可用）
+- [ ] 微信小程序后台配置 request 合法域名：加 `https://api.oiob.cn`（管理员扫码操作，mp.weixin.qq.com → 开发管理 → 开发设置 → 服务器域名）
 - [ ] yun1 生产 HTTPS 反代 + 域名就绪后再提审
 
 ## 已知边界（歧义选不做）

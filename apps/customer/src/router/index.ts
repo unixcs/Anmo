@@ -4,7 +4,7 @@ import { currentToken } from '../platform/auth/session'
 const routes = [
   { path: '/', name: 'home', component: () => import('../pages/HomePage.vue') },
   { path: '/services', name: 'services', component: () => import('../pages/ServicesPage.vue') },
-  { path: '/booking', name: 'booking', component: () => import('../pages/BookingPage.vue'), meta: { auth: true } },
+  { path: '/booking', name: 'booking', component: () => import('../pages/BookingPage.vue') },
   { path: '/login', name: 'login', component: () => import('../pages/LoginPage.vue') },
   { path: '/me', name: 'me', component: () => import('../pages/MePage.vue'), meta: { auth: true } },
   { path: '/me/cards', name: 'cards', component: () => import('../pages/CardsPage.vue'), meta: { auth: true } },

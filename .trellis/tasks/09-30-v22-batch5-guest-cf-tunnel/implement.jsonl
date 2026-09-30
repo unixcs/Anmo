@@ -1,0 +1,9 @@
+{"file": "AGENTS.md", "reason": "根约束：D24 微信凭据/dev 兜底、模块边界、状态机"}
+{"file": "server/internal/router/router.go", "reason": "路由装配：/api/ 前缀整体 JWT 守卫在 router 层；Go1.22 mux 最长模式优先使 root 组精确路径可豁免"}
+{"file": "server/internal/modules/service/module.go", "reason": "GET /api/services 移 root 组"}
+{"file": "server/internal/modules/appointment/module.go", "reason": "GET /api/booking-options 移 root 组"}
+{"file": "apps/weapp/pages/services/services.js", "reason": "删未登录门槛：onShow 恒 load"}
+{"file": "apps/weapp/pages/booking/booking.js", "reason": "游客可浏览（onShow 加载店铺+时段）；submit 未登录 goLogin 已有保持"}
+{"file": "apps/customer/src/pages/BookingPage.vue", "reason": "去 auth 门槛后 submit 开头补 token 检查跳登录 redirect=/booking"}
+{"file": "apps/customer/src/router/index.ts", "reason": "/booking 去 meta.auth；/services 已公开"}
+{"file": "apps/weapp/config.js", "reason": "PROD_URL 真机默认；storage 覆盖最高优先级已有"}

@@ -6,7 +6,9 @@ import "net/http"
 func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	api.HandleFunc("POST /api/appointments", p.handleCustomerCreate)
 	api.HandleFunc("GET /api/appointments", p.handleCustomerList)
-	api.HandleFunc("GET /api/booking-options", p.handleCustomerBookingOptions)
+	// 游客可浏览（V2.2 第五批）：注册在 root 组（精确路径），Go 1.22 ServeMux
+	// 最长模式优先于 router.go 的 /api/ 前缀守卫，匿名可达；只读无身份依赖。
+	root.HandleFunc("GET /api/booking-options", p.handleCustomerBookingOptions)
 	api.HandleFunc("GET /api/appointments/{id}", p.handleCustomerGet)
 	api.HandleFunc("PUT /api/appointments/{id}/cancel", p.handleCustomerCancel)
 	api.HandleFunc("PUT /api/appointments/{id}/reschedule", p.handleCustomerReschedule)

@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"anmo/server/internal/shared"
 )
 
 // rawDo goroutine 安全的请求（不在子协程里 t.Fatal）。
@@ -223,7 +225,7 @@ func TestGUARD_H1_AdminRouteMatrixAndAnonymous(t *testing.T) {
 		{"GET", "/api/appointments/" + f.aptB},
 		{"PUT", "/api/appointments/" + f.aptB + "/cancel"},
 		{"PUT", "/api/appointments/" + f.aptB + "/reschedule"},
-		{"GET", "/api/services"},
+		// GET /api/services 已移 root 组对游客开放（V2.2 第五批，见 H8），不再计入 401 矩阵
 		{"GET", "/api/home"},
 		{"GET", "/api/settings"},
 	}
@@ -520,5 +522,40 @@ func TestGUARD_H7_BookingStormNoDeadlockNo5xx(t *testing.T) {
 	}
 	if five > 0 {
 		t.Errorf("风暴产生 %d 个 5xx（并发控制不应以 500 暴露）", five)
+	}
+}
+
+// H8：游客浏览（V2.2 第五批）——GET /api/services 与 GET /api/booking-options
+// 注册在 root 组（精确路径优先于 /api/ 前缀守卫），无 token 可达；
+// 其余 /api/* 不受影响（豁免没有扩大化）。
+func TestGUARD_H8_GuestBrowsePublicEndpoints(t *testing.T) {
+	c := newServer(t)
+
+	// 无 token 游客浏览服务目录 → 200
+	status, out, err := rawDo(c.base, "GET", "/api/services", "", nil)
+	if err != nil || status != 200 {
+		t.Fatalf("无 token GET /api/services = %d（应为 200，err=%v）: %v", status, err, out)
+	}
+	if _, ok := out["data"].(map[string]any); !ok {
+		t.Fatalf("游客 catalog 响应缺少 data: %v", out)
+	}
+
+	// 无 token 游客浏览可约时段 → 200
+	day := shared.NowShanghai().AddDate(0, 0, 2).Format("2006-01-02")
+	status, out, err = rawDo(c.base, "GET", "/api/booking-options?date="+day, "", nil)
+	if err != nil || status != 200 {
+		t.Fatalf("无 token GET /api/booking-options?date=%s = %d（应为 200，err=%v）: %v", day, status, err, out)
+	}
+
+	// 回归：写接口与其余 api 组端点无 token 仍 401（豁免没有扩大化）
+	for _, ep := range []struct{ method, path string }{
+		{"POST", "/api/appointments"},
+		{"GET", "/api/me/profile"},
+		{"GET", "/api/appointments"},
+	} {
+		status, _, err = rawDo(c.base, ep.method, ep.path, "", nil)
+		if err != nil || status != 401 {
+			t.Errorf("无 token %s %s = %d（应为 401，err=%v）", ep.method, ep.path, status, err)
+		}
 	}
 }

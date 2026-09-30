@@ -43,7 +43,8 @@ Page({
     const app = getApp()
     app.ready((loggedIn) => {
       this.setData({ loggedIn })
-      if (!loggedIn) return
+      // 服务目录与可约时段已对游客开放（V2.2 第五批）：未登录也可浏览，提交时才要求登录；
+      // 店铺信息（/api/settings 仍是登录资源）只在登录链路上拉（成功页 loadShop）。
       // 跨零点重算日期条（页面可能在前台挂过夜）
       const days = this.data.days
       if (!days.length || days[0].value !== fmt.todayStr()) {
@@ -112,10 +113,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    if (!this.data.loggedIn) {
-      wx.stopPullDownRefresh()
-      return
-    }
+    // 目录/时段已对游客开放（V2.2 第五批）：游客下拉同样可刷新，不再短路
     this.loadServices()
     this.loadOptions()
     setTimeout(() => wx.stopPullDownRefresh(), 400)

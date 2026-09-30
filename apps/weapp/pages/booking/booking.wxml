@@ -48,13 +48,6 @@
       <view class="page-sub">只需三步：选项目、选时间、留个备注</view>
     </view>
 
-    <view wx:if="{{!loggedIn}}" class="card plain login-tip pressable" bindtap="goLogin">
-      <app-icon name="lock" size="18" />
-      <text>预约需要先登录</text>
-      <text class="login-go">去登录</text>
-      <app-icon name="chevron-right" size="16" />
-    </view>
-
     <!-- 1 选择服务 -->
     <view class="block">
       <view class="section-title"><text class="step-no">1</text>选择服务</view>
