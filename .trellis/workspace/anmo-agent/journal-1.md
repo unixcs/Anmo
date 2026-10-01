@@ -945,3 +945,36 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 **验证**: automator 16/16 真生产全绿 + 几何复核（mask=视口、submit-bar 钉底）+ 巡检零 console error + H5 build
 **提交**: d09e1f4
 **遗留**: 无代码遗留；发布运维项同 Next Steps
+
+## Session 11: V2.2 十轮子代理对抗式审查（墨菲定律验收）——只审不改
+<!-- trellis-session: v=2 fp=c9dd9f43307227d5 -->
+
+**Date**: 2026-10-01
+**Task**: 10-01-adversarial-review-10rounds
+**Branch**: `main`
+
+### Summary
+
+十轮独立子代理对抗审查（6 域并行：架构性能/并发完整性/安全越权/H5契约/小程序UI/业务规则对抗 → 2 轮墨菲终审：端到端灾难剧本+双端一致性 → 2 轮对抗证伪）。26 条高优先级发现逐条复核：0 条 REFUTED，严重度系统性校准（8 条 P1 仅 2 条维持），3 条加重（备份 cron 零日志、BUSY 主路径裸奔、UI 撤销守卫同缺）。核心结论：架构骨架健康（并发模型/不变量/事务纪律站住），乱麻感来自五个可批量修复的系统性模式——配置开发友好兜底无生产守卫、失败伪装空态（双端同病）、部署运维层裸奔、适老化硬指标未达标、双端漂移。F9/F10/F12/D17/D21 确认为冻结决策知情接受。产出 .trellis/tasks/10-01-adversarial-review-10rounds/REVIEW.md，含第九批修复批次建议（六组约 290 行）。
+
+### Testing
+
+- [OK] 证伪轮逐条打开 file:line 复核，含反证检索（compose 实际值、UI 侧守卫、login 路由行为、官方保留字文档）
+- [OK] R2 附带 adversarial/transaction/appointment 测试全绿佐证；R4 npm run build、R1/R3/R6/R7 go build 通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 按 REVIEW.md §7 六组批次推进第九批（安全闸最优先：compose ANMO_SMS_MODE 一行即堵住任意会员接管）
+- 运维侧一次核验：systemctl is-enabled docker nginx cloudflared；yun1 backups 独立盘核实
+
+# PHASE RESULT
+
+**Phase**: V2.2 十轮对抗式审查（只审不改）
+**Result**: 完成
+**验证**: 26 条高优发现全部经证伪轮复核（0 REFUTED / 16 CONFIRMED / 10 PARTIAL）；REVIEW.md 含墨菲十剧本判定与修复批次
+**提交**: 本 session（REVIEW.md + 归档）
+**遗留**: 修复待第九批执行
