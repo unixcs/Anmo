@@ -1049,3 +1049,26 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 **验证**: server 15 包全绿 + admin vue-tsc/build 绿 + e2e 三域双格式/筛选/权限/审计断言通过
 **提交**: 见本次 commit
 **遗留**: 生产部署（与第九批合并收口）；P2 域与日期控件未做（知情不做的范围见提案 §5）
+
+## Session 14: V2.2 第九批+第十批生产部署收口（yun1：镜像 v4 + 双 dist 换装 + 导出冒烟全绿）
+<!-- trellis-session: v=2 fp=deploy-batch9-10-yun1-20261001 -->
+
+**Date**: 2026-10-01
+**Branch**: `main`
+
+### Summary
+
+按 runbook（/opt/anmo/README.md）将第九批（微信小程序+H5 品牌体系）与第十批（D30 数据导出）一次性部署到 yun1 生产。流程全按 runbook 执行：WSL 构建镜像 `anmo-server:v4`（37.3MB，含 RowCap 20k 对齐 200m mem_limit 的提交 62f67ae）→ `docker save | gzip -1 | ssh yun1 'gunzip | docker load'` 传输；admin dist `--base=/admin-ui/` 重建（assets/index-Le_JcjFL.js）、customer dist（index-CU0vU5VR.js）scp 到 `*.new` 暂存；部署前快照 anmo-20261001-212551.db；compose 远程 python 编辑（仅锚点断言后写）：image v4 + healthcheck（wget /healthz 30s/5s/3/start 15s）+ json-file 日志 10m×3 → `up -d --force-recreate server` 起 healthy；dist 原子 mv 换装 + `docker restart anmo-nginx`（bind-mount inode 必须重启）；backup-sqlite.sh 默认 IMAGE 改 v4 同步到 yun1 并实跑验证（anmo-20261001-212703.db, 561KB）。
+
+冒烟（公网 + yun1 本机 127.0.0.1:18090 双路径）：healthz 200、匿名 GET /api/services 200、admin/H5 页面均为新 bundle hash、未登录 POST /admin/export/members 401、凭据只在 yun1 本机解析（sed 提取→python 组 JSON→终端零回显）登录 200（68ms）→ 导出冒烟：members txt 200（X-Export-Rows: 13、Content-Disposition filename*=utf-8''anmo-会员总表.txt、正文 `# 会员总表`+`手机号已打码`、掩码 138****2001、手机号列无一处真实 11 位号）、members xlsx 200（PK 魔数 504b）、payments txt(status=VALID) 200（11 条）；schema_migrations 15/15（读部署后快照校验，v3→v4 无新 migration 符合预期）；容器 healthy + healthcheck 心跳正常。
+
+排查插曲（两条假阳性，记录防再踩）：① bash `$'\x00'` 无法在字符串存 NUL——空模式 `grep -q ''` 匹配所有行造成"HAS_NUL"误报，python 复核 nul_count=0；② `grep -cE '[0-9]{11}'` 命中 13 处疑手机号泄漏——实为 member_no（M202609270001，M+日期+4 序号共 12 位数字），python 数字脱敏上下文复核全部为编号列，掩码无恙。另：anmo-server 容器不发布宿主机端口，本机冒烟走 anmo-nginx 18090。
+
+### Status
+
+[OK] **Completed** — 生产已运行第九批+第十批
+
+### Next Steps
+
+- **人工动作**：微信小程序第九批变更（slot-picker/booking/me）需在微信开发者工具手动重新上传体验版（无法自动化）
+- P2 候选（导出）：日期筛选控件、卡流水/预约/会员卡三域、剪贴板复制 Markdown 直喂 AI

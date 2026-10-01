@@ -19,7 +19,7 @@ KEEP=14
 BACKUPS="$COMPOSE_DIR/backups"
 CONTAINER="${CONTAINER:-anmo-server}"
 # F5：镜像 tag 可用环境变量对齐实际部署（compose 默认 sqlite，yun1 现网 v2）。
-IMAGE="${ANMO_IMAGE:-anmo-server:v2}"
+IMAGE="${ANMO_IMAGE:-anmo-server:v4}"
 # 快照体积下限：24 张表 + 种子数据远不止几 KB；低于此值视为快照失败，
 # 绝不能让它顶替好备份进入保留轮换（F5/墨菲定律）。
 MIN_SNAPSHOT_BYTES=4096
