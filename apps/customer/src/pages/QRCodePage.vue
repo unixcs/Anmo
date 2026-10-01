@@ -4,11 +4,11 @@ import QRCode from 'qrcode'
 import { api } from '../core/api/endpoints'
 import type { Appointment } from '../core/models/models'
 import { todayStr as bjTodayStr } from '../core/logic/booking'
-import { notify } from '../platform/notify/toast'
 import AppIcon from '../components/ui/AppIcon.vue'
 import AppStatusBadge from '../components/ui/AppStatusBadge.vue'
 import AppSkeleton from '../components/ui/AppSkeleton.vue'
 import AppEmpty from '../components/ui/AppEmpty.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 // 核销码页（BRAND-GUIDELINES §6 / D21）：顾客永远只出示一个码。
 // 会员码 ANMO-MEMBER:<member_id> 仅对持 ACTIVE 卡顾客展示；
@@ -25,6 +25,7 @@ const memberId = ref('')
 const memberQr = ref('')
 const hasActiveCard = ref(false)
 const loading = ref(true)
+const failed = ref(false)
 const nowText = ref('')
 const todayApts = ref<TodayApt[]>([])
 let timer: number | undefined
@@ -46,9 +47,7 @@ function aptTime(a: Appointment): string {
   return a.scheduled_start.slice(11, 16)
 }
 
-onMounted(async () => {
-  tick()
-  timer = window.setInterval(tick, 1000)
+async function load(): Promise<void> {
   try {
     const [profile, cards, apts] = await Promise.all([
       api.myProfile(),
@@ -80,11 +79,18 @@ onMounted(async () => {
         const names = (item.services ?? []).map((s) => s.service_name_snapshot).filter(Boolean)
         return { ...a, serviceNames: names.join(' · ') }
       })
-  } catch (e) {
-    notify((e as Error).message)
+  } catch {
+    // 加载失败绝不能落进「暂无有效会员卡」分支（持卡顾客会被误判没卡）
+    failed.value = true
   } finally {
     loading.value = false
   }
+}
+
+onMounted(() => {
+  tick()
+  timer = window.setInterval(tick, 1000)
+  load()
 })
 
 onUnmounted(() => {
@@ -100,6 +106,14 @@ onUnmounted(() => {
     </div>
 
     <AppSkeleton v-if="loading" variant="card" />
+
+    <template v-else-if="failed">
+      <div class="card">
+        <AppEmpty icon="alert" main="网络不可用" sub="核销码信息没能加载，请稍后再试">
+          <AppButton variant="outline" size="sm" @click="load">重新加载</AppButton>
+        </AppEmpty>
+      </div>
+    </template>
 
     <template v-else>
       <!-- 会员码块：仅持 ACTIVE 卡顾客可见（D21） -->

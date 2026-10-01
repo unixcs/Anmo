@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"anmo/server/internal/shared"
@@ -84,13 +85,16 @@ func Logging(log *slog.Logger) func(http.Handler) http.Handler {
 
 // OperationLog writes an audit entry after every admin mutation (non-GET
 // under /admin/). The writer comes from the ops module via main (D7). Audit
-// failures never break the request.
+// failures never break the request. Customer mutations under /api/ are NOT
+// audited: the ops trail is the merchant's bookkeeping, and customer auth
+// attempts (login/register probes) would bury it (第九批审查).
 func OperationLog(write func(r *http.Request, status int)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rec := &statusRecorder{ResponseWriter: w, status: 200}
 			next.ServeHTTP(rec, r)
-			if r.Method != http.MethodGet && write != nil {
+			if r.Method != http.MethodGet && write != nil &&
+				strings.HasPrefix(r.URL.Path, "/admin/") {
 				write(r, rec.status)
 			}
 		})

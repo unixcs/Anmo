@@ -2,8 +2,10 @@
 package router
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"anmo/server/internal/middleware"
 	"anmo/server/internal/shared"
@@ -19,12 +21,22 @@ type Module interface {
 // New builds the root handler. Admin routes live under /admin/, customer
 // routes under /api/; both prefixes are auth-guarded here. Public routes
 // (login, SMS) are registered by the identity module directly on root.
-func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.Request, status int), mods ...Module) http.Handler {
+// health is the liveness probe dependency check (nil = process-only): it must
+// touch the database, or /healthz reports green while the store is dead (F14).
+func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.Request, status int), health func(ctx context.Context) error, mods ...Module) http.Handler {
 	root := http.NewServeMux()
 	admin := http.NewServeMux()
 	api := http.NewServeMux()
 
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		if health != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := health(ctx); err != nil {
+				shared.Fail(w, shared.NewErr("DB_DOWN", "database unavailable", http.StatusServiceUnavailable))
+				return
+			}
+		}
 		shared.OK(w, map[string]string{"status": "ok"})
 	})
 
@@ -51,8 +63,10 @@ func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.R
 	root.Handle("/api/", middleware.NewAuth(verify, false)(api))
 
 	handler := middleware.Recover(log)(root)
+	handler = middleware.AuthRateLimit(handler) // F3: 公开鉴权端点按 IP 限速
 	handler = middleware.OperationLog(opLog)(handler)
 	handler = middleware.Logging(log)(handler)
+	handler = middleware.BodyLimit(1 << 20)(handler) // F15: 1MiB 请求体上限（防恶意大包）
 	handler = middleware.RequestIDMw(handler)
 	return handler
 }

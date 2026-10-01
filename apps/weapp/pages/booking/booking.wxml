@@ -63,7 +63,7 @@
               class="svc pressable {{svcIdx === index ? 'picked' : ''}}"
               data-idx="{{index}}" bindtap="pickService">
           <view class="svc-name">{{item.name}}</view>
-          <view class="svc-meta num">{{item.minutes}}分钟 · ¥{{item.price}}</view>
+          <view class="svc-meta num">{{item.minutes}}分钟 · {{item.price}}</view>
         </view>
       </view>
     </view>
@@ -85,7 +85,8 @@
     <view class="block" wx:if="{{svcIdx >= 0}}">
       <view class="section-title"><text class="step-no">3</text>上午 / 下午（必选）</view>
       <!-- 状态提示由 slot-picker 分半天渲染：已闭店 / 时段已过 / 已约满 / 剩 N 个名额 -->
-      <slot-picker options="{{options}}" part="{{part}}" slot="{{slot}}" bind:change="onPick" />
+      <view wx:if="{{optsErr}}" class="card plain empty-mini">时段查询失败，<text class="link" bindtap="loadOptions">点击重试</text></view>
+      <slot-picker wx:else options="{{options}}" part="{{part}}" picked-slot="{{slot}}" bind:change="onPick" />
     </view>
 
     <!-- 4 备注 -->
@@ -117,11 +118,11 @@
     </view>
 
     <!-- 资料完善半屏提示（V2.2 R4）：资料不全时首次点提交弹出，轻量不打断 -->
-    <view wx:if="{{profileSheet}}" class="mask" bindtap="closeProfileSheet">
+    <view wx:if="{{profileSheet}}" class="mask" bindtap="closeProfileSheet" catchtouchmove="noop">
       <view class="sheet" catchtap="noop">
         <view class="sheet-grab"></view>
         <view class="sheet-title">完善一下资料</view>
-        <view class="sheet-sub">填写手机号，方便技师联系您确认预约。</view>
+        <view class="sheet-sub">先完善资料，店主更好安排；不填也可直接预约。</view>
         <view class="profile-sheet-ops">
           <button class="btn primary block" bindtap="goProfile">去完善</button>
           <button class="btn ghost block" bindtap="skipProfile">先跳过，继续预约</button>

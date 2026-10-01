@@ -228,6 +228,14 @@ func (p *Provider) IssueCardTx(ctx context.Context, tx shared.Tx, memberID, temp
 	if err != nil {
 		return nil, shared.Server("CARD_TEMPLATE_QUERY", err)
 	}
+	// F8: 模板有效期已结束的卡不允许再发——发出来的卡 ACTIVE 却立即过期，
+	// 顾客端展示与核销校验直接打架。
+	if vu.Valid {
+		today := shared.NowShanghai().Format("2006-01-02")
+		if vu.String < today {
+			return nil, shared.Conflict("CARD_TEMPLATE_EXPIRED", "该卡模板有效期已结束，无法发卡")
+		}
+	}
 
 	cardID := shared.NewID()
 	validFrom := shared.NowShanghai().Format("2006-01-02")

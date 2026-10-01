@@ -56,7 +56,9 @@ Page({
 
   needLogin() {
     this.setData({ ready: false, hasActiveCard: false, todayApts: [] })
-    wx.navigateTo({ url: '/pages/login/login' })
+    // F19：redirectTo 替换当前页——navigateTo 会在「token 失效 + 静默登录失败」
+    // 时把 qrcode/login 压成循环栈，登录成功 navigateBack 又回到 qrcode 再跳
+    wx.redirectTo({ url: '/pages/login/login' })
   },
 
   load() {

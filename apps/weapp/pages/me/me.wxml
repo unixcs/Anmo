@@ -33,7 +33,7 @@
     </view>
 
     <!-- 编辑资料弹层（V2.2 第八批）：页内卡片观感太弱 → 半屏 Sheet（遮罩+标题+大按钮），与认领/H5 密码弹层同构 -->
-    <view wx:if="{{editing}}" class="mask" bindtap="cancelEdit">
+    <view wx:if="{{editing}}" class="mask" bindtap="cancelEdit" catchtouchmove="noop">
       <view class="sheet" catchtap="noop">
         <view class="sheet-grab"></view>
         <view class="sheet-title">完善个人资料</view>
@@ -94,7 +94,7 @@
     <button class="btn outline block lg logout" bindtap="logout">退出登录</button>
 
     <!-- 撞号认领弹层（V2.2 R4）：补手机号撞号后凭 H5 密码转绑老账号 -->
-    <view wx:if="{{claim.show}}" class="mask" bindtap="closeClaim">
+    <view wx:if="{{claim.show}}" class="mask" bindtap="closeClaim" catchtouchmove="noop">
       <view class="sheet" catchtap="noop">
         <view class="sheet-grab"></view>
         <view class="sheet-title">关联已有账号</view>
@@ -118,7 +118,7 @@
     </view>
 
     <!-- 设置 H5 密码弹层（V2.2 R5）：微信身份即凭证，设置后可在 H5 用手机号密码登录 -->
-    <view wx:if="{{pwd.show}}" class="mask" bindtap="closePwd">
+    <view wx:if="{{pwd.show}}" class="mask" bindtap="closePwd" catchtouchmove="noop">
       <view class="sheet" catchtap="noop">
         <view class="sheet-grab"></view>
         <view class="sheet-title">设置 H5 密码</view>

@@ -31,7 +31,7 @@ const loadingServices = ref(true)
 const svcErr = ref(false)
 
 // 预约成功页（goal §19/§66）：页内成功态，展示服务/日期/时间 + 门店信息卡
-const success = ref<{ name: string; date: string; time: string; fuzzy: boolean } | null>(null)
+const success = ref<{ name: string; date: string; time: string; fuzzy: boolean; no?: string } | null>(null)
 const shop = ref({ address: '', phone: '', latitude: '', longitude: '' })
 
 // 资料完善半屏提示（V2.2 R4）：拿原始资料判完善度，拉不到不阻塞预约
@@ -238,12 +238,13 @@ async function submit(): Promise<void> {
     ? { start_time: `${dateStr} ${slotTime.value}` }
     : { date: dateStr, day_part: part.value }
   try {
-    await api.createAppointment(selectedService.value.id, target, note.value)
+    const appt = await api.createAppointment(selectedService.value.id, target, note.value)
     success.value = {
       name: selectedService.value.name,
       date: day.value[dayIdx.value].label,
       time: slotTime.value || (part.value === 'AM' ? '上午' : '下午'),
       fuzzy: !slotTime.value,
+      no: appt.appointment_no, // 与小程序成功页同口径：展示预约单号
     }
     try {
       const s = await api.publicSettings()
@@ -289,6 +290,7 @@ async function submit(): Promise<void> {
           <span>时间</span>
           <b class="num">{{ success.time }}<template v-if="success.fuzzy">（具体时间由店主安排）</template></b>
         </div>
+        <div v-if="success.no" class="done-row"><span>预约单号</span><b class="num">{{ success.no }}</b></div>
       </div>
       <p class="done-tip">到店后向商家出示「我的 → 核销码」即可</p>
       <ShopCard v-bind="shop" />
@@ -387,7 +389,7 @@ async function submit(): Promise<void> {
 
       <section v-if="serviceId" class="block">
         <h2><i class="step-no">4</i>备注（可选）</h2>
-        <textarea v-model="note" rows="2" class="textarea" placeholder="身体状况、偏好等" />
+        <textarea v-model="note" rows="2" class="textarea" maxlength="200" placeholder="身体状况、偏好等" />
       </section>
 
       <!-- 底部固定提交条（V2.2 R1）：不随内容滚动，bottom 让开 App.vue 底部 tab 栏 -->

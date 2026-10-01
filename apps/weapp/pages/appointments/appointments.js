@@ -153,6 +153,8 @@ Page({
     this.loadOptions()
   },
 
+  noop() {},
+
   closeReschedule() {
     if (this.data.busy) return
     this.setData({ reschedule: null })
@@ -165,7 +167,7 @@ Page({
 
   loadOptions() {
     const day = this.data.days[this.data.dayIdx]
-    this.setData({ options: null, part: '', slot: '' })
+    this.setData({ options: null, part: '', slot: '', optsErr: false })
     api
       .bookingOptions(day.value)
       .then((o) => {
@@ -174,7 +176,12 @@ Page({
         if (!cur || cur.value !== day.value) return
         this.setData({ options: fmt.trimPastSlots(o, day.value) })
       })
-      .catch(() => {})
+      .catch(() => {
+        // F-错误态：改期抽屉里查询失败给出重试入口
+        const cur = this.data.days[this.data.dayIdx]
+        if (!cur || cur.value !== day.value) return
+        this.setData({ optsErr: true })
+      })
   },
 
   onPick(e) {

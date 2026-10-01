@@ -6,17 +6,25 @@ import { yuan } from '../core/utils/format'
 import AppIcon from '../components/ui/AppIcon.vue'
 import AppSkeleton from '../components/ui/AppSkeleton.vue'
 import AppEmpty from '../components/ui/AppEmpty.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 const catalog = ref<Catalog>({ categories: [], services: [] })
 const loading = ref(true)
+const failed = ref(false)
 
-onMounted(async () => {
+async function load(): Promise<void> {
   try {
     catalog.value = await api.catalog()
+    failed.value = false
+  } catch {
+    // 目录拉取失败不能渲染成「暂无服务项目」：失败态 + 重试
+    failed.value = true
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 
 function byCategory(): Record<string, typeof catalog.value.services> {
   const map: Record<string, typeof catalog.value.services> = {}
@@ -37,6 +45,15 @@ function byCategory(): Record<string, typeof catalog.value.services> {
     </div>
 
     <AppSkeleton v-if="loading" variant="card" />
+
+    <AppEmpty
+      v-else-if="failed"
+      icon="alert"
+      main="网络不可用"
+      sub="服务列表没能加载，请稍后再试"
+    >
+      <AppButton variant="outline" size="sm" @click="load">重新加载</AppButton>
+    </AppEmpty>
 
     <AppEmpty
       v-else-if="!catalog.services.length"

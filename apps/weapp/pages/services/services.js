@@ -17,6 +17,7 @@ Page({
   data: {
     groups: [], // { id, name, items }；无分类的服务归"其他"组（id 为空串）
     loading: true,
+    failed: false, // 加载失败必须和「暂无服务」区分开（不能把失败伪装成空态）
   },
 
   onShow() {
@@ -39,10 +40,14 @@ Page({
         }))
         const others = services.filter((s) => !cats.some((c) => c.id === s.category_id))
         if (others.length) groups.push({ id: '', name: '其他', items: others.map(toCard) })
-        this.setData({ groups, loading: false })
+        this.setData({ groups, loading: false, failed: false })
       })
-      .catch(() => this.setData({ loading: false }))
+      .catch(() => this.setData({ groups: [], loading: false, failed: true }))
       .then(() => done && done())
+  },
+
+  retry() {
+    this.load()
   },
 
   goBooking(e) {

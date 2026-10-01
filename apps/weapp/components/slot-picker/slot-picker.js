@@ -6,7 +6,8 @@ Component({
   properties: {
     options: { type: Object, value: null }, // BookingOptions
     part: { type: String, value: '' }, // 'AM' | 'PM' | ''
-    slot: { type: String, value: '' }, // 'HH:MM' | ''
+    // F18：`slot` 是 WXML 保留属性名，父页赋值恒失效 → 改名 pickedSlot（wxml 用 picked-slot）
+    pickedSlot: { type: String, value: '' }, // 'HH:MM' | ''
   },
 
   methods: {

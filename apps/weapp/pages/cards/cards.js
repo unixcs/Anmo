@@ -23,6 +23,7 @@ Page({
   data: {
     cards: [],
     loading: true,
+    failed: false, // 拉取失败不能伪装成「还没有会员卡」
     loggedIn: false,
     pickedId: '',
     picked: null, // 选中的卡对象（用于明细头）
@@ -67,18 +68,23 @@ Page({
           pickedId: '',
           picked: null,
           txns: [],
+          failed: false,
         })
         if (done) done()
       })
       .catch((e) => {
-        this.setData({ loading: false })
         if (done) done()
         if (e.needLogin) {
-          this.setData({ loggedIn: false })
+          this.setData({ loading: false, loggedIn: false, failed: false })
           return
         }
-        wx.showToast({ title: e.message, icon: 'none' })
+        // 失败态（可重试）替代一次性 toast + 空卡展示
+        this.setData({ loading: false, failed: true })
       })
+  },
+
+  retry() {
+    this.load()
   },
 
   pick(e) {

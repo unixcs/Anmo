@@ -47,9 +47,15 @@ type DB interface {
 
 // RunInTx executes fn inside a database transaction, committing on nil error
 // and rolling back on any error. The rollback error never masks fn's error.
+// SQLITE_BUSY on BEGIN/Commit (all writers queue at BEGIN IMMEDIATE; a busy
+// timeout expiry surfaces here, F7) is retryable business contention → 409
+// LOCK_RETRY, not a 500.
 func RunInTx(ctx context.Context, db DB, fn func(tx Tx) error) error {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
+		if IsBusy(err) {
+			return Conflict("LOCK_RETRY", "操作繁忙，请重试")
+		}
 		return Server("TX_BEGIN", err)
 	}
 	if err := fn(tx); err != nil {
@@ -57,6 +63,9 @@ func RunInTx(ctx context.Context, db DB, fn func(tx Tx) error) error {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
+		if IsBusy(err) {
+			return Conflict("LOCK_RETRY", "操作繁忙，请重试")
+		}
 		return Server("TX_COMMIT", err)
 	}
 	return nil

@@ -142,8 +142,10 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.CustomerTokenHours == 0 {
 		cfg.Auth.CustomerTokenHours = 24 * 7
 	}
+	// F1（第九批审查）：默认 off 而非 dev——未显式配置时生产不得静默打开
+	// 固定验证码后门。本地开发在 config.example.yaml / 测试里显式设 dev。
 	if cfg.SMS.Mode == "" {
-		cfg.SMS.Mode = "dev"
+		cfg.SMS.Mode = "off"
 	}
 	if cfg.SMS.CodeTTL == 0 {
 		cfg.SMS.CodeTTL = 300
@@ -193,8 +195,12 @@ func validate(cfg *Config) error {
 	if cfg.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret is required")
 	}
+	// F16（第九批审查）：拒绝占位符与过短密钥——弱 JWT secret 等于没有鉴权。
+	if len(cfg.Auth.JWTSecret) < 32 || strings.HasPrefix(cfg.Auth.JWTSecret, "change-me") {
+		return fmt.Errorf("auth.jwt_secret must be a random value of at least 32 characters (e.g. `openssl rand -hex 32`), not the example placeholder")
+	}
 	// sms.mode 合法值（V2.2 R6）：dev | off。生产必须显式 off——runbook 记录；
-	// 未设置时 setDefaults 兜底 dev（本地开发形态），部署时务必覆盖。
+	// 未设置时 setDefaults 兜底 off（F1：默认安全），本地开发需显式 dev。
 	if cfg.SMS.Mode != "dev" && cfg.SMS.Mode != "off" {
 		return fmt.Errorf("sms.mode must be dev or off, got %q", cfg.SMS.Mode)
 	}

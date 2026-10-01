@@ -81,9 +81,9 @@ func TestWalkInSettleWithPhoneArchivesMemberAndRecord(t *testing.T) {
 		t.Fatalf("walkin record must not link appointment/redemption")
 	}
 
-	// 幂等回放：同 key 返回原 payment，记录按 payment 重建
+	// 幂等回放：同 key 同体返回原 payment，记录按 payment 重建（F6：体必须一致）
 	res2, err := e.p.WalkInSettle(ctx, WalkInInput{
-		Phone: "13911112222", ServiceID: e.svcID, PayMethod: "CASH", AmountCents: 1,
+		Phone: "13911112222", ServiceID: e.svcID, PayMethod: "WECHAT_TRANSFER", AmountCents: 12800,
 		Record: RecordFields{Communicated: true}, OperatorID: "op-1", IdemKey: "walkin-settle-1",
 	})
 	if err != nil {
@@ -97,6 +97,15 @@ func TestWalkInSettleWithPhoneArchivesMemberAndRecord(t *testing.T) {
 	}
 	if res2.Record == nil || res2.Record.ID != res.Record.ID {
 		t.Fatalf("replay record = %+v", res2.Record)
+	}
+
+	// F6：同 key 换了方式/金额的重放 → 409 IDEM_CONFLICT（不回放原收款）
+	_, err = e.p.WalkInSettle(ctx, WalkInInput{
+		Phone: "13911112222", ServiceID: e.svcID, PayMethod: "CASH", AmountCents: 1,
+		Record: RecordFields{Communicated: true}, OperatorID: "op-1", IdemKey: "walkin-settle-1",
+	})
+	if !shared.Is(err, "IDEM_CONFLICT") {
+		t.Fatalf("mismatched replay = %v, want IDEM_CONFLICT", err)
 	}
 
 	// 再次到店（新 key，同手机号）→ 匹配既有会员，不新建

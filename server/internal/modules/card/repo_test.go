@@ -262,3 +262,65 @@ func TestUsableCardsFiltering(t *testing.T) {
 		t.Fatalf("usable for other service: n=%d err=%v", len(cards), err)
 	}
 }
+
+// F8（第九批审查）：未来生效的卡（预售/预发）不可核销、不出现在顾客可用卡列表。
+func TestCardNotStartedRejected(t *testing.T) {
+	e := newCardEnv(t)
+	ctx := context.Background()
+	tomorrow := shared.NowShanghai().AddDate(0, 0, 1).Format("2006-01-02")
+	nextYear := shared.NowShanghai().AddDate(1, 0, 0).Format("2006-01-02")
+	tpl, err := e.p.CreateTemplate(ctx, NewTemplate{
+		Name: "预售卡", Type: "COUNT", TotalCount: 5, PriceCents: 50000,
+		ValidityType: "FIXED", ValidFrom: &tomorrow, ValidUntil: &nextYear,
+	})
+	if err != nil {
+		t.Fatalf("template: %v", err)
+	}
+	if err := e.p.SetServiceRules(ctx, tpl.ID, []string{e.svcID}); err != nil {
+		t.Fatalf("rules: %v", err)
+	}
+	c, err := e.p.IssueCard(ctx, e.mbrID, tpl.ID, "op-1")
+	if err != nil {
+		t.Fatalf("issue future card: %v", err)
+	}
+	// 锁定后校验：CARD_NOT_STARTED
+	err = shared.RunInTx(ctx, e.p.db, func(tx shared.Tx) error {
+		locked, e2 := e.p.LockForRedeem(ctx, tx, c.ID)
+		if e2 != nil {
+			return e2
+		}
+		return e.p.ValidateForRedeem(ctx, tx, locked, e.svcID, 1)
+	})
+	if !shared.Is(err, "CARD_NOT_STARTED") {
+		t.Fatalf("validate future card = %v, want CARD_NOT_STARTED", err)
+	}
+	// 可用卡列表也不应出现
+	cards, err := e.p.UsableCards(ctx, e.mbrID, e.svcID)
+	if err != nil {
+		t.Fatalf("usable: %v", err)
+	}
+	for _, uc := range cards {
+		if uc.ID == c.ID {
+			t.Fatalf("future card must not appear in usable list")
+		}
+	}
+}
+
+// F8（第九批审查）：有效期已结束的模板不允许再发卡。
+func TestIssueFromExpiredTemplateRejected(t *testing.T) {
+	e := newCardEnv(t)
+	ctx := context.Background()
+	yesterday := shared.NowShanghai().AddDate(0, 0, -1).Format("2006-01-02")
+	lastYear := shared.NowShanghai().AddDate(-1, 0, 0).Format("2006-01-02")
+	tpl, err := e.p.CreateTemplate(ctx, NewTemplate{
+		Name: "已过气卡", Type: "COUNT", TotalCount: 5, PriceCents: 50000,
+		ValidityType: "FIXED", ValidFrom: &lastYear, ValidUntil: &yesterday,
+	})
+	if err != nil {
+		t.Fatalf("template: %v", err)
+	}
+	_, err = e.p.IssueCard(ctx, e.mbrID, tpl.ID, "op-1")
+	if !shared.Is(err, "CARD_TEMPLATE_EXPIRED") {
+		t.Fatalf("issue from expired template = %v, want CARD_TEMPLATE_EXPIRED", err)
+	}
+}

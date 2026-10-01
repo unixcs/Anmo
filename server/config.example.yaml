@@ -7,7 +7,10 @@ database:
   path: "data/anmo.db"
 
 auth:
-  jwt_secret: "change-me-in-production"
+  # F16：启动时校验——占位符（change-me*）或短于 32 字符直接拒绝启动。
+  # 下面是随机生成的示例值；复制本文件时务必重新生成：
+  #   openssl rand -hex 32
+  jwt_secret: "7f3a9c1d5e2b48a09d6f3c8e1b7a45209d8c3e6f1a4b7c0d9e2f5a8b3c6d9e1f"
   admin_token_hours: 12
   customer_token_hours: 168
   admin_phone: "13800000000"
@@ -16,7 +19,8 @@ auth:
 sms:
   # V2.2 起 H5 为手机号+密码登录，短信验证码登录已下线（R6）。
   #   dev: 本地开发过渡用，固定验证码 123456 并写入日志
-  #   off: 一律拒绝（410 SMS_DISABLED）——生产必须设为 off
+  #   off: 一律拒绝（410 SMS_DISABLED）
+  # F1：未配置时程序默认 off（默认安全）。本地开发显式设 dev；
   # 部署 runbook：生产 config.yaml 必须显式 sms.mode: "off"。
   mode: "dev"
   code_ttl_seconds: 300

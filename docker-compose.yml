@@ -9,10 +9,14 @@ services:
     environment:
       ANMO_SERVER_ADDR: ":8080"
       ANMO_DB_PATH: "/data/anmo.db"
-      ANMO_AUTH_JWT_SECRET: "change-me-in-production"
+      # F16：JWT secret 必须 ≥32 位随机值（启动时校验，占位符直接拒绝）。
+      # 这里的值仅为本仓库演示形态生成的随机数；生产部署必须另行生成：
+      #   openssl rand -hex 32
+      ANMO_AUTH_JWT_SECRET: "e0db503d9cbe53d09c1e26161664464dc137e507605d87b90fe4435f991d3cfc"
       ANMO_AUTH_ADMIN_PHONE: "13800000000"
       ANMO_AUTH_ADMIN_PASSWORD_SEED: "anmo-admin-2026"
-      ANMO_SMS_MODE: "dev"
+      # F1：短信登录已下线，默认关闭（默认安全）；本地联调需要时显式改 dev。
+      ANMO_SMS_MODE: "off"
       TZ: Asia/Shanghai
     volumes:
       - ./data:/data          # SQLite 主文件 + WAL/SHM 伴生文件
@@ -20,3 +24,17 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+    # F14：健康检查打穿到数据库（/healthz 内部执行 SELECT 1），
+    # 进程活着但库不可用时容器状态必须能看出来。
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # 防止 json-file 日志无限增长拖垮宿主机磁盘（运维防线）。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

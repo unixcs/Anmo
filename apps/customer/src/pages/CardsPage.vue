@@ -6,10 +6,12 @@ import { notify } from '../platform/notify/toast'
 import AppIcon from '../components/ui/AppIcon.vue'
 import AppSkeleton from '../components/ui/AppSkeleton.vue'
 import AppEmpty from '../components/ui/AppEmpty.vue'
+import AppButton from '../components/ui/AppButton.vue'
 
 // 余额不是唯一真相：remaining_count 是缓存，card_transaction 是历史（§§）
 const cards = ref<MemberCard[]>([])
 const loading = ref(true)
+const failed = ref(false)
 const pickedId = ref('')
 const txs = ref<CardTx[]>([])
 const txLoading = ref(false)
@@ -58,17 +60,21 @@ function fmtDay(iso: string | null): string {
   return iso ? iso.slice(0, 10) : '长期有效'
 }
 
-onMounted(async () => {
+async function load(): Promise<void> {
   try {
     // http 解包后可能是 null（顾客无卡），归一成数组防崩
     cards.value = (await api.myCards()) ?? []
+    failed.value = false
     if (cards.value.length > 0) await pick(cards.value[0])
-  } catch (e) {
-    notify((e as Error).message)
+  } catch {
+    // 加载失败不能渲染成「还没有会员卡」（顾客会以为卡没了）：失败态 + 重试
+    failed.value = true
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -79,6 +85,15 @@ onMounted(async () => {
     </div>
 
     <AppSkeleton v-if="loading" variant="card" />
+
+    <AppEmpty
+      v-else-if="failed"
+      icon="alert"
+      main="网络不可用"
+      sub="没能取到会员卡信息，请稍后再试"
+    >
+      <AppButton variant="outline" size="sm" @click="load">重新加载</AppButton>
+    </AppEmpty>
 
     <AppEmpty
       v-else-if="!cards.length"

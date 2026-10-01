@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router'
 import { notify } from '../platform/notify/toast'
 import AppCell from '../components/ui/AppCell.vue'
 import AppStat from '../components/ui/AppStat.vue'
+import AppDialog from '../components/ui/AppDialog.vue'
 
 const router = useRouter()
 const name = ref('')
@@ -55,7 +56,15 @@ onMounted(async () => {
   }
 })
 
+const logoutAsk = ref(false)
+
+// 退出登录加一次确认（第九批）：手机上「退出」就在列表底部，误触直接丢登录态
 function logout(): void {
+  logoutAsk.value = true
+}
+
+function logoutConfirm(): void {
+  logoutAsk.value = false
   signOut()
   router.replace('/login')
 }
@@ -98,6 +107,16 @@ function logout(): void {
     <button type="button" class="btn outline block lg logout pressable" @click="logout">
       退出登录
     </button>
+
+    <AppDialog
+      :open="logoutAsk"
+      title="退出登录？"
+      body="退出后需要重新登录才能查看会员卡与预约。"
+      confirm-text="退出"
+      danger
+      @close="logoutAsk = false"
+      @confirm="logoutConfirm"
+    />
   </div>
 </template>
 

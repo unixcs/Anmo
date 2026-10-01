@@ -33,8 +33,13 @@ func (p *Provider) ValidateForRedeem(ctx context.Context, tx shared.Tx, c *Membe
 	if c.Status != "ACTIVE" {
 		return shared.Conflict("CARD_NOT_ACTIVE", "会员卡不可用（状态 "+c.Status+"）")
 	}
+	today := shared.NowShanghai().Format("2006-01-02")
+	// F8: 未来生效的卡（预售/预发）同样不可核销——此前只拦了过期一端。
+	// member_card.valid_from NOT NULL，直接字符串比较。
+	if today < c.ValidFrom {
+		return shared.Conflict("CARD_NOT_STARTED", "会员卡尚未到生效日期")
+	}
 	if c.ValidUntil != nil {
-		today := shared.NowShanghai().Format("2006-01-02")
 		if today > *c.ValidUntil {
 			return shared.Conflict("CARD_EXPIRED", "会员卡已过期")
 		}
@@ -247,10 +252,11 @@ func (p *Provider) UsableCards(ctx context.Context, memberID, serviceID string) 
 	rows, err := p.db.QueryContext(ctx,
 		`SELECT `+cardNamedColumns+` FROM member_card c JOIN card_template t ON t.id = c.card_template_id
 		 WHERE c.member_id = ? AND c.status = 'ACTIVE' AND c.remaining_count > 0
+		   AND (c.valid_from IS NULL OR c.valid_from <= ?)
 		   AND (c.valid_until IS NULL OR c.valid_until >= ?)
 		   AND EXISTS (SELECT 1 FROM card_service_rule r
 		               WHERE r.card_template_id = c.card_template_id AND r.service_id = ?)
-		 ORDER BY c.issued_at`, memberID, today, serviceID)
+		 ORDER BY c.issued_at`, memberID, today, today, serviceID)
 	if err != nil {
 		return nil, shared.Server("CARD_USABLE", err)
 	}

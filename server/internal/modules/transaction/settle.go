@@ -78,6 +78,13 @@ func wrapTxErr(code string, err error) error {
 	return shared.Server(code, err)
 }
 
+// idemConflict — F6（第九批审查）：同一幂等键被用于请求体不一致的重放。
+// 幂等回放的前提是"同一个请求"，体不匹配说明键被复用/串单——返回原结果
+// 会把别人的结算当成本次的，宁可 409 让操作者刷新重来。
+func idemConflict() error {
+	return shared.Conflict("IDEM_CONFLICT", "该幂等键已用于其他结算，请刷新后重试")
+}
+
 // primaryService returns the appointment's first snapshot service (V1: one service).
 func (p *Provider) primaryService(ctx context.Context, tx shared.Tx, aptID string) (*appointment.AppointmentService, error) {
 	svcs, err := p.appointments.ServicesOfTx(ctx, tx, aptID)
@@ -129,6 +136,11 @@ func (p *Provider) SettleByCard(ctx context.Context, aptID, cardID, serviceIDOpt
 			return err
 		}
 		if existing != nil {
+			// F6: 同键不同体的重放（复制错预约/串键）绝不能把别人的结算结果
+			// 当作本次响应返回——体不一致一律 409。
+			if existing.AppointmentID == nil || *existing.AppointmentID != aptID {
+				return idemConflict()
+			}
 			if existing.Status != "SUCCESS" {
 				// W1: the settlement this key identifies has been reversed —
 				// replay must not resurface it (nor a mismatched payment).
@@ -280,6 +292,10 @@ func (p *Provider) RedeemWalkIn(ctx context.Context, cardID, serviceID, operator
 			return err
 		}
 		if existing != nil {
+			// F6: 散客核销无预约；键体不一致（含把预约结算的键拿到散客重放）一律 409。
+			if existing.AppointmentID != nil || existing.MemberCardID != cardID || existing.ServiceID != serviceID {
+				return idemConflict()
+			}
 			if existing.Status != "SUCCESS" {
 				return shared.Conflict("RDM_REVERSED", "该结算对应的核销已被撤销")
 			}
@@ -397,6 +413,11 @@ func (p *Provider) SettleByPay(ctx context.Context, aptID, method string, amount
 			return err
 		}
 		if existing != nil {
+			// F6: 同键不同体（改了预约/方式/金额后重放）不回放原收款，一律 409。
+			if existing.AppointmentID == nil || *existing.AppointmentID != aptID ||
+				existing.Method != method || existing.AmountCents != amountCents {
+				return idemConflict()
+			}
 			payment = existing
 			return nil
 		}

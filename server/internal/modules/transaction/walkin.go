@@ -64,6 +64,11 @@ func (p *Provider) WalkInSettle(ctx context.Context, in WalkInInput) (*WalkInRes
 			return err
 		}
 		if existing != nil {
+			// F6: 散客快速结算无预约；键体不一致（换了方式/金额，或把预约
+			// 收款的键拿到这里重放）不回放，一律 409。
+			if existing.AppointmentID != nil || existing.Method != in.PayMethod || existing.AmountCents != in.AmountCents {
+				return idemConflict()
+			}
 			res.Payment = existing
 			res.Record, err = p.services.RecordByPaymentTx(ctx, tx, existing.ID)
 			if err != nil {

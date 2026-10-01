@@ -69,7 +69,13 @@
             </view>
           </view>
         </view>
-        <view wx:if="{{!loading && !services.length}}" class="empty">
+        <view wx:if="{{!loading && svcFailed && !services.length}}" class="empty">
+          <view class="empty-icon"><app-icon name="alert" size="40" /></view>
+          <view class="empty-main">网络不可用</view>
+          <view class="empty-sub">服务推荐没能加载</view>
+          <button class="btn outline sm" bindtap="retryServices">重新加载</button>
+        </view>
+        <view wx:elif="{{!loading && !services.length}}" class="empty">
           <view class="empty-icon"><app-icon name="inbox" size="76" stroke-width="1.4" /></view>
           <view class="empty-main">暂未上架服务</view>
           <view class="empty-sub">商家上架后会显示在这里</view>

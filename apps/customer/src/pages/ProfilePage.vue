@@ -31,8 +31,9 @@ async function save(): Promise<void> {
   try {
     const patch: Record<string, string> = {}
     if (name.value) patch.name = name.value
-    if (gender.value) patch.gender = gender.value
-    if (birthday.value) patch.birthday = birthday.value
+    // 性别/生日恒提交：条件发送会让「清空」永远保存不上（后端空串=清除该字段）
+    patch.gender = gender.value
+    patch.birthday = birthday.value
     const res = await api.updateProfile(patch)
     member.value = res.member
     notify('已保存')

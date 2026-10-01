@@ -48,7 +48,7 @@ Page({
       // 跨零点重算日期条（页面可能在前台挂过夜）
       const days = this.data.days
       if (!days.length || days[0].value !== fmt.todayStr()) {
-        this.setData({ days: buildDays(), dayIdx: 0, options: null, part: '', slot: '' })
+        this.setData({ days: buildDays(), dayIdx: 0, options: null, part: '', slot: '', optsErr: false })
       }
       // 首页"选服务去预约"经 globalData 传参（tab 页不能带参跳转）
       const prefer = app.globalData.pendingServiceId || ''
@@ -92,7 +92,7 @@ Page({
   loadOptions() {
     this.ensureFreshDays()
     const day = this.data.days[this.data.dayIdx]
-    this.setData({ options: null, part: '', slot: '' })
+    this.setData({ options: null, part: '', slot: '', optsErr: false })
     api
       .bookingOptions(day.value)
       .then((o) => {
@@ -102,14 +102,19 @@ Page({
         fmt.trimPastSlots(o, day.value)
         this.setData({ options: o })
       })
-      .catch(() => {})
+      .catch(() => {
+        // F-错误态：查询失败要给出重试入口，而不是永远停在「正在查询…」
+        const cur = this.data.days[this.data.dayIdx]
+        if (!cur || cur.value !== day.value) return
+        this.setData({ optsErr: true })
+      })
   },
 
   // 页面前台跨零点：日期条过期则整体重算（防提交昨天的日期）
   ensureFreshDays() {
     const days = this.data.days
     if (days.length && days[0].value === fmt.todayStr()) return
-    this.setData({ days: buildDays(), dayIdx: 0, options: null, part: '', slot: '' })
+    this.setData({ days: buildDays(), dayIdx: 0, options: null, part: '', slot: '', optsErr: false })
   },
 
   onPullDownRefresh() {

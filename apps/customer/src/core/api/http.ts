@@ -55,7 +55,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   const payload = (await res.json().catch(() => ({}))) as Envelope<T>
   if (!res.ok) {
-    if (res.status === 401) unauthorizedHandler?.()
+    // F-第九批：登录/注册端点本身返回 401（密码错误等）是业务语义，
+    // 不能触发全局登出——否则正在登录的游客会被「登出+跳转」打断。
+    if (res.status === 401 && !path.startsWith('/api/auth/')) unauthorizedHandler?.()
     throw new ApiError(payload.code ?? 'ERROR', payload.msg ?? `请求失败(${res.status})`, res.status)
   }
   return payload.data as T

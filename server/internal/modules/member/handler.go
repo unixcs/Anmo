@@ -168,5 +168,7 @@ func (p *Provider) handleUpdateMyProfile(w http.ResponseWriter, r *http.Request)
 		shared.Fail(w, err)
 		return
 	}
-	shared.OK(w, m)
+	// F17（第九批审查）：与 GET /api/me/profile 及 H5 端约定一致——
+	// 包一层 {member}（裸对象会让前端 res.member 得到 undefined）。
+	shared.OK(w, map[string]any{"member": m})
 }

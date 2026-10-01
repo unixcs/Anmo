@@ -17,6 +17,13 @@
       <view class="skeleton sk-line short"></view>
     </view>
 
+    <view wx:elif="{{failed}}" class="empty">
+      <view class="empty-icon"><app-icon name="alert" size="40" /></view>
+      <view class="empty-main">网络不可用</view>
+      <view class="empty-sub">会员卡信息没能加载，请稍后再试</view>
+      <button class="btn outline sm" bindtap="retry">重新加载</button>
+    </view>
+
     <view wx:elif="{{!cards.length}}" class="empty">
       <view class="empty-icon"><app-icon name="wallet" size="80" /></view>
       <view class="empty-main">还没有会员卡</view>

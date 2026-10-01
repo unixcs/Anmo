@@ -18,7 +18,7 @@ const services = ref<ServiceItem[]>([])
 const banners = ref<HomeBanner[]>([])
 const announcements = ref<HomeAnnouncement[]>([])
 const blocks = ref<HomeBlock[]>([])
-const hours = ref('09:00 - 20:00')
+const hours = ref('') // 只展示后台真实配置（此前硬编码 09:00-20:00 会冒充配置）
 // 首页文案（§31）与门店信息（§18）
 const heroTitle = ref('')
 const heroBody = ref('')
@@ -218,7 +218,7 @@ function onBannerErr(bn: HomeBanner): void {
 
       <!-- 门店信息 -->
       <section class="shop-section">
-        <div class="hours-row card plain">
+        <div v-if="hours" class="hours-row card plain">
           <AppIcon name="clock" :size="16" />
           <span>营业时间 {{ hours }}</span>
         </div>

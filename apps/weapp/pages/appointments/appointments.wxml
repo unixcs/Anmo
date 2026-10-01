@@ -67,7 +67,7 @@
   </view>
 
   <!-- 改期抽屉 -->
-  <view wx:if="{{reschedule}}" class="mask" bindtap="closeReschedule">
+  <view wx:if="{{reschedule}}" class="mask" bindtap="closeReschedule" catchtouchmove="noop">
     <view class="sheet" catchtap="">
       <view class="sheet-grab"></view>
       <view class="sheet-title">改期</view>
@@ -77,7 +77,8 @@
               class="chip {{dayIdx === index ? 'picked' : ''}}"
               data-idx="{{index}}" bindtap="pickDay">{{item.label}} {{item.sub}}</view>
       </scroll-view>
-      <slot-picker options="{{options}}" part="{{part}}" slot="{{slot}}" bind:change="onPick" />
+      <view wx:if="{{optsErr}}" class="sheet-note">时段查询失败，<text class="link" bindtap="loadOptions">点击重试</text></view>
+      <slot-picker wx:else options="{{options}}" part="{{part}}" picked-slot="{{slot}}" bind:change="onPick" />
       <view class="sheet-note">同一天改时间会自动排除自身；仅限「待到店」的预约</view>
       <button class="btn primary lg block" disabled="{{busy}}" bindtap="submitReschedule">
         {{busy ? '提交中…' : '确认改期'}}

@@ -27,7 +27,7 @@
     <view class="slots">
       <block wx:if="{{part === 'AM'}}">
         <view wx:for="{{options.am.slots}}" wx:key="time"
-              class="slot pressable num {{item.time === slot ? 'picked' : ''}} {{item.remaining < 1 ? 'full' : ''}}"
+              class="slot pressable num {{item.time === pickedSlot ? 'picked' : ''}} {{item.remaining < 1 ? 'full' : ''}}"
               data-part="AM" data-time="{{item.time}}" data-remaining="{{item.remaining}}" bindtap="pickSlot">
           {{item.time}}
           <view wx:if="{{item.remaining < 1}}" class="slot-full-badge">满</view>
@@ -35,7 +35,7 @@
       </block>
       <block wx:else>
         <view wx:for="{{options.pm.slots}}" wx:key="time"
-              class="slot pressable num {{item.time === slot ? 'picked' : ''}} {{item.remaining < 1 ? 'full' : ''}}"
+              class="slot pressable num {{item.time === pickedSlot ? 'picked' : ''}} {{item.remaining < 1 ? 'full' : ''}}"
               data-part="PM" data-time="{{item.time}}" data-remaining="{{item.remaining}}" bindtap="pickSlot">
           {{item.time}}
           <view wx:if="{{item.remaining < 1}}" class="slot-full-badge">满</view>

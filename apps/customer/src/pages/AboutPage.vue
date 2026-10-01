@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api } from '../core/api/endpoints'
+import { currentToken } from '../platform/auth/session'
 import ShopCard from '../components/ShopCard.vue'
 import AppIcon from '../components/ui/AppIcon.vue'
+
+// 与小程序 config.js 的 VERSION 对齐（第九批：两端版本标识一致）
+const VERSION = '2.2.6' // 与小程序 config.js VERSION 同步维护
 
 // 关于我们（goal §19/§67）：首页文案 + 门店信息卡（导航/拨号）
 const heroTitle = ref('')
@@ -11,6 +15,9 @@ const hours = ref('')
 const shop = ref({ address: '', phone: '', latitude: '', longitude: '' })
 
 onMounted(async () => {
+  // 门店内容接口是顾客 JWT 资源（与小程序 about 同口径）：游客不打这枪，
+  // 避免 401 噪音；页面文案本身有静态兜底。
+  if (!currentToken()) return
   try {
     const s = await api.publicSettings()
     heroTitle.value = s.home_title ?? ''
@@ -42,6 +49,8 @@ onMounted(async () => {
     </div>
 
     <ShopCard v-bind="shop" />
+
+    <p class="version num">安摩顾客端 v{{ VERSION }}</p>
   </div>
 </template>
 
@@ -87,5 +96,12 @@ onMounted(async () => {
   font: var(--font-sub);
   color: var(--muted-foreground);
   margin-bottom: 10px;
+}
+
+.version {
+  text-align: center;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  margin: 18px 0 6px;
 }
 </style>

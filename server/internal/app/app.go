@@ -54,10 +54,15 @@ func Build(db shared.DB, cfg *config.Config, log *slog.Logger) http.Handler {
 		opLog(ops.LogEntry{
 			ActorType: pr.ActorType, ActorID: pr.ActorID,
 			Action: r.Method + " " + r.URL.Path,
-			Detail: string(detail), IP: r.RemoteAddr,
+			Detail: string(detail), IP: middleware.ClientIP(r),
 		})
 	}
-	return router.New(log, identityMod.TokenVerifier(), logEntry,
+	// F14: /healthz must prove the store is reachable, not just the process.
+	health := func(ctx context.Context) error {
+		var one int
+		return db.QueryRowContext(ctx, `SELECT 1`).Scan(&one)
+	}
+	return router.New(log, identityMod.TokenVerifier(), logEntry, health,
 		identityMod, memberMod, serviceMod, cardMod,
 		appointmentMod, transactionMod, contentMod, opsMod,
 	)
@@ -68,4 +73,16 @@ func SeedIdentity(db shared.DB, cfg *config.Config, log *slog.Logger) error {
 	memberMod := member.New(db, cfg)
 	identityMod := identity.New(db, cfg, memberMod, log)
 	return identityMod.EnsureSeed(context.Background())
+}
+
+// RunDaily executes the ops daily maintenance (expired-card sweep + insight
+// snapshots, F13) so host cron can run `anmo -daily` without booting HTTP.
+// Wire only the modules RunDaily touches; no booking rules source needed.
+func RunDaily(db shared.DB, cfg *config.Config, _ *slog.Logger) (map[string]any, error) {
+	memberMod := member.New(db, cfg)
+	serviceMod := service.New(db, cfg)
+	cardMod := card.New(db, cfg)
+	appointmentMod := appointment.New(db, cfg, serviceMod, nil)
+	opsMod := ops.New(db, cfg, cardMod, appointmentMod, memberMod)
+	return opsMod.RunDaily(context.Background())
 }

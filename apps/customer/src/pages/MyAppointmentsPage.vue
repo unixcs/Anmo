@@ -134,7 +134,7 @@ function buildDays(): { label: string; value: string }[] {
   const t = todayStr()
   const base = Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10))
   const out: { label: string; value: string }[] = []
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 30; i++) {
     const value = new Date(base + i * 86_400_000).toISOString().slice(0, 10)
     out.push({ label: value, value })
   }

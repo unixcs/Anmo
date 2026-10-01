@@ -978,3 +978,38 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 **验证**: 26 条高优发现全部经证伪轮复核（0 REFUTED / 16 CONFIRMED / 10 PARTIAL）；REVIEW.md 含墨菲十剧本判定与修复批次
 **提交**: 本 session（REVIEW.md + 归档）
 **遗留**: 修复待第九批执行
+
+## Session 12: V2.2 第九批——对抗审查 26 条修复（六组批次执行）
+<!-- trellis-session: v=2 fp=batch9-fixes-20261001 -->
+
+**Date**: 2026-10-01
+**Task**: 10-01-batch9-review-fixes
+**Branch**: `main`
+
+### Summary
+
+按 10-01 对抗审查 REVIEW.md §7 六组批次全部落地 26 条发现（F1-F26，除知情接受项 F9/F10/F12/D17/D21）。①安全闸：compose SMS 默认 off + 独立 JWT secret、config.Load 校验 secret≥32 字符且非 change-me 前缀、登录限速 20/min（429 RATE_LIMITED）、body 限幅 1MB、审计日志过滤 GET、wx 凭据缺失警示。②运维防线：main 启动空库守卫（ANMO_ALLOW_EMPTY_DB 逃生门）、备份脚本四防护（镜像 tag v2 对齐/快照体积下限 4KB/chmod 600/secret 长度适配）、`-daily` 一键日维（sweep+备份+integrity）、healthz 带 2s 超时 DB 探活 + compose healthcheck、SQLite synchronous=FULL、日志轮转上限。③后端逻辑：BUSY→409 LOCK_RETRY（Begin/Commit 双路径）、四个结算入口幂等回放全部加请求体一致性校验（不一致 IDEM_CONFLICT）、valid_from 双闸（发卡模板过期拒绝 + UsableCards 过滤未生效卡）、F17 profile 响应包 {member}。④⑤双端体验：slot 保留字改名 pickedSlot（F18 真凶）、失败态三处×双端 + 重试、F20 价格¥、F25 弹层滚动穿透、F26 about onShow 登录态 + 双端版本标识、退出确认、预约成功展示单号、备注 200 上限、44px 触点、muted-foreground 对比度、性别/生日 always-send 修复回退、改期窗口统一 14→30 天、游客营业时间回落、index.html lang/title。新增测试：healthz 503、限速 429、CARD_NOT_STARTED、CARD_TEMPLATE_EXPIRED、两个幂等体校验。
+
+### Testing
+
+- [OK] server：go build/vet/test 16 包全绿（含 adversarial/e2e，0 skip）
+- [OK] H5：vue-tsc + vite build 通过（476ms）
+- [OK] weapp：8 个改动 JS node --check 通过；rsync 同步副本（--exclude config.js）SYNC_OK
+- [OK] automator 16/16 真生产全绿（T06/T07 经 slot-picker 组件穿透查询证得 F18 链路：tap 21:00 → page.slot → pickedSlot；wxml 断言用副本==仓库静态比对，规避 page.wxml API 缺失）
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 生产部署收口：/opt/anmo compose 需换 ANMO_AUTH_JWT_SECRET（≥32 hex）+ ANMO_SMS_MODE=off + healthcheck；yun1 backup 脚本同步 ANMO_IMAGE 环境变量版
+- 小程序端改动需重新上传体验版审核（slot-picker/预约/我的 均有变更）
+
+# PHASE RESULT
+
+**Phase**: V2.2 第九批（对抗审查 26 条修复）
+**Result**: 完成
+**验证**: server 16 包全绿 + H5 build + automator 16/16 真生产 + 副本同步核验
+**提交**: 见本次 commit
+**遗留**: 生产部署四件事（secret/SMS off/healthcheck/备份脚本）待执行

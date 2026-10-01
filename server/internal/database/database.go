@@ -49,7 +49,9 @@ func dsn(path string) string {
 		"?_txlock=immediate" +
 		"&_pragma=busy_timeout(10000)" +
 		"&_pragma=journal_mode(WAL)" +
-		"&_pragma=synchronous(NORMAL)" +
+		// FULL（第九批审查）：单店写频率极低，fsync 开销可忽略；NORMAL 在断电时
+		// 可能丢最近已确认交易（收款/核销账本），这里宁可慢也要每笔落盘。
+		"&_pragma=synchronous(FULL)" +
 		"&_pragma=foreign_keys(1)" +
 		"&_timezone=Asia/Shanghai" +
 		"&_time_format=datetime"

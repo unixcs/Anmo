@@ -9,7 +9,7 @@ page {
   --card: #ffffff;
   --foreground: #221e1b;
   --muted: #efece6;
-  --muted-foreground: #8b857c;
+  --muted-foreground: #6f695f; /* 第九批：加深达 AA，与 H5 style.css 镜像 */
   --primary: #a94a43;
   --primary-foreground: #ffffff;
   --primary-soft: #f6e9e6;
@@ -147,9 +147,11 @@ button.btn[disabled]:not([type]) {
 }
 
 .btn.sm {
-  padding: 7px 12px;
-  font-size: 13px;
-  line-height: 18px;
+  /* 适老化（第九批）：最小触达目标 44px，与 H5 镜像 */
+  padding: 10px 14px;
+  min-height: 44px;
+  font-size: 14px;
+  line-height: 20px;
   border-radius: var(--radius-sm);
 }
 
@@ -360,8 +362,8 @@ button.btn[disabled]:not([type]) {
   background: var(--input);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  font-size: 15px;
-  line-height: 22px;
+  font-size: 16px; /* 防 iOS 聚焦放大（第九批，与 H5 镜像） */
+  line-height: 24px;
   color: var(--foreground);
   box-sizing: border-box;
 }

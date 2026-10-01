@@ -21,6 +21,7 @@ func main() {
 	cfgPath := flag.String("config", "", "path to config.yaml")
 	migrateOnly := flag.Bool("migrate", false, "apply migrations and exit")
 	backupTo := flag.String("backup", "", "write a consistent snapshot (VACUUM INTO) to this path and verify it, then exit")
+	daily := flag.Bool("daily", false, "run the daily maintenance sweep (expiry sweep + insights) and exit")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -29,6 +30,25 @@ func main() {
 		os.Exit(1)
 	}
 	log := logger.New(cfg.Log.Level)
+
+	// F2（第九批审查）：微信凭据缺省 = dev 兜底 openid（D24）。本地无所谓，
+	// 生产若仍为空则顾客身份全走 dev:<code>——启动时必须喊出来。
+	if cfg.Wx.AppID == "" || cfg.Wx.Secret == "" {
+		log.Warn("wx credentials not configured: wx login falls back to dev openids (dev:<code>); set ANMO_WX_APPID / ANMO_WX_SECRET before production")
+	}
+
+	// F4（第九批审查）：库文件缺失/为空 = 大概率是挂卷丢了或路径配错。
+	// 静默新建空库会让"数据全没了"伪装成"系统刚上线"。首装显式放行。
+	if *backupTo == "" && !*migrateOnly && !*daily && cfg.Database.Path != ":memory:" {
+		if info, err := os.Stat(cfg.Database.Path); err != nil || info.Size() == 0 {
+			if os.Getenv("ANMO_ALLOW_EMPTY_DB") != "1" {
+				log.Error("database file missing or empty — refusing to boot a fresh store",
+					"path", cfg.Database.Path,
+					"hint", "first install: set ANMO_ALLOW_EMPTY_DB=1 (or run -migrate); wrong volume/path: fix the mount")
+				os.Exit(1)
+			}
+		}
+	}
 
 	db, err := database.Open(cfg.Database.Path)
 	if err != nil {
@@ -42,6 +62,16 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info("backup ok", "path", *backupTo)
+		return
+	}
+
+	if *daily {
+		out, err := app.RunDaily(db, cfg, log)
+		if err != nil {
+			log.Error("daily sweep", "err", err)
+			os.Exit(1)
+		}
+		log.Info("daily sweep done", "result", out)
 		return
 	}
 

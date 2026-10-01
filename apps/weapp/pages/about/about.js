@@ -23,6 +23,11 @@ Page({
     // 首页已缓存的设置先顶上，避免分享落地时白屏
     const cached = getApp().globalData.settings
     if (cached) this.applySettings(cached)
+  },
+
+  // F26：登录态判定必须在 onShow——从登录页返回时 onLoad 不再执行，
+  // 留在 onLoad 会一直用旧值，登录回来仍是游客态、下拉刷新被短路空转。
+  onShow() {
     getApp().ready((loggedIn) => {
       this.setData({ loggedIn })
       if (loggedIn) this.load()

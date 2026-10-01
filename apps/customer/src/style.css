@@ -10,7 +10,7 @@
   --card: #ffffff;
   --foreground: #221e1b;
   --muted: #efece6;
-  --muted-foreground: #8b857c;
+  --muted-foreground: #6f695f; /* 第九批：#8b857c 仅 3.3:1，加深达 AA（与小程序镜像） */
   --primary: #a94a43;
   --primary-foreground: #ffffff;
   --primary-soft: #f6e9e6;
@@ -180,8 +180,10 @@ textarea {
 }
 
 .btn.sm {
-  padding: 7px 12px;
-  font-size: 13px;
+  /* 适老化（第九批）：最小触达目标 44px（含命中扩展） */
+  padding: 10px 14px;
+  min-height: 44px;
+  font-size: 14px;
   border-radius: var(--radius-sm);
 }
 
@@ -300,7 +302,9 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 7px 14px;
+  /* 适老化（第九批）：触达目标 ≥44px */
+  min-height: 44px;
+  padding: 8px 16px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
   background: var(--card);
@@ -395,7 +399,8 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px 14px;
-  font: var(--font-body);
+  /* 16px：iOS Safari 对 <16px 的输入框聚焦时强制放大页面（第九批适老化） */
+  font: 500 16px/24px var(--font-stack);
   color: var(--foreground);
   outline: none;
   transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);

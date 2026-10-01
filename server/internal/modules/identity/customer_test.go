@@ -381,7 +381,8 @@ func TestSMSOffReturns410(t *testing.T) {
 }
 
 func TestSMSDevLegacyFlowStillWorks(t *testing.T) {
-	p, _ := newWxEnv(t, nil) // Defaults: sms.mode = dev
+	// F1：默认已改为 off（默认安全），dev 流程需显式开启
+	p, _ := newWxEnv(t, func(c *config.Config) { c.SMS.Mode = "dev" })
 	ctx := context.Background()
 
 	// 过渡期 dev：send → verify(123456) → 建号+Token

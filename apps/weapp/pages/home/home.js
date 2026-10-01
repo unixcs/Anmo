@@ -18,6 +18,7 @@ Page({
     shop: { address: '', phone: '', latitude: '', longitude: '' },
     loggedIn: false,
     loading: true,
+    svcFailed: false, // 目录拉取失败 ≠「暂未上架」，要给重试入口
   },
 
   onShow() {
@@ -156,9 +157,12 @@ Page({
           a.content ? a.title + ' · ' + a.content : a.title,
         )
         this.applyCatalog(catalog)
-        this.setData({ announcements, blocks: fmt.homeBlocks(home.blocks) })
+        this.setData({ announcements, blocks: fmt.homeBlocks(home.blocks), svcFailed: false })
       })
-      .catch(() => {})
+      .catch(() => {
+        // 目录失败时服务区不冒充「暂未上架」：留失败态 + 重试
+        if (!this.data.services.length) this.setData({ svcFailed: true })
+      })
       .then(() => done && done())
   },
 
@@ -180,8 +184,19 @@ Page({
   loadGuestCatalog() {
     api
       .catalog()
-      .then((catalog) => this.applyCatalog(catalog))
-      .catch(() => {})
+      .then((catalog) => {
+        this.applyCatalog(catalog)
+        this.setData({ svcFailed: false })
+      })
+      .catch(() => {
+        if (!this.data.services.length) this.setData({ svcFailed: true })
+      })
+  },
+
+  retryServices() {
+    this.setData({ svcFailed: false })
+    if (this.data.loggedIn) this.loadHome()
+    else this.loadGuestCatalog()
   },
 
   // 服务推荐展示列表（V2.1）：目录与 settings 都就绪后按 pickHomeServices 口径筛选；

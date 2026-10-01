@@ -373,3 +373,37 @@ func TestSettleByCardWithActualServiceOverride(t *testing.T) {
 		t.Fatalf("appointment snapshot overwritten: %+v", svcs[0])
 	}
 }
+
+// F6（第九批审查）：同一幂等键被用于不同预约的重放 → 409 IDEM_CONFLICT，
+// 绝不把别的预约的结算结果当本次响应返回。
+func TestSettleByCardIdemBodyMismatch(t *testing.T) {
+	e := newTxnEnv(t)
+	ctx := context.Background()
+	apt1 := e.bookInService(t, 1, 10, 0)
+	apt2 := e.bookInService(t, 2, 10, 0)
+	key := "f6000000-0000-0000-0000-000000000001"
+	rec := RecordFields{Communicated: true}
+	if _, _, err := e.p.SettleByCard(ctx, apt1, e.card, "", "op-1", key, rec); err != nil {
+		t.Fatalf("settle 1: %v", err)
+	}
+	_, _, err := e.p.SettleByCard(ctx, apt2, e.card, "", "op-1", key, rec)
+	if !shared.Is(err, "IDEM_CONFLICT") {
+		t.Fatalf("replay with different apt = %v, want IDEM_CONFLICT", err)
+	}
+}
+
+// F6：同键换了收款方式/金额的重放同样 409（此前会静默回放原收款）。
+func TestSettleByPayIdemBodyMismatch(t *testing.T) {
+	e := newTxnEnv(t)
+	ctx := context.Background()
+	aptID := e.bookInService(t, 1, 10, 0)
+	key := "f6000000-0000-0000-0000-000000000002"
+	rec := RecordFields{Communicated: true}
+	if _, err := e.p.SettleByPay(ctx, aptID, "CASH", 12800, "", "", "op-1", key, rec); err != nil {
+		t.Fatalf("settle 1: %v", err)
+	}
+	_, err := e.p.SettleByPay(ctx, aptID, "WECHAT_TRANSFER", 12800, "", "", "op-1", key, rec)
+	if !shared.Is(err, "IDEM_CONFLICT") {
+		t.Fatalf("replay with other method = %v, want IDEM_CONFLICT", err)
+	}
+}
