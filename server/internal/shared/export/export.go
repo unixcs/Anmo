@@ -18,7 +18,8 @@ import (
 )
 
 // RowCap bounds any export; exceeded → 400 EXPORT_TOO_LARGE (提案 §4).
-const RowCap = 50_000
+// 20k 而非 5 万：生产容器 mem_limit 200m，excelize 全内存渲染需留余量（部署 runbook）。
+const RowCap = 20_000
 
 // ValidateFormat normalizes the requested export format: "" → "xlsx",
 // otherwise only "xlsx" | "txt" (D30).
