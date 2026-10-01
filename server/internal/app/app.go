@@ -48,13 +48,18 @@ func Build(db shared.DB, cfg *config.Config, log *slog.Logger) http.Handler {
 	opsMod := ops.New(db, cfg, cardMod, appointmentMod, memberMod)
 
 	opLog := opsMod.NewLogWriter(log)
-	logEntry := func(r *http.Request, status int) {
+	logEntry := func(r *http.Request, status int, hdr http.Header) {
 		pr, _ := middleware.PrincipalFrom(r.Context())
-		detail, _ := json.Marshal(map[string]any{"method": r.Method, "status": status, "query": r.URL.RawQuery})
+		detail := map[string]any{"method": r.Method, "status": status, "query": r.URL.RawQuery}
+		// D30：导出端点经响应头回报行数，进审计 detail（domain 在 Action path 里）
+		if rows := hdr.Get("X-Export-Rows"); rows != "" {
+			detail["rows"] = rows
+		}
+		dj, _ := json.Marshal(detail)
 		opLog(ops.LogEntry{
 			ActorType: pr.ActorType, ActorID: pr.ActorID,
 			Action: r.Method + " " + r.URL.Path,
-			Detail: string(detail), IP: middleware.ClientIP(r),
+			Detail: string(dj), IP: middleware.ClientIP(r),
 		})
 	}
 	// F14: /healthz must prove the store is reachable, not just the process.

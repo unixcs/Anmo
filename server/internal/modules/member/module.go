@@ -6,6 +6,7 @@ import "net/http"
 func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	admin.HandleFunc("GET /admin/members", p.handleList)
 	admin.HandleFunc("POST /admin/members", p.handleCreate)
+	admin.HandleFunc("POST /admin/export/members", p.handleExportMembers)
 	admin.HandleFunc("GET /admin/members/{id}", p.handleGet)
 	admin.HandleFunc("PUT /admin/members/{id}", p.handleUpdate)
 	admin.HandleFunc("PUT /admin/members/{id}/password", p.handleAdminSetPassword)

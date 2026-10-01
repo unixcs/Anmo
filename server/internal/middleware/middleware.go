@@ -88,14 +88,16 @@ func Logging(log *slog.Logger) func(http.Handler) http.Handler {
 // failures never break the request. Customer mutations under /api/ are NOT
 // audited: the ops trail is the merchant's bookkeeping, and customer auth
 // attempts (login/register probes) would bury it (第九批审查).
-func OperationLog(write func(r *http.Request, status int)) func(http.Handler) http.Handler {
+// hdr carries handler-set response headers so binary endpoints (导出) can
+// report row counts via X-Export-Rows (D30).
+func OperationLog(write func(r *http.Request, status int, hdr http.Header)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rec := &statusRecorder{ResponseWriter: w, status: 200}
 			next.ServeHTTP(rec, r)
 			if r.Method != http.MethodGet && write != nil &&
 				strings.HasPrefix(r.URL.Path, "/admin/") {
-				write(r, rec.status)
+				write(r, rec.status, rec.Header())
 			}
 		})
 	}

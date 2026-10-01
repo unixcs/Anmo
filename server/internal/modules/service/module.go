@@ -19,6 +19,7 @@ func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	admin.HandleFunc("PUT /admin/service-tags/{id}", p.handleUpdateServiceTag)
 	admin.HandleFunc("DELETE /admin/service-tags/{id}", p.handleDeleteServiceTag)
 	admin.HandleFunc("GET /admin/members/{id}/service-records", p.handleListMemberRecords)
+	admin.HandleFunc("POST /admin/export/service-records", p.handleExportServiceRecords)
 	admin.HandleFunc("PUT /admin/service-records/{id}/merchant-note", p.handleMerchantNote)
 	admin.HandleFunc("POST /admin/service-records/{id}/revoke", p.handleRevokeRecord)
 

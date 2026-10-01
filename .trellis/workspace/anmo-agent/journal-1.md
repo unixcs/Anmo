@@ -1013,3 +1013,39 @@ CHANGELOG v2.2.0 三批收口（tag v2.2.0 已推 GitHub main）。yun1 部署�
 **验证**: server 16 包全绿 + H5 build + automator 16/16 真生产 + 副本同步核验
 **提交**: 见本次 commit
 **遗留**: 生产部署四件事（secret/SMS off/healthcheck/备份脚本）待执行
+
+## Session 13: V2.2 第十批——数据导出（D30，双子代理审查通过后实施）
+<!-- trellis-session: v=2 fp=batch10-data-export-20261001 -->
+
+**Date**: 2026-10-01
+**Task**: 10-01-batch10-data-export
+**Branch**: `main`
+
+### Summary
+
+应商家需求"导出已办卡/已消费数据"立项。先调研对标（Shopify 客户聚合行/美业 SaaS 字段勾选/excelize 纯 Go/CSV BOM 实践）产出提案 docs/proposals/data-export-plan.md；应用户新增"手机直开/喂 AI"场景出 v2（TXT=Markdown 内容裁决：.md/.txt 同字节冗余只留 .txt 扩展名，宽域卡片块排版，TXT 手机号打码 PII 最小化）；双子代理对抗审查（后端架构线+前端横切线）均 GO，14 条实锤修订写回 v3：payment.amount 列名（非 amount_cents）、member 聚合改模块内 GROUP BY JOIN（transaction.Api import member 反向注入即 cycle）、审计行数经 X-Export-Rows 响应头+OperationLog 回调扩 hdr 参数、blob 下载前端自造文件名、RecordsPage 落位改页头下拉（tab2 是核销记录不是服务记录）、打码边界规则、硬顶 5 万、TXT 收款 5 列等。
+
+实施：shared/export 工具包（xlsx 内存构建+TXT Markdown 渲染+build-then-write 单一出口+mime.FormatMediaType 文件名+注入防护+金额分→元数字型+X-Export-Rows）；三域 handler（member 14 列聚合走 GROUP BY JOIN+批量标签、payments LEFT JOIN 散客留白+状态/日期筛选、service_record body_parts JSON→顿号）；admin http.ts downloadBlob（复用 tokenProvider/401 全局登出/错误包络）+exportFilename 自造名+MembersPage 两按钮+RecordsPage 页头下拉四项+0 行提示；测试：export 包单测（打码边界/卡片/表格/注入/xlsx 回读/行顶）、e2e TestExportDomains（散客结算造数→三域双格式→筛选→401→审计含 rows）、中间件捕获测试。
+
+### Testing
+
+- [OK] server：go build/vet/test 15 包全绿（新增 export 包 + e2e 两测）
+- [OK] admin：vue-tsc 零错误 + vite build 通过
+- [OK] e2e 实证：xlsx PK 魔数与回读（全量手机号/3580.00/空号）、TXT 打码与 5 列、keyword/status 筛选、未登录 401、EXPORT_BAD_FORMAT 400、操作日志含 "rows"
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 生产部署第十批时同步：admin dist 重建 --base=/admin-ui/ + nginx 原子换装（与第九批一起收口）
+- P2 候选：日期筛选控件（payments/service-records 后端已支持 date_from/date_to）、卡流水/预约/会员卡三域、剪贴板复制 Markdown 直喂 AI
+
+# PHASE RESULT
+
+**Phase**: V2.2 第十批（数据导出 D30 P1）
+**Result**: 完成
+**验证**: server 15 包全绿 + admin vue-tsc/build 绿 + e2e 三域双格式/筛选/权限/审计断言通过
+**提交**: 见本次 commit
+**遗留**: 生产部署（与第九批合并收口）；P2 域与日期控件未做（知情不做的范围见提案 §5）

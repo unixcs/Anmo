@@ -1,5 +1,18 @@
 <template>
   <el-card shadow="never">
+    <div class="export-bar">
+      <el-dropdown :disabled="exporting" @command="doExport">
+        <el-button size="small" plain :loading="exporting">导出 ▾</el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="payments-xlsx">收款流水 · Excel</el-dropdown-item>
+            <el-dropdown-item command="payments-txt">收款流水 · TXT（手机号已打码）</el-dropdown-item>
+            <el-dropdown-item command="records-xlsx">服务记录 · Excel</el-dropdown-item>
+            <el-dropdown-item command="records-txt">服务记录 · TXT（手机号已打码）</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+    </div>
     <el-tabs v-model="tab" @tab-change="load">
       <el-tab-pane label="收款记录" name="payments">
         <div class="tab-head">
@@ -113,10 +126,13 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  exportPayments,
+  exportServiceRecords,
   listMembers,
   listPayments,
   listRedemptions,
   reverseRedemption,
+  type ExportFormat,
   type Payment,
   type Redemption,
 } from '../core/api/admin'
@@ -124,6 +140,26 @@ import { PAY_METHOD_TEXT, yuan } from '../core/format'
 import { useIsMobile } from '../core/useMedia'
 
 const isMobile = useIsMobile()
+const exporting = ref(false)
+
+// D30 导出：收款随 payStatus 筛选走；服务记录 P1 全量（日期筛选 P2）
+async function doExport(cmd: string) {
+  if (exporting.value) return
+  const [domain, fmt] = cmd.split('-') as [string, ExportFormat]
+  exporting.value = true
+  try {
+    const rows = domain === 'payments'
+      ? await exportPayments(fmt, { status: payStatus.value || undefined })
+      : await exportServiceRecords(fmt)
+    if (rows === 0) ElMessage.warning('导出结果为空（0 行）')
+    else ElMessage.success(`已导出 ${rows} 行`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
 const tab = ref('payments')
 const payStatus = ref('')
 const rdmStatus = ref('')
@@ -178,6 +214,11 @@ onMounted(load)
 </script>
 
 <style scoped>
+.export-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
 .tab-head {
   display: flex;
   justify-content: space-between;

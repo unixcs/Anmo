@@ -1,6 +1,6 @@
 // core/api — Admin 端点封装。字段名与后端 struct json tag 严格一致
 // （请求体启用 DisallowUnknownFields，多传字段会被 400 拒绝）。
-import { http, idemKey } from './http'
+import { exportFilename, http, idemKey } from './http'
 
 // ---------- 模型 ----------
 
@@ -306,6 +306,26 @@ export function listMembers(
   if (filters?.tag_id) q.set('tag_id', filters.tag_id)
   if (filters?.card_type) q.set('card_type', filters.card_type)
   return http.getPage<Member>(`/admin/members?${q}`)
+}
+
+// D30 数据导出：POST /admin/export/{domain}，body {format, ...筛选}
+// downloadBlob 返回 X-Export-Rows（0 = 空结果），filename 前端自造（方案 v3）。
+
+export type ExportFormat = 'xlsx' | 'txt'
+
+export function exportMembers(
+  format: ExportFormat,
+  filters: { keyword?: string; tag_id?: string; card_type?: string },
+) {
+  return http.downloadBlob('/admin/export/members', { format, ...filters }, exportFilename('会员总表', format))
+}
+
+export function exportPayments(format: ExportFormat, filters: { status?: string }) {
+  return http.downloadBlob('/admin/export/payments', { format, ...filters }, exportFilename('收款流水', format))
+}
+
+export function exportServiceRecords(format: ExportFormat) {
+  return http.downloadBlob('/admin/export/service-records', { format }, exportFilename('服务记录', format))
 }
 
 export function createMember(body: {

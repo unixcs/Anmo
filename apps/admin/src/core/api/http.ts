@@ -86,6 +86,38 @@ export const http = {
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
   getPage: <T>(path: string) => requestPage<T>('GET', path),
+  /**
+   * 导出下载（D30）：blob + objectURL 保存，返回响应头 X-Export-Rows 供 toast。
+   * blob 下载浏览器不读 Content-Disposition，文件名由调用方自造（方案 v3）。
+   */
+  downloadBlob: async (path: string, body: unknown, filename: string): Promise<number> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = tokenProvider()
+    if (token) headers.Authorization = `Bearer ${token}`
+    const res = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) })
+    if (!res.ok) {
+      if (res.status === 401) onUnauthorized()
+      const payload = (await res.json().catch(() => ({}))) as Envelope<unknown>
+      throw new ApiError(payload.code ?? 'ERROR', payload.msg ?? `请求失败(${res.status})`, res.status)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    return Number(res.headers.get('X-Export-Rows') ?? 0)
+  },
+}
+
+/** 导出文件名：anmo-<域名>-YYYYMMDD.<ext>（方案 v3：前端自造，非 Content-Disposition） */
+export function exportFilename(domain: string, format: 'xlsx' | 'txt'): string {
+  const d = new Date()
+  const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+  return `anmo-${domain}-${day}.${format}`
 }
 
 // 每次写操作的幂等键（AGENTS.md D-幂等：请求级 UUID）

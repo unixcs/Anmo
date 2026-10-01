@@ -12,4 +12,5 @@ func (p *Provider) Mount(root, admin, api *http.ServeMux) {
 	admin.HandleFunc("GET /admin/workbench", p.handleWorkbench)
 	admin.HandleFunc("GET /admin/payments", p.handleListPayments)
 	admin.HandleFunc("GET /admin/redemptions", p.handleListRedemptions)
+	admin.HandleFunc("POST /admin/export/payments", p.handleExportPayments)
 }

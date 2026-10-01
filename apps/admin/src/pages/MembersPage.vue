@@ -13,6 +13,8 @@
       <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="createVisible = true">新建会员</el-button>
       <el-button plain @click="openTagManager">标签管理</el-button>
+      <el-button plain :loading="exporting" @click="doExport('xlsx')">导出 Excel</el-button>
+      <el-button plain :loading="exporting" @click="doExport('txt')">导出 TXT</el-button>
       <span class="spacer" />
       <span class="total">共 {{ total }} 位</span>
     </div>
@@ -320,6 +322,8 @@ import {
   updateMember,
   updateMerchantNote,
   revokeServiceRecord,
+  exportMembers,
+  type ExportFormat,
   type Member,
   type MemberCard,
   type CardTransaction,
@@ -335,6 +339,26 @@ import { useIsMobile } from '../core/useMedia'
 const keyword = ref('')
 const tagFilter = ref('')
 const cardTypeFilter = ref('')
+const exporting = ref(false)
+
+// D30 导出：随当前筛选走；TXT 手机号已打码（喂 AI / 手机看），Excel 全量
+async function doExport(format: ExportFormat) {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    const rows = await exportMembers(format, {
+      keyword: keyword.value || undefined,
+      tag_id: tagFilter.value || undefined,
+      card_type: cardTypeFilter.value || undefined,
+    })
+    if (rows === 0) ElMessage.warning('导出结果为空（0 行）')
+    else ElMessage.success(format === 'txt' ? `已导出 ${rows} 行（TXT 手机号已打码）` : `已导出 ${rows} 行`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '导出失败')
+  } finally {
+    exporting.value = false
+  }
+}
 const page = ref(1)
 const perPage = 20
 const total = ref(0)

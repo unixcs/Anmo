@@ -23,7 +23,7 @@ type Module interface {
 // (login, SMS) are registered by the identity module directly on root.
 // health is the liveness probe dependency check (nil = process-only): it must
 // touch the database, or /healthz reports green while the store is dead (F14).
-func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.Request, status int), health func(ctx context.Context) error, mods ...Module) http.Handler {
+func New(log *slog.Logger, verify middleware.TokenVerifier, opLog func(r *http.Request, status int, hdr http.Header), health func(ctx context.Context) error, mods ...Module) http.Handler {
 	root := http.NewServeMux()
 	admin := http.NewServeMux()
 	api := http.NewServeMux()
